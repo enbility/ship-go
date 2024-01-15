@@ -1,6 +1,10 @@
 package api
 
-import "github.com/enbility/ship-go/model"
+import (
+	"net"
+
+	"github.com/enbility/ship-go/model"
+)
 
 //go:generate mockery
 
@@ -78,3 +82,15 @@ type WebsocketDataProcessing interface {
 	// e.g. due to connection issues
 	ReportConnectionError(error)
 }
+
+/* Mdns */
+
+type MdnsProvider interface {
+	CheckAvailability() bool
+	Shutdown()
+	Announce(serviceName string, port int, txt []string) error
+	Unannounce()
+	ResolveEntries(cancelChan chan bool, callback func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool))
+}
+
+const ShipWebsocketSubProtocol = "ship" // SHIP 10.2: sub protocol is required for websocket connections
