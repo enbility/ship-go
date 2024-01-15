@@ -9,6 +9,7 @@ require (
 	github.com/holoplot/go-avahi v0.0.0-20231130181535-fd8f1d0307ed
 	github.com/stretchr/testify v1.8.4
 	gitlab.com/c0b/go-ordered-json v0.0.0-20201030195603-febf46534d5a
+	go.uber.org/mock v0.4.0
 )
 
 require (

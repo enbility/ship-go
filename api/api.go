@@ -7,6 +7,7 @@ import (
 )
 
 //go:generate mockery
+//go:generate mockgen -destination=../mocks/mockgen_api.go -package=mocks github.com/enbility/ship-go/api MdnsService
 
 type ShipConnection interface {
 	DataHandler() WebsocketDataConnection
@@ -84,6 +85,36 @@ type WebsocketDataProcessing interface {
 }
 
 /* Mdns */
+
+type MdnsEntry struct {
+	Name       string
+	Ski        string
+	Identifier string   // mandatory
+	Path       string   // mandatory
+	Register   bool     // mandatory
+	Brand      string   // optional
+	Type       string   // optional
+	Model      string   // optional
+	Host       string   // mandatory
+	Port       int      // mandatory
+	Addresses  []net.IP // mandatory
+}
+
+// implemented by hubConnection, used by mdns
+type MdnsSearch interface {
+	ReportMdnsEntries(entries map[string]*MdnsEntry)
+}
+
+// implemented by mdns, used by hubConnection
+type MdnsService interface {
+	SetupMdnsService() error
+	ShutdownMdnsService()
+	AnnounceMdnsEntry() error
+	UnannounceMdnsEntry()
+	RegisterMdnsSearch(cb MdnsSearch)
+	UnregisterMdnsSearch(cb MdnsSearch)
+	SetAutoAccept(bool)
+}
 
 type MdnsProvider interface {
 	CheckAvailability() bool
