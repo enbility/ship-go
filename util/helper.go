@@ -3,6 +3,7 @@ package util
 import (
 	"encoding/json"
 	"os"
+	"strings"
 )
 
 // used in tests
@@ -28,4 +29,13 @@ func IsChannelClosed[T any](ch <-chan T) bool {
 	default:
 		return true
 	}
+}
+
+// standardize the provided SKI strings
+func NormalizeSKI(ski string) string {
+	ski = strings.ReplaceAll(ski, " ", "")
+	ski = strings.ReplaceAll(ski, "-", "")
+	ski = strings.ToLower(ski)
+
+	return ski
 }

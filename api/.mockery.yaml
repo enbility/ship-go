@@ -7,4 +7,3 @@ filename: "{{.InterfaceName}}.go"
 all: True
 packages:
   github.com/enbility/ship-go/api:
-   
