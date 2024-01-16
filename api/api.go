@@ -7,7 +7,9 @@ import (
 )
 
 //go:generate mockery
-//go:generate mockgen -destination=../mocks/mockgen_api.go -package=mocks github.com/enbility/ship-go/api MdnsService
+//go:generate mockgen -destination=../mocks/mockgen_api.go -package=mocks github.com/enbility/ship-go/api MdnsService,HubConnection
+
+/* ShipConnection */
 
 type ShipConnection interface {
 	DataHandler() WebsocketDataConnection
