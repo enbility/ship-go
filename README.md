@@ -13,6 +13,18 @@ This repository was started as part of the [eebus-go](https://github.com/enbilit
 
 Basic understanding of the EEBUS concepts SHIP and SPINE to use this library is required. Please check the corresponding specifications on the [EEBUS downloads website](https://www.eebus.org/media-downloads/).
 
+## Overview
+
+Includes:
+
+- Certificate handling
+- mDNS, incl. avahi support (recommended)
+- Websocket server and client
+- Connection handling, including reconnection and double connections
+- Handling of device pairing
+- SHIP handshake
+- Logging which is also used by [spine-go](https://github.com/enbility/spine-go) and [eebus-go](https://github.com/enbility/eebus-go)
+
 ## Implementation notes
 
 - Double connection handling is not implemented according to SHIP 12.2.2. Instead the connection initiated by the higher SKI will be kept. Much simpler and always works
