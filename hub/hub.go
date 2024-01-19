@@ -455,12 +455,12 @@ func (h *HubImpl) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Connect to another EEBUS service
 //
 // returns error contains a reason for failing the connection or nil if no further tries should be processed
-func (h *HubImpl) connectFoundService(remoteService *api.ServiceDetails, host, port string) error {
+func (h *HubImpl) connectFoundService(remoteService *api.ServiceDetails, host, port, path string) error {
 	if h.isSkiConnected(remoteService.SKI) {
 		return nil
 	}
 
-	logging.Log().Debugf("initiating connection to %s at %s:%s", remoteService.SKI, host, port)
+	logging.Log().Debugf("initiating connection to %s at %s:%s%s", remoteService.SKI, host, port, path)
 
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
@@ -473,8 +473,12 @@ func (h *HubImpl) connectFoundService(remoteService *api.ServiceDetails, host, p
 		Subprotocols: []string{api.ShipWebsocketSubProtocol},
 	}
 
-	address := fmt.Sprintf("wss://%s:%s", host, port)
+	address := fmt.Sprintf("wss://%s:%s%s", host, port, path)
 	conn, _, err := dialer.Dial(address, nil)
+	if err != nil {
+		address = fmt.Sprintf("wss://%s:%s", host, port)
+		conn, _, err = dialer.Dial(address, nil)
+	}
 	if err != nil {
 		return err
 	}
@@ -765,7 +769,7 @@ func (h *HubImpl) initateConnection(remoteService *api.ServiceDetails, entry *ap
 		}
 
 		logging.Log().Debug("trying to connect to", remoteService.SKI, "at", address)
-		if err = h.connectFoundService(remoteService, address.String(), strconv.Itoa(entry.Port)); err != nil {
+		if err = h.connectFoundService(remoteService, address.String(), strconv.Itoa(entry.Port), entry.Path); err != nil {
 			logging.Log().Debug("connection to", remoteService.SKI, "failed: ", err)
 		} else {
 			return true
@@ -775,7 +779,7 @@ func (h *HubImpl) initateConnection(remoteService *api.ServiceDetails, entry *ap
 	// connectdion via IP address failed, try hostname
 	if len(entry.Host) > 0 {
 		logging.Log().Debug("trying to connect to", remoteService.SKI, "at", entry.Host)
-		if err = h.connectFoundService(remoteService, entry.Host, strconv.Itoa(entry.Port)); err != nil {
+		if err = h.connectFoundService(remoteService, entry.Host, strconv.Itoa(entry.Port), entry.Path); err != nil {
 			logging.Log().Debugf("connection to %s failed: %s", remoteService.SKI, err)
 		} else {
 			return true
