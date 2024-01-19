@@ -112,6 +112,30 @@ func (s *HelloSuite) Test_ReadyListen_Ignore() {
 	shutdownTest(sut)
 }
 
+func (s *HelloSuite) Test_ReadyListen_Ignore_Invalid() {
+	sut, _ := initTest(s.role)
+
+	sut.setState(model.SmeHelloStateReadyInit, nil) // inits the timer
+	sut.setState(model.SmeHelloStateReadyListen, nil)
+
+	helloMsg := model.ConnectionHello{
+		ConnectionHello: model.ConnectionHelloType{
+			Phase:               model.ConnectionHelloPhaseTypePending,
+			ProlongationRequest: util.Ptr(false),
+		},
+	}
+
+	msg, err := sut.shipMessage(model.MsgTypeControl, helloMsg)
+	assert.Nil(s.T(), err)
+	assert.NotNil(s.T(), msg)
+
+	sut.handleState(false, msg)
+
+	assert.Equal(s.T(), model.SmeHelloStateReadyListen, sut.getState())
+
+	shutdownTest(sut)
+}
+
 func (s *HelloSuite) Test_ReadyListen_Prolongation() {
 	sut, data := initTest(s.role)
 

@@ -60,7 +60,8 @@ func (c *ShipConnectionImpl) handshakeHello_ReadyListen(timeout bool, message []
 			return
 		}
 
-		// TODO: what to do if this is false?
+		// we do get false, which is invalid, so ignore it
+		return
 
 	case model.ConnectionHelloPhaseTypeAborted:
 		c.setAndHandleState(model.SmeHelloStateRemoteAbortDone)
