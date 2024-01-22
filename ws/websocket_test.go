@@ -45,7 +45,7 @@ func (s *WebsocketSuite) BeforeTest(suiteName, testName string) {
 }
 
 func (s *WebsocketSuite) AfterTest(suiteName, testName string) {
-	s.testWsConn.Close()
+	_ = s.testWsConn.Close()
 	s.testServer.Close()
 }
 

@@ -371,7 +371,7 @@ func (h *HubImpl) startWebsocketServer() error {
 		TLSConfig: &tls.Config{
 			Certificates:          []tls.Certificate{h.certifciate},
 			ClientAuth:            tls.RequireAnyClientCert, // SHIP 9: Client authentication is required
-			CipherSuites:          cert.CiperSuites,         // SHIP 9.1: the ciphers are reported insecure but are defined to be used by SHIP
+			CipherSuites:          cert.CipherSuites,        // #nosec G402 // SHIP 9.1: the ciphers are reported insecure but are defined to be used by SHIP
 			VerifyPeerCertificate: h.verifyPeerCertificate,
 			MinVersion:            tls.VersionTLS12, // SHIP 9: Mandatory TLS version
 		},
@@ -467,9 +467,11 @@ func (h *HubImpl) connectFoundService(remoteService *api.ServiceDetails, host, p
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 5 * time.Second,
 		TLSClientConfig: &tls.Config{
-			Certificates:       []tls.Certificate{h.certifciate},
-			InsecureSkipVerify: true,             // SHIP 12.1: all certificates are locally signed
-			CipherSuites:       cert.CiperSuites, // SHIP 9.1: the ciphers are reported insecure but are defined to be used by SHIP
+			Certificates: []tls.Certificate{h.certifciate},
+			// SHIP 12.1: all certificates are locally signed
+			InsecureSkipVerify: true, // #nosec G402
+			// SHIP 9.1: the ciphers are reported insecure but are defined to be used by SHIP
+			CipherSuites: cert.CipherSuites, // #nosec G402
 		},
 		Subprotocols: []string{api.ShipWebsocketSubProtocol},
 	}
@@ -843,6 +845,7 @@ func (h *HubImpl) getConnectionInitiationDelayTime(ski string) (int, time.Durati
 	min := timeRange.min * 1000
 	max := timeRange.max * 1000
 
+	// #nosec G404
 	duration := rand.Intn(max-min) + min
 
 	return counter, time.Duration(duration) * time.Millisecond
