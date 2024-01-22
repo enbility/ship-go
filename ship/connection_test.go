@@ -161,6 +161,8 @@ func (s *ConnectionSuite) TestHandleIncomingShipMessage() {
 
 	s.sut.spineDataProcessing = s.spineDataProcessing
 
+	s.sut.processBufferedSpineMessages()
+
 	s.sut.HandleIncomingShipMessage(msg)
 }
 
