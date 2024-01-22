@@ -371,8 +371,9 @@ func (h *HubImpl) startWebsocketServer() error {
 		TLSConfig: &tls.Config{
 			Certificates:          []tls.Certificate{h.certifciate},
 			ClientAuth:            tls.RequireAnyClientCert, // SHIP 9: Client authentication is required
-			CipherSuites:          cert.CiperSuites,         // the ciphers are reported insecure but are defined to be used by SHIP
+			CipherSuites:          cert.CiperSuites,         // SHIP 9.1: the ciphers are reported insecure but are defined to be used by SHIP
 			VerifyPeerCertificate: h.verifyPeerCertificate,
+			MinVersion:            tls.VersionTLS12, // SHIP 9: Mandatory TLS version
 		},
 	}
 
@@ -467,8 +468,8 @@ func (h *HubImpl) connectFoundService(remoteService *api.ServiceDetails, host, p
 		HandshakeTimeout: 5 * time.Second,
 		TLSClientConfig: &tls.Config{
 			Certificates:       []tls.Certificate{h.certifciate},
-			InsecureSkipVerify: true,             // all certificates are locally signed
-			CipherSuites:       cert.CiperSuites, // the ciphers are reported insecure but are defined to be used by SHIP
+			InsecureSkipVerify: true,             // SHIP 12.1: all certificates are locally signed
+			CipherSuites:       cert.CiperSuites, // SHIP 9.1: the ciphers are reported insecure but are defined to be used by SHIP
 		},
 		Subprotocols: []string{api.ShipWebsocketSubProtocol},
 	}
