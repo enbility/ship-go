@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
-)
+) // #nosec G505
 
 func TestHubSuite(t *testing.T) {
 	suite.Run(t, new(HubSuite))
@@ -276,7 +276,7 @@ func (s *HubSuite) Test_ServeHTTP_01() {
 	// Connect to the server
 	con, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	assert.Nil(s.T(), err)
-	con.Close()
+	_ = con.Close()
 
 	dialer := &websocket.Dialer{
 		Subprotocols: []string{api.ShipWebsocketSubProtocol},
@@ -284,7 +284,7 @@ func (s *HubSuite) Test_ServeHTTP_01() {
 	con, _, err = dialer.Dial(wsURL, nil)
 	assert.Nil(s.T(), err)
 
-	con.Close()
+	_ = con.Close()
 	server.CloseClientConnections()
 	server.Close()
 
@@ -296,8 +296,8 @@ func (s *HubSuite) Test_ServeHTTP_02() {
 	server.TLS = &tls.Config{
 		Certificates:       []tls.Certificate{s.sut.certifciate},
 		ClientAuth:         tls.RequireAnyClientCert,
-		CipherSuites:       cert.CiperSuites,
-		InsecureSkipVerify: true,
+		CipherSuites:       cert.CipherSuites, // #nosec G402
+		InsecureSkipVerify: true,              // #nosec G402
 	}
 	server.StartTLS()
 	wsURL := strings.Replace(server.URL, "https://", "wss://", -1)
@@ -308,15 +308,15 @@ func (s *HubSuite) Test_ServeHTTP_02() {
 		HandshakeTimeout: 5 * time.Second,
 		TLSClientConfig: &tls.Config{
 			Certificates:       []tls.Certificate{invalidCert},
-			InsecureSkipVerify: true,
-			CipherSuites:       cert.CiperSuites,
+			InsecureSkipVerify: true,              // #nosec G402
+			CipherSuites:       cert.CipherSuites, // #nosec G402
 		},
 		Subprotocols: []string{api.ShipWebsocketSubProtocol},
 	}
 	con, _, err := dialer.Dial(wsURL, nil)
 	assert.Nil(s.T(), err)
 
-	con.Close()
+	_ = con.Close()
 
 	validCert, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
 	dialer = &websocket.Dialer{
@@ -324,15 +324,15 @@ func (s *HubSuite) Test_ServeHTTP_02() {
 		HandshakeTimeout: 5 * time.Second,
 		TLSClientConfig: &tls.Config{
 			Certificates:       []tls.Certificate{validCert},
-			InsecureSkipVerify: true,
-			CipherSuites:       cert.CiperSuites,
+			InsecureSkipVerify: true,              // #nosec G402
+			CipherSuites:       cert.CipherSuites, // #nosec G402
 		},
 		Subprotocols: []string{api.ShipWebsocketSubProtocol},
 	}
 	con, _, err = dialer.Dial(wsURL, nil)
 	assert.Nil(s.T(), err)
 
-	con.Close()
+	_ = con.Close()
 	server.CloseClientConnections()
 	server.Close()
 
@@ -366,8 +366,8 @@ func (s *HubSuite) Test_ConnectFoundService_02() {
 	server.TLS = &tls.Config{
 		Certificates:       []tls.Certificate{invalidCert},
 		ClientAuth:         tls.RequireAnyClientCert,
-		CipherSuites:       cert.CiperSuites,
-		InsecureSkipVerify: true,
+		CipherSuites:       cert.CipherSuites, // #nosec G402
+		InsecureSkipVerify: true,              // #nosec G402
 	}
 	server.StartTLS()
 
@@ -390,8 +390,8 @@ func (s *HubSuite) Test_ConnectFoundService_03() {
 	server.TLS = &tls.Config{
 		Certificates:       []tls.Certificate{s.sut.certifciate},
 		ClientAuth:         tls.RequireAnyClientCert,
-		CipherSuites:       cert.CiperSuites,
-		InsecureSkipVerify: true,
+		CipherSuites:       cert.CipherSuites, // #nosec G402
+		InsecureSkipVerify: true,              // #nosec G402
 	}
 	server.StartTLS()
 
@@ -579,6 +579,7 @@ func createInvalidCertificate(organizationalUnit, organization, country, commonN
 		return tls.Certificate{}, err
 	}
 	// SHIP 12.2: Required to be created according to RFC 3280 4.2.1.2
+	// #nosec G401
 	ski := sha1.Sum(asn1)
 
 	subject := pkix.Name{

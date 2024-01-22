@@ -14,7 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-)
+) // #nosec G505
 
 func TestCertSuite(t *testing.T) {
 	suite.Run(t, new(CertSuite))
@@ -64,6 +64,7 @@ func createInvalidCertificate(organizationalUnit, organization, country, commonN
 		return tls.Certificate{}, err
 	}
 	// SHIP 12.2: Required to be created according to RFC 3280 4.2.1.2
+	// #nosec G401
 	ski := sha1.Sum(asn1)
 
 	subject := pkix.Name{

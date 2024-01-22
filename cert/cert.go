@@ -12,10 +12,10 @@ import (
 	"fmt"
 	"math/big"
 	"time"
-)
+) // #nosec G505
 
 // SHIP 9.1: the ciphers are reported insecure but are defined to be used by SHIP
-var CiperSuites = []uint16{
+var CipherSuites = []uint16{
 	tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256, // SHIP 9.1: required cipher suite
 	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, // SHIP 9.1: optional cipher suite
 }
@@ -38,6 +38,7 @@ func CreateCertificate(organizationalUnit, organization, country, commonName str
 		return tls.Certificate{}, err
 	}
 	// SHIP 12.2: Required to be created according to RFC 3280 4.2.1.2
+	// #nosec G401
 	ski := sha1.Sum(asn1)
 
 	subject := pkix.Name{
