@@ -24,7 +24,7 @@ func TestWebsocketSuite(t *testing.T) {
 type WebsocketSuite struct {
 	suite.Suite
 
-	sut *websocketConnection
+	sut *WebsocketConnection
 
 	testServer *httptest.Server
 	testWsConn *websocket.Conn
