@@ -146,7 +146,7 @@ func (m *MdnsManager) SetupMdnsService() error {
 // A CEM service should always invoke this on startup
 // Any other service should only invoke this whenever it is not connected to a CEM service
 func (m *MdnsManager) AnnounceMdnsEntry() error {
-	if m.isAnnounced {
+	if m.isAnnounced || m.mdnsProvider == nil {
 		return nil
 	}
 
@@ -179,7 +179,7 @@ func (m *MdnsManager) AnnounceMdnsEntry() error {
 
 // Stop the mDNS announcement on the network
 func (m *MdnsManager) UnannounceMdnsEntry() {
-	if !m.isAnnounced {
+	if !m.isAnnounced || m.mdnsProvider == nil {
 		return
 	}
 
@@ -193,6 +193,10 @@ func (m *MdnsManager) UnannounceMdnsEntry() {
 func (m *MdnsManager) ShutdownMdnsService() {
 	m.UnannounceMdnsEntry()
 	m.stopResolvingEntries()
+
+	if m.mdnsProvider == nil {
+		return
+	}
 
 	m.mdnsProvider.Shutdown()
 	m.mdnsProvider = nil
