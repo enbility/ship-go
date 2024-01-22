@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// the ciphers are reported insecure but are defined to be used by SHIP
+// SHIP 9.1: the ciphers are reported insecure but are defined to be used by SHIP
 var CiperSuites = []uint16{
 	tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256, // SHIP 9.1: required cipher suite
 	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, // SHIP 9.1: optional cipher suite
