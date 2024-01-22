@@ -59,7 +59,11 @@ type ShipConnectionImpl struct {
 
 	shutdownOnce sync.Once
 
-	mux sync.Mutex
+	// buffer for SPINE messages that came in before the handshake was completed
+	spineBuffer [][]byte
+
+	mux       sync.Mutex
+	bufferMux sync.Mutex
 }
 
 var _ api.ShipConnection = (*ShipConnectionImpl)(nil)
@@ -214,6 +218,20 @@ func (c *ShipConnectionImpl) shipModelFromMessage(message []byte) (*model.ShipDa
 	return &data, nil
 }
 
+// process any SPINE messages that came in before the handshake completed
+// this will be called once the handshake is completed and
+// spineDataProcessing is set
+func (c *ShipConnectionImpl) processBufferedSpineMessages() {
+	c.bufferMux.Lock()
+	defer c.bufferMux.Unlock()
+
+	for _, item := range c.spineBuffer {
+		c.spineDataProcessing.HandleIncomingSpineMesssage(item)
+	}
+
+	c.spineBuffer = nil
+}
+
 // route the incoming message to either SHIP or SPINE message handlers
 func (c *ShipConnectionImpl) HandleIncomingShipMessage(message []byte) {
 	// Check if this is a SHIP SME or SPINE message
@@ -228,6 +246,12 @@ func (c *ShipConnectionImpl) HandleIncomingShipMessage(message []byte) {
 	}
 
 	if c.spineDataProcessing == nil {
+		// buffer message for processing once the handshake is completed
+		c.bufferMux.Lock()
+		defer c.bufferMux.Unlock()
+
+		c.spineBuffer = append(c.spineBuffer, []byte(data.Data.Payload))
+
 		return
 	}
 

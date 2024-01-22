@@ -202,6 +202,7 @@ func (c *ShipConnectionImpl) approveHandshake() {
 	c.spineDataProcessing = c.serviceDataProvider.SetupRemoteDevice(c.remoteSKI, c)
 	c.stopHandshakeTimer()
 	c.setState(model.SmeStateComplete, nil)
+	c.processBufferedSpineMessages()
 }
 
 // end the handshake process because of an error
