@@ -4,7 +4,7 @@
 # this needs to be run once on each golang installation or update
 
 # this might need to be run with sudo
-GOROOT=`go env GOROOT`
+GOROOT=$(go env GOROOT)
 BASEDIR=$(dirname $(realpath "$0"))
 cat $GOROOT/src/vendor/golang.org/x/crypto/cryptobyte/asn1.go | grep -C 1 "out = true"
 patch -N -t -d $GOROOT/src/vendor/golang.org/x/crypto/cryptobyte -i $BASEDIR/asn1.diff
