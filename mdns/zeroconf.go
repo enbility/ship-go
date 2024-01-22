@@ -73,7 +73,6 @@ func (z *ZeroconfProvider) ResolveEntries(cancelChan chan bool, callback func(el
 		select {
 		case <-ctx.Done():
 			end = true
-			break
 		case <-cancelChan:
 			ctx.Done()
 		case service := <-zcRemoved:
