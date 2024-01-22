@@ -122,7 +122,6 @@ func (a *AvahiProvider) ResolveEntries(cancelChan chan bool, callback func(eleme
 		select {
 		case <-cancelChan:
 			end = true
-			break
 		case service := <-avBrowser.AddChannel:
 			a.processService(service, false, callback)
 		case service := <-avBrowser.RemoveChannel:
