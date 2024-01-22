@@ -366,8 +366,9 @@ func (h *HubImpl) startWebsocketServer() error {
 	logging.Log().Debug("starting websocket server on", addr)
 
 	h.httpServer = &http.Server{
-		Addr:    addr,
-		Handler: h,
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: time.Duration(time.Second * 10),
 		TLSConfig: &tls.Config{
 			Certificates:          []tls.Certificate{h.certifciate},
 			ClientAuth:            tls.RequireAnyClientCert, // SHIP 9: Client authentication is required
