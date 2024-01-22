@@ -102,9 +102,7 @@ func (s *HubSuite) BeforeTest(suiteName, testName string) {
 	s.shipConnection.EXPECT().DataHandler().Return(s.wsDataConnection).Maybe()
 	s.shipConnection.EXPECT().ShipHandshakeState().Return(model.SmeStateComplete, nil).Maybe()
 
-	localService := &api.ServiceDetails{
-		SKI: "localSKI",
-	}
+	localService := api.NewServiceDetails("localSKI")
 
 	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
 	s.sut = NewHub(s.serviceProvider, s.mdnsService, 4567, certificate, localService)
@@ -554,15 +552,15 @@ func (s *HubSuite) Test_ReportMdnsEntries() {
 		Ski: testski1,
 	}
 	service1 := s.sut.ServiceForSKI(testski1)
-	service1.Trusted = true
-	service1.IPv4 = "127.0.0.1"
+	service1.SetTrusted(true)
+	service1.SetIPv4("127.0.0.1")
 
 	entries[testski2] = &api.MdnsEntry{
 		Ski: testski2,
 	}
 	service2 := s.sut.ServiceForSKI(testski2)
-	service2.Trusted = true
-	service2.IPv4 = "127.0.0.1"
+	service2.SetTrusted(true)
+	service2.SetIPv4("127.0.0.1")
 
 	s.sut.ReportMdnsEntries(entries)
 }
