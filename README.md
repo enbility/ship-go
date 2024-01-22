@@ -4,6 +4,7 @@
 [![GoDoc](https://img.shields.io/badge/godoc-reference-5272B4)](https://godoc.org/github.com/enbility/ship-go)
 [![Coverage Status](https://coveralls.io/repos/github/enbility/ship-go/badge.svg?branch=dev)](https://coveralls.io/github/enbility/ship-go?branch=dev)
 [![Go report](https://goreportcard.com/badge/github.com/enbility/ship-go)](https://goreportcard.com/report/github.com/enbility/ship-go)
+[![CodeFactor](https://www.codefactor.io/repository/github/enbility/ship-go/badge)](https://www.codefactor.io/repository/github/enbility/ship-go)
 
 This library provides an implementation of SHIP 1.0.1 in [go](https://golang.org), which is part of the [EEBUS](https://eebus.org) specification.
 
