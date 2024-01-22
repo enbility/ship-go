@@ -490,14 +490,14 @@ func (h *HubImpl) connectFoundService(remoteService *api.ServiceDetails, host, p
 	if len(remoteCerts) == 0 || remoteCerts[0].SubjectKeyId == nil {
 		// Close connection as we couldn't get the remote SKI
 		errorString := fmt.Sprintf("closing connection to %s: could not get remote SKI from certificate", remoteService.SKI)
-		conn.Close()
+		_ = conn.Close()
 		return errors.New(errorString)
 	}
 
 	if _, err := cert.SkiFromCertificate(remoteCerts[0]); err != nil {
 		// Close connection as the remote SKI can't be correct
 		errorString := fmt.Sprintf("closing connection to %s: %s", remoteService.SKI, err)
-		conn.Close()
+		_ = conn.Close()
 		return errors.New(errorString)
 	}
 
@@ -505,7 +505,7 @@ func (h *HubImpl) connectFoundService(remoteService *api.ServiceDetails, host, p
 
 	if remoteSKI != remoteService.SKI {
 		errorString := fmt.Sprintf("closing connection to %s: SKI does not match %s", remoteService.SKI, remoteSKI)
-		conn.Close()
+		_ = conn.Close()
 		return errors.New(errorString)
 	}
 
@@ -566,7 +566,7 @@ func (h *HubImpl) keepThisConnection(conn *websocket.Conn, incomingRequest bool,
 			go func() {
 				_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "double connection"))
 				time.Sleep(time.Millisecond * 100)
-				conn.Close()
+				_ = conn.Close()
 			}()
 		}
 	}

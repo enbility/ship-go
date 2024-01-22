@@ -240,7 +240,7 @@ func (w *WebsocketConnection) close() {
 		}
 
 		if w.conn != nil {
-			w.conn.Close()
+			_ = w.conn.Close()
 		}
 
 		w.muxShipWrite.Unlock()
