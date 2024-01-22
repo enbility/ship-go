@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"math/big"
 	"math/rand"
 	"net"
 	"net/http"
@@ -844,17 +843,7 @@ func (h *HubImpl) getConnectionInitiationDelayTime(ski string) (int, time.Durati
 	min := timeRange.min * 1000
 	max := timeRange.max * 1000
 
-	// seed with the local SKI for initializing rand
-	// TODO: remove when upping minimum go version to 1.20
-	i := new(big.Int)
-	hex := fmt.Sprintf("0x%s", h.localService.SKI)
-	randSource := rand.NewSource(time.Now().UnixNano())
-	if _, err := fmt.Sscan(hex, i); err == nil {
-		randSource = rand.NewSource(i.Int64() + time.Now().UnixNano())
-	}
-
-	r := rand.New(randSource)
-	duration := r.Intn(max-min) + min
+	duration := rand.Intn(max-min) + min
 
 	return counter, time.Duration(duration) * time.Millisecond
 }
