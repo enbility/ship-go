@@ -1,6 +1,6 @@
 module github.com/enbility/ship-go
 
-go 1.18
+go 1.21.1
 
 require (
 	github.com/DerAndereAndi/zeroconf/v2 v2.0.0-20231028092313-1ae0ab54a2df
