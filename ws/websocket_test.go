@@ -34,8 +34,8 @@ type WebsocketSuite struct {
 
 func (s *WebsocketSuite) BeforeTest(suiteName, testName string) {
 	s.wsDataReader = mocks.NewWebsocketDataReaderInterface(s.T())
-	s.wsDataReader.On("ReportConnectionError", mock.Anything).Return().Maybe()
-	s.wsDataReader.On("HandleIncomingShipMessage", mock.Anything).Return().Maybe()
+	s.wsDataReader.EXPECT().ReportConnectionError(mock.Anything).Return().Maybe()
+	s.wsDataReader.EXPECT().HandleIncomingWebsocketMessage(mock.Anything).Return().Maybe()
 
 	ts := &testServer{}
 	s.testServer, s.testWsConn = newWSServer(s.T(), ts)

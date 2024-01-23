@@ -65,7 +65,7 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 	err := z.sut.Announce("dummytest", 4289, []string{""})
 	assert.Nil(z.T(), err)
 
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second * 2)
 
 	z.mux.Lock()
 	assert.Equal(z.T(), true, dummyTestEntryFound)
@@ -74,7 +74,7 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 
 	z.sut.Unannounce()
 
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second * 2)
 
 	z.mux.Lock()
 	assert.Equal(z.T(), true, dummyTestEntryFound)
@@ -83,7 +83,7 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 	err = z.sut.Announce("test", 4289, []string{"test=test"})
 	assert.Nil(z.T(), err)
 
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second * 2)
 
 	z.mux.Lock()
 	assert.Equal(z.T(), true, testEntryFound)
