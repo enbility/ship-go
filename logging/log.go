@@ -4,8 +4,8 @@ import "sync"
 
 //go:generate mockery
 
-// Logging needs to be implemented, if the internal logs should be printed
-type Logging interface {
+// LoggingInterface needs to be implemented, if the internal logs should be printed
+type LoggingInterface interface {
 	Trace(args ...interface{})
 	Tracef(format string, args ...interface{})
 	Debug(args ...interface{})
@@ -28,13 +28,13 @@ func (l *NoLogging) Infof(format string, args ...interface{})  {}
 func (l *NoLogging) Error(args ...interface{})                 {}
 func (l *NoLogging) Errorf(format string, args ...interface{}) {}
 
-var log Logging = &NoLogging{}
+var log LoggingInterface = &NoLogging{}
 var mux sync.Mutex
 
 // Sets a custom logging implementation
 // By default NoLogging is used, so no logs are printed
 // This is used by service.SetLogging()
-func SetLogging(logger Logging) {
+func SetLogging(logger LoggingInterface) {
 	if logger == nil {
 		return
 	}
@@ -44,7 +44,7 @@ func SetLogging(logger Logging) {
 	log = logger
 }
 
-func Log() Logging {
+func Log() LoggingInterface {
 	mux.Lock()
 	defer mux.Unlock()
 

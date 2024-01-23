@@ -21,7 +21,7 @@ func NewZeroconfProvider(ifaces []net.Interface) *ZeroconfProvider {
 	}
 }
 
-var _ api.MdnsProvider = (*ZeroconfProvider)(nil)
+var _ api.MdnsProviderInterface = (*ZeroconfProvider)(nil)
 
 func (z *ZeroconfProvider) CheckAvailability() bool {
 	return true

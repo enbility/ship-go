@@ -41,19 +41,19 @@ type testStruct struct {
 type HubSuite struct {
 	suite.Suite
 
-	serviceProvider *mocks.MockHubConnection
-	mdnsService     *mocks.MockMdnsService
+	serviceProvider *mocks.MockHubReaderInterface
+	mdnsService     *mocks.MockMdnsInterface
 
 	// serviceProvider  *mocks.ServiceProvider
 	// mdnsService      *mocks.MdnsService
-	shipConnection   *mocks.ShipConnection
-	wsDataConnection *mocks.WebsocketDataConnection
+	shipConnection *mocks.ShipConnectionInterface
+	wsDataWriter   *mocks.WebsocketDataWriterInterface
 
 	remoteSki string
 
 	tests []testStruct
 
-	sut *HubImpl
+	sut *Hub
 }
 
 func (s *HubSuite) BeforeTest(suiteName, testName string) {
@@ -76,7 +76,7 @@ func (s *HubSuite) BeforeTest(suiteName, testName string) {
 	ctrl := gomock.NewController(s.T())
 	// use gomock mocks instead of mockery, as those will panic with a data race error in these tests
 
-	s.serviceProvider = mocks.NewMockHubConnection(ctrl)
+	s.serviceProvider = mocks.NewMockHubReaderInterface(ctrl)
 	// s.serviceProvider = mocks.NewServiceProvider(s.T())
 	s.serviceProvider.EXPECT().RemoteSKIConnected(gomock.Any()).Return().AnyTimes()
 	s.serviceProvider.EXPECT().ServiceShipIDUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
@@ -84,7 +84,7 @@ func (s *HubSuite) BeforeTest(suiteName, testName string) {
 	s.serviceProvider.EXPECT().RemoteSKIDisconnected(gomock.Any()).Return().AnyTimes()
 	s.serviceProvider.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
 
-	s.mdnsService = mocks.NewMockMdnsService(ctrl)
+	s.mdnsService = mocks.NewMockMdnsInterface(ctrl)
 	// s.mdnsService = mocks.NewMdnsService(s.T())
 	s.mdnsService.EXPECT().SetupMdnsService().Return(nil).AnyTimes()
 	s.mdnsService.EXPECT().AnnounceMdnsEntry().Return(nil).AnyTimes()
@@ -92,14 +92,14 @@ func (s *HubSuite) BeforeTest(suiteName, testName string) {
 	s.mdnsService.EXPECT().RegisterMdnsSearch(gomock.Any()).Return().AnyTimes()
 	s.mdnsService.EXPECT().UnregisterMdnsSearch(gomock.Any()).Return().AnyTimes()
 
-	s.wsDataConnection = mocks.NewWebsocketDataConnection(s.T())
+	s.wsDataWriter = mocks.NewWebsocketDataWriterInterface(s.T())
 
-	s.shipConnection = mocks.NewShipConnection(s.T())
+	s.shipConnection = mocks.NewShipConnectionInterface(s.T())
 	s.shipConnection.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 	s.shipConnection.EXPECT().RemoteSKI().Return(s.remoteSki).Maybe()
 	s.shipConnection.EXPECT().ApprovePendingHandshake().Return().Maybe()
 	s.shipConnection.EXPECT().AbortPendingHandshake().Return().Maybe()
-	s.shipConnection.EXPECT().DataHandler().Return(s.wsDataConnection).Maybe()
+	s.shipConnection.EXPECT().DataHandler().Return(s.wsDataWriter).Maybe()
 	s.shipConnection.EXPECT().ShipHandshakeState().Return(model.SmeStateComplete, nil).Maybe()
 
 	localService := api.NewServiceDetails("localSKI")

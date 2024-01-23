@@ -39,8 +39,8 @@ var connectionInitiationDelayTimeRanges = []connectionInitiationDelayTimeRange{
 }
 
 // handling the server and all connections to remote services
-type HubImpl struct {
-	connections map[string]api.ShipConnection
+type Hub struct {
+	connections map[string]api.ShipConnectionInterface
 
 	// which attempt is it to initate an connection to the remote SKI
 	connectionAttemptCounter map[string]int
@@ -51,7 +51,7 @@ type HubImpl struct {
 
 	localService *api.ServiceDetails
 
-	serviceProvider api.HubConnection
+	hubReader api.HubReaderInterface
 
 	// The list of known remote services
 	remoteServices map[string]*api.ServiceDetails
@@ -60,7 +60,7 @@ type HubImpl struct {
 	httpServer *http.Server
 
 	// Handling mDNS related tasks
-	mdns api.MdnsService
+	mdns api.MdnsInterface
 
 	// list of currently known/reported mDNS entries
 	knownMdnsEntries []*api.MdnsEntry
@@ -71,14 +71,14 @@ type HubImpl struct {
 	muxMdns       sync.Mutex
 }
 
-func NewHub(serviceProvider api.HubConnection, mdns api.MdnsService, port int, certificate tls.Certificate, localService *api.ServiceDetails) *HubImpl {
-	hub := &HubImpl{
-		connections:              make(map[string]api.ShipConnection),
+func NewHub(serviceProvider api.HubReaderInterface, mdns api.MdnsInterface, port int, certificate tls.Certificate, localService *api.ServiceDetails) *Hub {
+	hub := &Hub{
+		connections:              make(map[string]api.ShipConnectionInterface),
 		connectionAttemptCounter: make(map[string]int),
 		connectionAttemptRunning: make(map[string]bool),
 		remoteServices:           make(map[string]*api.ServiceDetails),
 		knownMdnsEntries:         make([]*api.MdnsEntry, 0),
-		serviceProvider:          serviceProvider,
+		hubReader:                serviceProvider,
 		port:                     port,
 		certifciate:              certificate,
 		localService:             localService,
@@ -89,7 +89,7 @@ func NewHub(serviceProvider api.HubConnection, mdns api.MdnsService, port int, c
 }
 
 // Start the ConnectionsHub with all its services
-func (h *HubImpl) Start() {
+func (h *Hub) Start() {
 	// start the websocket server
 	if err := h.startWebsocketServer(); err != nil {
 		logging.Log().Debug("error during websocket server starting:", err)
@@ -104,17 +104,17 @@ func (h *HubImpl) Start() {
 	h.checkRestartMdnsSearch()
 }
 
-var _ api.ShipServiceDataProvider = (*HubImpl)(nil)
+var _ api.ShipConnectionInfoProviderInterface = (*Hub)(nil)
 
 // Returns if the provided SKI is from a registered service
-func (h *HubImpl) IsRemoteServiceForSKIPaired(ski string) bool {
+func (h *Hub) IsRemoteServiceForSKIPaired(ski string) bool {
 	service := h.ServiceForSKI(ski)
 
 	return service.Trusted()
 }
 
 // The connection was closed, we need to clean up
-func (h *HubImpl) HandleConnectionClosed(connection api.ShipConnection, handshakeCompleted bool) {
+func (h *Hub) HandleConnectionClosed(connection api.ShipConnectionInterface, handshakeCompleted bool) {
 	remoteSki := connection.RemoteSKI()
 
 	// only remove this connection if it is the registered one for the ski!
@@ -132,7 +132,7 @@ func (h *HubImpl) HandleConnectionClosed(connection api.ShipConnection, handshak
 		}
 	}
 
-	h.serviceProvider.RemoteSKIDisconnected(connection.RemoteSKI())
+	h.hubReader.RemoteSKIDisconnected(connection.RemoteSKI())
 
 	// Do not automatically reconnect if handshake failed and not already paired
 	remoteService := h.ServiceForSKI(connection.RemoteSKI())
@@ -143,12 +143,12 @@ func (h *HubImpl) HandleConnectionClosed(connection api.ShipConnection, handshak
 	h.checkRestartMdnsSearch()
 }
 
-func (h *HubImpl) SetupRemoteDevice(ski string, writeI api.SpineDataConnection) api.SpineDataProcessing {
-	return h.serviceProvider.SetupRemoteDevice(ski, writeI)
+func (h *Hub) SetupRemoteDevice(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
+	return h.hubReader.SetupRemoteDevice(ski, writeI)
 }
 
 // return the number of paired services
-func (h *HubImpl) numberPairedServices() int {
+func (h *Hub) numberPairedServices() int {
 	amount := 0
 
 	h.muxReg.Lock()
@@ -163,7 +163,7 @@ func (h *HubImpl) numberPairedServices() int {
 }
 
 // startup mDNS if a paired service is not connected
-func (h *HubImpl) checkRestartMdnsSearch() {
+func (h *Hub) checkRestartMdnsSearch() {
 	countPairedServices := h.numberPairedServices()
 	h.muxCon.Lock()
 	countConnections := len(h.connections)
@@ -176,36 +176,36 @@ func (h *HubImpl) checkRestartMdnsSearch() {
 	}
 }
 
-func (h *HubImpl) StartBrowseMdnsSearch() {
+func (h *Hub) StartBrowseMdnsSearch() {
 	// TODO: this currently collides with searching for a specific SKI
 	h.mdns.RegisterMdnsSearch(h)
 }
 
-func (h *HubImpl) StopBrowseMdnsSearch() {
+func (h *Hub) StopBrowseMdnsSearch() {
 	// TODO: this currently collides with searching for a specific SKI
 	h.mdns.UnregisterMdnsSearch(h)
 }
 
 // Provides the SHIP ID the remote service reported during the handshake process
-func (h *HubImpl) ReportServiceShipID(ski string, shipdID string) {
-	h.serviceProvider.RemoteSKIConnected(ski)
+func (h *Hub) ReportServiceShipID(ski string, shipdID string) {
+	h.hubReader.RemoteSKIConnected(ski)
 
-	h.serviceProvider.ServiceShipIDUpdate(ski, shipdID)
+	h.hubReader.ServiceShipIDUpdate(ski, shipdID)
 }
 
 // return if the user is still able to trust the connection
-func (h *HubImpl) AllowWaitingForTrust(ski string) bool {
+func (h *Hub) AllowWaitingForTrust(ski string) bool {
 	if service := h.ServiceForSKI(ski); service != nil {
 		if service.Trusted() {
 			return true
 		}
 	}
 
-	return h.serviceProvider.AllowWaitingForTrust(ski)
+	return h.hubReader.AllowWaitingForTrust(ski)
 }
 
 // Provides the current ship message exchange state for a given SKI and the corresponding error if state is error
-func (h *HubImpl) HandleShipHandshakeStateUpdate(ski string, state model.ShipState) {
+func (h *Hub) HandleShipHandshakeStateUpdate(ski string, state model.ShipState) {
 	// overwrite service Paired value
 	if state.State == model.SmeHelloStateOk {
 		h.RegisterRemoteSKI(ski, true)
@@ -225,7 +225,7 @@ func (h *HubImpl) HandleShipHandshakeStateUpdate(ski string, state model.ShipSta
 	if existingState != pairingState || existingDetails.Error() != state.Error {
 		service.SetConnectionStateDetail(pairingDetail)
 
-		h.serviceProvider.ServicePairingDetailUpdate(ski, pairingDetail)
+		h.hubReader.ServicePairingDetailUpdate(ski, pairingDetail)
 	}
 }
 
@@ -235,7 +235,7 @@ func (h *HubImpl) HandleShipHandshakeStateUpdate(ski string, state model.ShipSta
 //
 //	ErrNotPaired if the SKI is not in the (to be) paired list
 //	ErrNoConnectionFound if no connection for the SKI was found
-func (h *HubImpl) PairingDetailForSki(ski string) *api.ConnectionStateDetail {
+func (h *Hub) PairingDetailForSki(ski string) *api.ConnectionStateDetail {
 	service := h.ServiceForSKI(ski)
 
 	if conn := h.connectionForSKI(ski); conn != nil {
@@ -248,7 +248,7 @@ func (h *HubImpl) PairingDetailForSki(ski string) *api.ConnectionStateDetail {
 }
 
 // maps ShipMessageExchangeState to PairingState
-func (h *HubImpl) mapShipMessageExchangeState(state model.ShipMessageExchangeState, ski string) api.ConnectionState {
+func (h *Hub) mapShipMessageExchangeState(state model.ShipMessageExchangeState, ski string) api.ConnectionState {
 	var connState api.ConnectionState
 
 	// map the SHIP states to a public gState
@@ -288,7 +288,7 @@ func (h *HubImpl) mapShipMessageExchangeState(state model.ShipMessageExchangeSta
 
 // Disconnect a connection to an SKI, used by a service implementation
 // e.g. if heartbeats go wrong
-func (h *HubImpl) DisconnectSKI(ski string, reason string) {
+func (h *Hub) DisconnectSKI(ski string, reason string) {
 	h.muxCon.Lock()
 	defer h.muxCon.Unlock()
 
@@ -302,14 +302,14 @@ func (h *HubImpl) DisconnectSKI(ski string, reason string) {
 }
 
 // register a new ship Connection
-func (h *HubImpl) registerConnection(connection api.ShipConnection) {
+func (h *Hub) registerConnection(connection api.ShipConnectionInterface) {
 	h.muxCon.Lock()
 	h.connections[connection.RemoteSKI()] = connection
 	h.muxCon.Unlock()
 }
 
 // return the connection for a specific SKI
-func (h *HubImpl) connectionForSKI(ski string) api.ShipConnection {
+func (h *Hub) connectionForSKI(ski string) api.ShipConnectionInterface {
 	h.muxCon.Lock()
 	defer h.muxCon.Unlock()
 
@@ -321,7 +321,7 @@ func (h *HubImpl) connectionForSKI(ski string) api.ShipConnection {
 }
 
 // close all connections
-func (h *HubImpl) Shutdown() {
+func (h *Hub) Shutdown() {
 	h.mdns.ShutdownMdnsService()
 	for _, c := range h.connections {
 		c.CloseConnection(false, 0, "")
@@ -329,7 +329,7 @@ func (h *HubImpl) Shutdown() {
 }
 
 // return if there is a connection for a SKI
-func (h *HubImpl) isSkiConnected(ski string) bool {
+func (h *Hub) isSkiConnected(ski string) bool {
 	h.muxCon.Lock()
 	defer h.muxCon.Unlock()
 
@@ -339,7 +339,7 @@ func (h *HubImpl) isSkiConnected(ski string) bool {
 }
 
 // Websocket connection handling
-func (h *HubImpl) verifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+func (h *Hub) verifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 	skiFound := false
 	for _, v := range rawCerts {
 		cerificate, err := x509.ParseCertificate(v)
@@ -360,7 +360,7 @@ func (h *HubImpl) verifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x
 }
 
 // start the ship websocket server
-func (h *HubImpl) startWebsocketServer() error {
+func (h *Hub) startWebsocketServer() error {
 	addr := fmt.Sprintf(":%d", h.port)
 	logging.Log().Debug("starting websocket server on", addr)
 
@@ -390,7 +390,7 @@ func (h *HubImpl) startWebsocketServer() error {
 // Connection Handling
 
 // HTTP Server callback for handling incoming connection requests
-func (h *HubImpl) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  ws.MaxMessageSize,
 		WriteBufferSize: ws.MaxMessageSize,
@@ -434,7 +434,7 @@ func (h *HubImpl) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	connectionStateDetail := service.ConnectionStateDetail()
 	if connectionStateDetail.State() == api.ConnectionStateQueued {
 		connectionStateDetail.SetState(api.ConnectionStateReceivedPairingRequest)
-		h.serviceProvider.ServicePairingDetailUpdate(ski, connectionStateDetail)
+		h.hubReader.ServicePairingDetailUpdate(ski, connectionStateDetail)
 	}
 
 	remoteService = service
@@ -456,7 +456,7 @@ func (h *HubImpl) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Connect to another EEBUS service
 //
 // returns error contains a reason for failing the connection or nil if no further tries should be processed
-func (h *HubImpl) connectFoundService(remoteService *api.ServiceDetails, host, port, path string) error {
+func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port, path string) error {
 	if h.isSkiConnected(remoteService.SKI()) {
 		return nil
 	}
@@ -531,7 +531,7 @@ func (h *HubImpl) connectFoundService(remoteService *api.ServiceDetails, host, p
 //
 // returns true if this connection is fine to be continue
 // returns false if this connection should not be established or kept
-func (h *HubImpl) keepThisConnection(conn *websocket.Conn, incomingRequest bool, remoteService *api.ServiceDetails) bool {
+func (h *Hub) keepThisConnection(conn *websocket.Conn, incomingRequest bool, remoteService *api.ServiceDetails) bool {
 	// SHIP 12.2.2 defines:
 	// prevent double connections with SKI Comparison
 	// the node with the hight SKI value kees the most recent connection and
@@ -577,7 +577,7 @@ func (h *HubImpl) keepThisConnection(conn *websocket.Conn, incomingRequest bool,
 }
 
 // return the service for a given SKI or an error if not found
-func (h *HubImpl) ServiceForSKI(ski string) *api.ServiceDetails {
+func (h *Hub) ServiceForSKI(ski string) *api.ServiceDetails {
 	h.muxReg.Lock()
 	defer h.muxReg.Unlock()
 
@@ -594,7 +594,7 @@ func (h *HubImpl) ServiceForSKI(ski string) *api.ServiceDetails {
 // Sets the SKI as being paired or not
 // Should be used for services which completed the pairing process and
 // which were stored as having the process completed
-func (h *HubImpl) RegisterRemoteSKI(ski string, enable bool) {
+func (h *Hub) RegisterRemoteSKI(ski string, enable bool) {
 	service := h.ServiceForSKI(ski)
 	service.SetTrusted(enable)
 
@@ -607,7 +607,7 @@ func (h *HubImpl) RegisterRemoteSKI(ski string, enable bool) {
 
 	service.ConnectionStateDetail().SetState(api.ConnectionStateNone)
 
-	h.serviceProvider.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
+	h.hubReader.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
 
 	if existingC := h.connectionForSKI(ski); existingC != nil {
 		existingC.CloseConnection(true, 4500, "User close")
@@ -615,7 +615,7 @@ func (h *HubImpl) RegisterRemoteSKI(ski string, enable bool) {
 }
 
 // Triggers the pairing process for a SKI
-func (h *HubImpl) InitiatePairingWithSKI(ski string) {
+func (h *Hub) InitiatePairingWithSKI(ski string) {
 	conn := h.connectionForSKI(ski)
 
 	// remotely initiated
@@ -629,7 +629,7 @@ func (h *HubImpl) InitiatePairingWithSKI(ski string) {
 	service := h.ServiceForSKI(ski)
 	service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
 
-	h.serviceProvider.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
+	h.hubReader.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
 
 	// initiate a search and also a connection if it does not yet exist
 	if !h.isSkiConnected(service.SKI()) {
@@ -638,7 +638,7 @@ func (h *HubImpl) InitiatePairingWithSKI(ski string) {
 }
 
 // Cancels the pairing process for a SKI
-func (h *HubImpl) CancelPairingWithSKI(ski string) {
+func (h *Hub) CancelPairingWithSKI(ski string) {
 	h.removeConnectionAttemptCounter(ski)
 
 	if existingC := h.connectionForSKI(ski); existingC != nil {
@@ -649,11 +649,11 @@ func (h *HubImpl) CancelPairingWithSKI(ski string) {
 	service.ConnectionStateDetail().SetState(api.ConnectionStateNone)
 	service.SetTrusted(false)
 
-	h.serviceProvider.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
+	h.hubReader.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
 }
 
 // Process reported mDNS services
-func (h *HubImpl) ReportMdnsEntries(entries map[string]*api.MdnsEntry) {
+func (h *Hub) ReportMdnsEntries(entries map[string]*api.MdnsEntry) {
 	h.muxMdns.Lock()
 	defer h.muxMdns.Unlock()
 
@@ -694,11 +694,11 @@ func (h *HubImpl) ReportMdnsEntries(entries map[string]*api.MdnsEntry) {
 
 	h.knownMdnsEntries = mdnsEntries
 
-	h.serviceProvider.VisibleMDNSRecordsUpdated(mdnsEntries)
+	h.hubReader.VisibleMDNSRecordsUpdated(mdnsEntries)
 }
 
 // coordinate connection initiation attempts to a remove service
-func (h *HubImpl) coordinateConnectionInitations(ski string, entry *api.MdnsEntry) {
+func (h *Hub) coordinateConnectionInitations(ski string, entry *api.MdnsEntry) {
 	if h.isConnectionAttemptRunning(ski) {
 		return
 	}
@@ -727,7 +727,7 @@ func (h *HubImpl) coordinateConnectionInitations(ski string, entry *api.MdnsEntr
 
 // invoked by coordinateConnectionInitations either with a delay or directly
 // when initating a pairing process
-func (h *HubImpl) prepareConnectionInitation(ski string, counter int, entry *api.MdnsEntry) {
+func (h *Hub) prepareConnectionInitation(ski string, counter int, entry *api.MdnsEntry) {
 	h.setConnectionAttemptRunning(ski, false)
 
 	// check if the current counter is still the same, otherwise this counter is irrelevant
@@ -759,7 +759,7 @@ func (h *HubImpl) prepareConnectionInitation(ski string, counter int, entry *api
 
 // attempt to establish a connection to a remote service
 // returns true if successful
-func (h *HubImpl) initateConnection(remoteService *api.ServiceDetails, entry *api.MdnsEntry) bool {
+func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.MdnsEntry) bool {
 	var err error
 
 	// try connecting via an IP address first
@@ -795,7 +795,7 @@ func (h *HubImpl) initateConnection(remoteService *api.ServiceDetails, entry *ap
 }
 
 // increase the connection attempt counter for the given ski
-func (h *HubImpl) increaseConnectionAttemptCounter(ski string) int {
+func (h *Hub) increaseConnectionAttemptCounter(ski string) int {
 	h.muxConAttempt.Lock()
 	defer h.muxConAttempt.Unlock()
 
@@ -814,7 +814,7 @@ func (h *HubImpl) increaseConnectionAttemptCounter(ski string) int {
 }
 
 // remove the connection attempt counter for the given ski
-func (h *HubImpl) removeConnectionAttemptCounter(ski string) {
+func (h *Hub) removeConnectionAttemptCounter(ski string) {
 	h.muxConAttempt.Lock()
 	defer h.muxConAttempt.Unlock()
 
@@ -822,7 +822,7 @@ func (h *HubImpl) removeConnectionAttemptCounter(ski string) {
 }
 
 // get the current attempt counter
-func (h *HubImpl) getCurrentConnectionAttemptCounter(ski string) (int, bool) {
+func (h *Hub) getCurrentConnectionAttemptCounter(ski string) (int, bool) {
 	h.muxConAttempt.Lock()
 	defer h.muxConAttempt.Unlock()
 
@@ -833,7 +833,7 @@ func (h *HubImpl) getCurrentConnectionAttemptCounter(ski string) (int, bool) {
 
 // get the connection initiation delay time range for a given ski
 // returns the current counter and the duration
-func (h *HubImpl) getConnectionInitiationDelayTime(ski string) (int, time.Duration) {
+func (h *Hub) getConnectionInitiationDelayTime(ski string) (int, time.Duration) {
 	counter := h.increaseConnectionAttemptCounter(ski)
 
 	h.muxConAttempt.Lock()
@@ -852,7 +852,7 @@ func (h *HubImpl) getConnectionInitiationDelayTime(ski string) (int, time.Durati
 }
 
 // set if a connection attempt is running/in progress
-func (h *HubImpl) setConnectionAttemptRunning(ski string, active bool) {
+func (h *Hub) setConnectionAttemptRunning(ski string, active bool) {
 	h.muxConAttempt.Lock()
 	defer h.muxConAttempt.Unlock()
 
@@ -860,7 +860,7 @@ func (h *HubImpl) setConnectionAttemptRunning(ski string, active bool) {
 }
 
 // return if a connection attempt is runnning/in progress
-func (h *HubImpl) isConnectionAttemptRunning(ski string) bool {
+func (h *Hub) isConnectionAttemptRunning(ski string) bool {
 	h.muxConAttempt.Lock()
 	defer h.muxConAttempt.Unlock()
 

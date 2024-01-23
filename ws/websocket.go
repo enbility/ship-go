@@ -19,7 +19,7 @@ type WebsocketConnection struct {
 	conn *websocket.Conn
 
 	// The implementation handling message processing
-	dataProcessing api.WebsocketDataProcessing
+	dataProcessing api.WebsocketDataReaderInterface
 
 	// The connection was closed
 	closeChannel chan struct{}
@@ -192,7 +192,7 @@ func (w *WebsocketConnection) readShipPump() {
 		}
 		logging.Log().Trace("Recv:", w.remoteSki, text)
 
-		w.dataProcessing.HandleIncomingShipMessage(message)
+		w.dataProcessing.HandleIncomingWebsocketMessage(message)
 	}
 }
 
@@ -247,16 +247,16 @@ func (w *WebsocketConnection) close() {
 	})
 }
 
-var _ api.WebsocketDataConnection = (*WebsocketConnection)(nil)
+var _ api.WebsocketDataWriterInterface = (*WebsocketConnection)(nil)
 
-func (w *WebsocketConnection) InitDataProcessing(dataProcessing api.WebsocketDataProcessing) {
+func (w *WebsocketConnection) InitDataProcessing(dataProcessing api.WebsocketDataReaderInterface) {
 	w.dataProcessing = dataProcessing
 
 	w.run()
 }
 
 // write a message to the websocket connection
-func (w *WebsocketConnection) WriteMessageToDataConnection(message []byte) error {
+func (w *WebsocketConnection) WriteMessageToWebsocketConnection(message []byte) error {
 	if w.isConnClosed() {
 		return errors.New("connection is closed")
 	}
