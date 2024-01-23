@@ -93,6 +93,9 @@ func (s *WebsocketSuite) TestConnectionInvalid() {
 	isConnClosed, err := s.sut.IsDataConnectionClosed()
 	assert.Equal(s.T(), true, isConnClosed)
 	assert.NotNil(s.T(), err)
+
+	err = s.sut.WriteMessageToDataConnection(msg)
+	assert.NotNil(s.T(), err)
 }
 
 func (s *WebsocketSuite) TestConnectionClose() {
