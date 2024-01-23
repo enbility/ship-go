@@ -54,9 +54,9 @@ type MdnsManager struct {
 	entries map[string]*api.MdnsEntry
 
 	// the registered callback, only connectionsHub is using this
-	searchDelegate api.MdnsSearch
+	searchDelegate api.MdnsSearchInterface
 
-	mdnsProvider api.MdnsProvider
+	mdnsProvider api.MdnsProviderInterface
 
 	mux        sync.Mutex
 	entriesMux sync.Mutex
@@ -105,7 +105,7 @@ func (m *MdnsManager) interfaces() ([]net.Interface, []int32, error) {
 	return ifaces, ifaceIndexes, nil
 }
 
-var _ api.MdnsService = (*MdnsManager)(nil)
+var _ api.MdnsInterface = (*MdnsManager)(nil)
 
 func (m *MdnsManager) SetupMdnsService() error {
 	ifaces, ifaceIndexes, err := m.interfaces()
@@ -258,7 +258,7 @@ func (m *MdnsManager) removeMdnsEntry(ski string) {
 }
 
 // Register a callback to be invoked for found mDNS entries
-func (m *MdnsManager) RegisterMdnsSearch(cb api.MdnsSearch) {
+func (m *MdnsManager) RegisterMdnsSearch(cb api.MdnsSearchInterface) {
 	m.mux.Lock()
 	if m.searchDelegate != cb {
 		m.searchDelegate = cb
@@ -283,7 +283,7 @@ func (m *MdnsManager) RegisterMdnsSearch(cb api.MdnsSearch) {
 }
 
 // Remove a callback for found mDNS entries and stop searching if no callbacks are left
-func (m *MdnsManager) UnregisterMdnsSearch(cb api.MdnsSearch) {
+func (m *MdnsManager) UnregisterMdnsSearch(cb api.MdnsSearchInterface) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 

@@ -14,8 +14,8 @@ import (
 	"github.com/enbility/ship-go/util"
 )
 
-// A ShipConnectionImpl handles the data connection and coordinates SHIP and SPINE messages i/o
-type ShipConnectionImpl struct {
+// A ShipConnection handles the data connection and coordinates SHIP and SPINE messages i/o
+type ShipConnection struct {
 	// The ship connection mode of this connection
 	role shipRole
 
@@ -29,13 +29,13 @@ type ShipConnectionImpl struct {
 	localShipID string
 
 	// data provider
-	serviceDataProvider api.ShipServiceDataProvider
+	infoProvider api.ShipConnectionInfoProviderInterface
 
 	// Where to pass incoming SPINE messages to
-	spineDataProcessing api.SpineDataProcessing
+	dataReader api.ShipConnectionDataReaderInterface
 
 	// the (web socket) handler for sending messages
-	dataHandler api.WebsocketDataConnection
+	dataWriter api.WebsocketDataWriterInterface
 
 	// The current SHIP state
 	smeState model.ShipMessageExchangeState
@@ -66,24 +66,24 @@ type ShipConnectionImpl struct {
 	bufferMux sync.Mutex
 }
 
-var _ api.ShipConnection = (*ShipConnectionImpl)(nil)
+var _ api.ShipConnectionInterface = (*ShipConnection)(nil)
 
 func NewConnectionHandler(
-	dataProvider api.ShipServiceDataProvider,
-	dataHandler api.WebsocketDataConnection,
+	dataProvider api.ShipConnectionInfoProviderInterface,
+	dataHandler api.WebsocketDataWriterInterface,
 	role shipRole,
 	localShipID,
 	remoteSki,
-	remoteShipId string) *ShipConnectionImpl {
-	ship := &ShipConnectionImpl{
-		serviceDataProvider: dataProvider,
-		dataHandler:         dataHandler,
-		role:                role,
-		localShipID:         localShipID,
-		remoteSKI:           remoteSki,
-		remoteShipID:        remoteShipId,
-		smeState:            model.CmiStateInitStart,
-		smeError:            nil,
+	remoteShipId string) *ShipConnection {
+	ship := &ShipConnection{
+		infoProvider: dataProvider,
+		dataWriter:   dataHandler,
+		role:         role,
+		localShipID:  localShipID,
+		remoteSKI:    remoteSki,
+		remoteShipID: remoteShipId,
+		smeState:     model.CmiStateInitStart,
+		smeError:     nil,
 	}
 
 	ship.handshakeTimerStopChan = make(chan struct{})
@@ -95,26 +95,26 @@ func NewConnectionHandler(
 	return ship
 }
 
-func (c *ShipConnectionImpl) RemoteSKI() string {
+func (c *ShipConnection) RemoteSKI() string {
 	return c.remoteSKI
 }
 
-func (c *ShipConnectionImpl) DataHandler() api.WebsocketDataConnection {
-	return c.dataHandler
+func (c *ShipConnection) DataHandler() api.WebsocketDataWriterInterface {
+	return c.dataWriter
 }
 
 // start SHIP communication
-func (c *ShipConnectionImpl) Run() {
+func (c *ShipConnection) Run() {
 	c.handleShipMessage(false, nil)
 }
 
 // provides the current ship state and error value if the state is in error
-func (c *ShipConnectionImpl) ShipHandshakeState() (model.ShipMessageExchangeState, error) {
+func (c *ShipConnection) ShipHandshakeState() (model.ShipMessageExchangeState, error) {
 	return c.getState(), c.smeError
 }
 
 // invoked when pairing for a pending request is approved
-func (c *ShipConnectionImpl) ApprovePendingHandshake() {
+func (c *ShipConnection) ApprovePendingHandshake() {
 	state := c.getState()
 	if state != model.SmeHelloStatePendingListen {
 		// TODO: what to do if the state is different?
@@ -133,7 +133,7 @@ func (c *ShipConnectionImpl) ApprovePendingHandshake() {
 }
 
 // invoked when pairing for a pending request is denied
-func (c *ShipConnectionImpl) AbortPendingHandshake() {
+func (c *ShipConnection) AbortPendingHandshake() {
 	state := c.getState()
 	if state != model.SmeHelloStatePendingListen && state != model.SmeHelloStateReadyListen {
 		// TODO: what to do if the state is differnet?
@@ -148,7 +148,7 @@ func (c *ShipConnectionImpl) AbortPendingHandshake() {
 }
 
 // close this ship connection
-func (c *ShipConnectionImpl) CloseConnection(safe bool, code int, reason string) {
+func (c *ShipConnection) CloseConnection(safe bool, code int, reason string) {
 	c.shutdownOnce.Do(func() {
 		c.stopHandshakeTimer()
 
@@ -172,7 +172,7 @@ func (c *ShipConnectionImpl) CloseConnection(safe bool, code int, reason string)
 			_ = c.sendShipModel(model.MsgTypeEnd, closeMessage)
 
 			if state != model.SmeStateError {
-				c.serviceDataProvider.HandleConnectionClosed(c, handshakeEnd)
+				c.infoProvider.HandleConnectionClosed(c, handshakeEnd)
 				return
 			}
 		}
@@ -181,25 +181,25 @@ func (c *ShipConnectionImpl) CloseConnection(safe bool, code int, reason string)
 		if code != 0 {
 			closeCode = code
 		}
-		c.dataHandler.CloseDataConnection(closeCode, reason)
+		c.dataWriter.CloseDataConnection(closeCode, reason)
 
-		c.serviceDataProvider.HandleConnectionClosed(c, handshakeEnd)
+		c.infoProvider.HandleConnectionClosed(c, handshakeEnd)
 	})
 }
 
-var _ api.SpineDataConnection = (*ShipConnectionImpl)(nil)
+var _ api.ShipConnectionDataWriterInterface = (*ShipConnection)(nil)
 
 // SpineDataConnection interface implementation
-func (c *ShipConnectionImpl) WriteSpineMessage(message []byte) {
+func (c *ShipConnection) WriteShipMessageWithPayload(message []byte) {
 	if err := c.sendSpineData(message); err != nil {
 		logging.Log().Debug(c.RemoteSKI, "Error sending spine message: ", err)
 		return
 	}
 }
 
-var _ api.WebsocketDataProcessing = (*ShipConnectionImpl)(nil)
+var _ api.WebsocketDataReaderInterface = (*ShipConnection)(nil)
 
-func (c *ShipConnectionImpl) shipModelFromMessage(message []byte) (*model.ShipData, error) {
+func (c *ShipConnection) shipModelFromMessage(message []byte) (*model.ShipData, error) {
 	_, jsonData := c.parseMessage(message, true)
 
 	// Get the datagram from the message
@@ -221,19 +221,19 @@ func (c *ShipConnectionImpl) shipModelFromMessage(message []byte) (*model.ShipDa
 // process any SPINE messages that came in before the handshake completed
 // this will be called once the handshake is completed and
 // spineDataProcessing is set
-func (c *ShipConnectionImpl) processBufferedSpineMessages() {
+func (c *ShipConnection) processBufferedSpineMessages() {
 	c.bufferMux.Lock()
 	defer c.bufferMux.Unlock()
 
 	for _, item := range c.spineBuffer {
-		c.spineDataProcessing.HandleIncomingSpineMesssage(item)
+		c.dataReader.HandleShipPayloadMessage(item)
 	}
 
 	c.spineBuffer = nil
 }
 
 // route the incoming message to either SHIP or SPINE message handlers
-func (c *ShipConnectionImpl) HandleIncomingShipMessage(message []byte) {
+func (c *ShipConnection) HandleIncomingWebsocketMessage(message []byte) {
 	// Check if this is a SHIP SME or SPINE message
 	if !c.hasSpineDatagram(message) {
 		c.handleShipMessage(false, message)
@@ -245,7 +245,7 @@ func (c *ShipConnectionImpl) HandleIncomingShipMessage(message []byte) {
 		return
 	}
 
-	if c.spineDataProcessing == nil {
+	if c.dataReader == nil {
 		// buffer message for processing once the handshake is completed
 		c.bufferMux.Lock()
 		defer c.bufferMux.Unlock()
@@ -256,16 +256,16 @@ func (c *ShipConnectionImpl) HandleIncomingShipMessage(message []byte) {
 	}
 
 	// pass the payload to the SPINE read handler
-	c.spineDataProcessing.HandleIncomingSpineMesssage([]byte(data.Data.Payload))
+	c.dataReader.HandleShipPayloadMessage([]byte(data.Data.Payload))
 }
 
 // checks wether the provided messages is a SHIP message
-func (c *ShipConnectionImpl) hasSpineDatagram(message []byte) bool {
+func (c *ShipConnection) hasSpineDatagram(message []byte) bool {
 	return bytes.Contains(message, []byte("datagram"))
 }
 
 // the websocket data connection was closed from remote
-func (c *ShipConnectionImpl) ReportConnectionError(err error) {
+func (c *ShipConnection) ReportConnectionError(err error) {
 	// if the handshake is aborted, a closed connection is no error
 	currentState := c.getState()
 
@@ -297,12 +297,12 @@ func (c *ShipConnectionImpl) ReportConnectionError(err error) {
 		State: model.SmeStateError,
 		Error: err,
 	}
-	c.serviceDataProvider.HandleShipHandshakeStateUpdate(c.remoteSKI, state)
+	c.infoProvider.HandleShipHandshakeStateUpdate(c.remoteSKI, state)
 }
 
 const payloadPlaceholder = `{"place":"holder"}`
 
-func (c *ShipConnectionImpl) transformSpineDataIntoShipJson(data []byte) ([]byte, error) {
+func (c *ShipConnection) transformSpineDataIntoShipJson(data []byte) ([]byte, error) {
 	spineMsg, err := JsonIntoEEBUSJson(data)
 	if err != nil {
 		return nil, err
@@ -340,13 +340,13 @@ func (c *ShipConnectionImpl) transformSpineDataIntoShipJson(data []byte) ([]byte
 	return []byte(eebusMsg), nil
 }
 
-func (c *ShipConnectionImpl) sendSpineData(data []byte) error {
+func (c *ShipConnection) sendSpineData(data []byte) error {
 	eebusMsg, err := c.transformSpineDataIntoShipJson(data)
 	if err != nil {
 		return err
 	}
 
-	if isClosed, err := c.dataHandler.IsDataConnectionClosed(); isClosed {
+	if isClosed, err := c.dataWriter.IsDataConnectionClosed(); isClosed {
 		c.CloseConnection(false, 0, "")
 		return err
 	}
@@ -355,7 +355,7 @@ func (c *ShipConnectionImpl) sendSpineData(data []byte) error {
 	shipMsg := []byte{model.MsgTypeData}
 	shipMsg = append(shipMsg, eebusMsg...)
 
-	err = c.dataHandler.WriteMessageToDataConnection(shipMsg)
+	err = c.dataWriter.WriteMessageToWebsocketConnection(shipMsg)
 	if err != nil {
 		logging.Log().Debug("error sending message: ", err)
 		return err
@@ -365,13 +365,13 @@ func (c *ShipConnectionImpl) sendSpineData(data []byte) error {
 }
 
 // send a json message for a provided model to the websocket connection
-func (c *ShipConnectionImpl) sendShipModel(typ byte, model interface{}) error {
+func (c *ShipConnection) sendShipModel(typ byte, model interface{}) error {
 	shipMsg, err := c.shipMessage(typ, model)
 	if err != nil {
 		return err
 	}
 
-	err = c.dataHandler.WriteMessageToDataConnection(shipMsg)
+	err = c.dataWriter.WriteMessageToWebsocketConnection(shipMsg)
 	if err != nil {
 		return err
 	}
@@ -380,15 +380,15 @@ func (c *ShipConnectionImpl) sendShipModel(typ byte, model interface{}) error {
 }
 
 // Process a SHIP Json message
-func (c *ShipConnectionImpl) processShipJsonMessage(message []byte, target any) error {
+func (c *ShipConnection) processShipJsonMessage(message []byte, target any) error {
 	_, data := c.parseMessage(message, true)
 
 	return json.Unmarshal(data, &target)
 }
 
 // transform a SHIP model into EEBUS specific JSON
-func (c *ShipConnectionImpl) shipMessage(typ byte, model interface{}) ([]byte, error) {
-	if isClosed, err := c.dataHandler.IsDataConnectionClosed(); isClosed {
+func (c *ShipConnection) shipMessage(typ byte, model interface{}) ([]byte, error) {
+	if isClosed, err := c.dataWriter.IsDataConnectionClosed(); isClosed {
 		c.CloseConnection(false, 0, "")
 		return nil, err
 	}
@@ -417,7 +417,7 @@ func (c *ShipConnectionImpl) shipMessage(typ byte, model interface{}) ([]byte, e
 // return the SHIP message type, the SHIP message and an error
 //
 // enable jsonFormat if the return message is expected to be encoded in the eebus json format
-func (c *ShipConnectionImpl) parseMessage(msg []byte, jsonFormat bool) (byte, []byte) {
+func (c *ShipConnection) parseMessage(msg []byte, jsonFormat bool) (byte, []byte) {
 	if len(msg) == 0 {
 		return 0, nil
 	}

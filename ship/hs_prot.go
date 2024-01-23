@@ -10,7 +10,7 @@ import (
 
 // Handshake Prot covers the states smeProt...
 
-func (c *ShipConnectionImpl) handshakeProtocol_Init() {
+func (c *ShipConnection) handshakeProtocol_Init() {
 	switch c.role {
 	case ShipRoleServer:
 		c.setState(model.SmeProtHStateServerInit, nil)
@@ -23,7 +23,7 @@ func (c *ShipConnectionImpl) handshakeProtocol_Init() {
 }
 
 // provide a ship.MessageProtocolHandshake struct
-func (c *ShipConnectionImpl) protocolHandshake() model.MessageProtocolHandshake {
+func (c *ShipConnection) protocolHandshake() model.MessageProtocolHandshake {
 	protocolHandshake := model.MessageProtocolHandshake{
 		MessageProtocolHandshake: model.MessageProtocolHandshakeType{
 			Version: model.Version{Major: 1, Minor: 0},
@@ -36,7 +36,7 @@ func (c *ShipConnectionImpl) protocolHandshake() model.MessageProtocolHandshake 
 	return protocolHandshake
 }
 
-func (c *ShipConnectionImpl) handshakeProtocol_smeProtHStateServerListenProposal(message []byte) {
+func (c *ShipConnection) handshakeProtocol_smeProtHStateServerListenProposal(message []byte) {
 	_, data := c.parseMessage(message, true)
 
 	messageProtocolHandshake := model.MessageProtocolHandshake{}
@@ -64,7 +64,7 @@ func (c *ShipConnectionImpl) handshakeProtocol_smeProtHStateServerListenProposal
 	c.setState(model.SmeProtHStateServerListenConfirm, nil)
 }
 
-func (c *ShipConnectionImpl) handshakeProtocol_smeProtHStateServerListenConfirm(message []byte) {
+func (c *ShipConnection) handshakeProtocol_smeProtHStateServerListenConfirm(message []byte) {
 	_, data := c.parseMessage(message, true)
 
 	var messageProtocolHandshake model.MessageProtocolHandshake
@@ -85,7 +85,7 @@ func (c *ShipConnectionImpl) handshakeProtocol_smeProtHStateServerListenConfirm(
 	c.setAndHandleState(model.SmeProtHStateServerOk)
 }
 
-func (c *ShipConnectionImpl) handshakeProtocol_smeProtHStateClientInit() {
+func (c *ShipConnection) handshakeProtocol_smeProtHStateClientInit() {
 	c.setState(model.SmeProtHStateClientInit, nil)
 
 	protocolHandshake := c.protocolHandshake()
@@ -99,7 +99,7 @@ func (c *ShipConnectionImpl) handshakeProtocol_smeProtHStateClientInit() {
 	c.setState(model.SmeProtHStateClientListenChoice, nil)
 }
 
-func (c *ShipConnectionImpl) handshakeProtocol_smeProtHStateClientListenChoice(message []byte) {
+func (c *ShipConnection) handshakeProtocol_smeProtHStateClientListenChoice(message []byte) {
 	_, data := c.parseMessage(message, true)
 
 	messageProtocolHandshake := model.MessageProtocolHandshake{}
@@ -160,7 +160,7 @@ func (c *ShipConnectionImpl) handshakeProtocol_smeProtHStateClientListenChoice(m
 	c.setAndHandleState(model.SmeProtHStateClientOk)
 }
 
-func (c *ShipConnectionImpl) abortProtocolHandshake(err model.MessageProtocolHandshakeErrorErrorType) {
+func (c *ShipConnection) abortProtocolHandshake(err model.MessageProtocolHandshakeErrorErrorType) {
 	c.stopHandshakeTimer()
 
 	msg := model.MessageProtocolHandshakeError{

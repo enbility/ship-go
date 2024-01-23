@@ -9,7 +9,7 @@ import (
 )
 
 // handle incoming SHIP messages and coordinate Handshake States
-func (c *ShipConnectionImpl) handleShipMessage(timeout bool, message []byte) {
+func (c *ShipConnection) handleShipMessage(timeout bool, message []byte) {
 	if len(message) > 2 {
 		var closeMsg model.ConnectionClose
 		err := c.processShipJsonMessage(message, &closeMsg)
@@ -29,12 +29,12 @@ func (c *ShipConnectionImpl) handleShipMessage(timeout bool, message []byte) {
 				<-time.After(500 * time.Millisecond)
 
 				//
-				c.dataHandler.CloseDataConnection(4001, "close")
-				c.serviceDataProvider.HandleConnectionClosed(c, c.getState() == model.SmeStateComplete)
+				c.dataWriter.CloseDataConnection(4001, "close")
+				c.infoProvider.HandleConnectionClosed(c, c.getState() == model.SmeStateComplete)
 			case model.ConnectionClosePhaseTypeConfirm:
 				// we got a confirmation so close this connection
-				c.dataHandler.CloseDataConnection(4001, "close")
-				c.serviceDataProvider.HandleConnectionClosed(c, c.getState() == model.SmeStateComplete)
+				c.dataWriter.CloseDataConnection(4001, "close")
+				c.infoProvider.HandleConnectionClosed(c, c.getState() == model.SmeStateComplete)
 			}
 
 			return
@@ -45,7 +45,7 @@ func (c *ShipConnectionImpl) handleShipMessage(timeout bool, message []byte) {
 }
 
 // set a new handshake state and handle timers if needed
-func (c *ShipConnectionImpl) setState(newState model.ShipMessageExchangeState, err error) {
+func (c *ShipConnection) setState(newState model.ShipMessageExchangeState, err error) {
 	c.mux.Lock()
 
 	oldState := c.smeState
@@ -75,13 +75,13 @@ func (c *ShipConnectionImpl) setState(newState model.ShipMessageExchangeState, e
 			Error: err,
 		}
 		c.mux.Unlock()
-		c.serviceDataProvider.HandleShipHandshakeStateUpdate(c.remoteSKI, state)
+		c.infoProvider.HandleShipHandshakeStateUpdate(c.remoteSKI, state)
 		return
 	}
 	c.mux.Unlock()
 }
 
-func (c *ShipConnectionImpl) getState() model.ShipMessageExchangeState {
+func (c *ShipConnection) getState() model.ShipMessageExchangeState {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 
@@ -89,7 +89,7 @@ func (c *ShipConnectionImpl) getState() model.ShipMessageExchangeState {
 }
 
 // handle handshake state transitions
-func (c *ShipConnectionImpl) handleState(timeout bool, message []byte) {
+func (c *ShipConnection) handleState(timeout bool, message []byte) {
 	switch c.getState() {
 	case model.SmeStateError:
 		logging.Log().Debug(c.RemoteSKI, "connection is in error state")
@@ -123,7 +123,7 @@ func (c *ShipConnectionImpl) handleState(timeout bool, message []byte) {
 		// pairing service
 		// go to substate ready if so, otherwise to substate pending
 
-		if c.serviceDataProvider.IsRemoteServiceForSKIPaired(c.remoteSKI) || c.role == ShipRoleClient {
+		if c.infoProvider.IsRemoteServiceForSKIPaired(c.remoteSKI) || c.role == ShipRoleClient {
 			c.setState(model.SmeHelloStateReadyInit, nil)
 		} else {
 			c.setState(model.SmeHelloStatePendingInit, nil)
@@ -191,22 +191,22 @@ func (c *ShipConnectionImpl) handleState(timeout bool, message []byte) {
 }
 
 // set a state and trigger handling it
-func (c *ShipConnectionImpl) setAndHandleState(state model.ShipMessageExchangeState) {
+func (c *ShipConnection) setAndHandleState(state model.ShipMessageExchangeState) {
 	c.setState(state, nil)
 	c.handleState(false, nil)
 }
 
 // SHIP handshake is approved, now set the new state and the SPINE read handler
-func (c *ShipConnectionImpl) approveHandshake() {
+func (c *ShipConnection) approveHandshake() {
 	// Report to SPINE local device about this remote device connection
-	c.spineDataProcessing = c.serviceDataProvider.SetupRemoteDevice(c.remoteSKI, c)
+	c.dataReader = c.infoProvider.SetupRemoteDevice(c.remoteSKI, c)
 	c.stopHandshakeTimer()
 	c.setState(model.SmeStateComplete, nil)
 	c.processBufferedSpineMessages()
 }
 
 // end the handshake process because of an error
-func (c *ShipConnectionImpl) endHandshakeWithError(err error) {
+func (c *ShipConnection) endHandshakeWithError(err error) {
 	c.stopHandshakeTimer()
 
 	c.setState(model.SmeStateError, err)
@@ -219,11 +219,11 @@ func (c *ShipConnectionImpl) endHandshakeWithError(err error) {
 		State: model.SmeStateError,
 		Error: err,
 	}
-	c.serviceDataProvider.HandleShipHandshakeStateUpdate(c.remoteSKI, state)
+	c.infoProvider.HandleShipHandshakeStateUpdate(c.remoteSKI, state)
 }
 
 // set the handshake timer to a new duration and start the channel
-func (c *ShipConnectionImpl) setHandshakeTimer(timerType timeoutTimerType, duration time.Duration) {
+func (c *ShipConnection) setHandshakeTimer(timerType timeoutTimerType, duration time.Duration) {
 	c.stopHandshakeTimer()
 
 	c.setHandshakeTimerRunning(true)
@@ -242,7 +242,7 @@ func (c *ShipConnectionImpl) setHandshakeTimer(timerType timeoutTimerType, durat
 }
 
 // stop the handshake timer and close the channel
-func (c *ShipConnectionImpl) stopHandshakeTimer() {
+func (c *ShipConnection) stopHandshakeTimer() {
 	if !c.getHandshakeTimerRunnging() {
 		return
 	}
@@ -254,28 +254,28 @@ func (c *ShipConnectionImpl) stopHandshakeTimer() {
 	c.setHandshakeTimerRunning(false)
 }
 
-func (c *ShipConnectionImpl) setHandshakeTimerRunning(value bool) {
+func (c *ShipConnection) setHandshakeTimerRunning(value bool) {
 	c.handshakeTimerMux.Lock()
 	defer c.handshakeTimerMux.Unlock()
 
 	c.handshakeTimerRunning = value
 }
 
-func (c *ShipConnectionImpl) getHandshakeTimerRunnging() bool {
+func (c *ShipConnection) getHandshakeTimerRunnging() bool {
 	c.handshakeTimerMux.Lock()
 	defer c.handshakeTimerMux.Unlock()
 
 	return c.handshakeTimerRunning
 }
 
-func (c *ShipConnectionImpl) setHandshakeTimerType(timerType timeoutTimerType) {
+func (c *ShipConnection) setHandshakeTimerType(timerType timeoutTimerType) {
 	c.handshakeTimerMux.Lock()
 	defer c.handshakeTimerMux.Unlock()
 
 	c.handshakeTimerType = timerType
 }
 
-func (c *ShipConnectionImpl) getHandshakeTimerType() timeoutTimerType {
+func (c *ShipConnection) getHandshakeTimerType() timeoutTimerType {
 	c.handshakeTimerMux.Lock()
 	defer c.handshakeTimerMux.Unlock()
 

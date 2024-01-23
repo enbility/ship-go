@@ -29,19 +29,19 @@ type WebsocketSuite struct {
 	testServer *httptest.Server
 	testWsConn *websocket.Conn
 
-	wsDataProcessing *mocks.WebsocketDataProcessing
+	wsDataReader *mocks.WebsocketDataReaderInterface
 }
 
 func (s *WebsocketSuite) BeforeTest(suiteName, testName string) {
-	s.wsDataProcessing = mocks.NewWebsocketDataProcessing(s.T())
-	s.wsDataProcessing.On("ReportConnectionError", mock.Anything).Return().Maybe()
-	s.wsDataProcessing.On("HandleIncomingShipMessage", mock.Anything).Return().Maybe()
+	s.wsDataReader = mocks.NewWebsocketDataReaderInterface(s.T())
+	s.wsDataReader.On("ReportConnectionError", mock.Anything).Return().Maybe()
+	s.wsDataReader.On("HandleIncomingShipMessage", mock.Anything).Return().Maybe()
 
 	ts := &testServer{}
 	s.testServer, s.testWsConn = newWSServer(s.T(), ts)
 
 	s.sut = NewWebsocketConnection(s.testWsConn, "remoteSki")
-	s.sut.InitDataProcessing(s.wsDataProcessing)
+	s.sut.InitDataProcessing(s.wsDataReader)
 }
 
 func (s *WebsocketSuite) AfterTest(suiteName, testName string) {
@@ -54,7 +54,7 @@ func (s *WebsocketSuite) TestConnection() {
 	assert.Equal(s.T(), false, isClosed)
 
 	msg := []byte{0, 0}
-	err := s.sut.WriteMessageToDataConnection(msg)
+	err := s.sut.WriteMessageToWebsocketConnection(msg)
 	assert.Nil(s.T(), err)
 
 	// make sure we have enough time to read and write
@@ -62,7 +62,7 @@ func (s *WebsocketSuite) TestConnection() {
 
 	msg = []byte{1}
 	msg = append(msg, []byte("message")...)
-	err = s.sut.WriteMessageToDataConnection(msg)
+	err = s.sut.WriteMessageToWebsocketConnection(msg)
 	assert.Nil(s.T(), err)
 
 	// make sure we have enough time to read and write
@@ -78,13 +78,13 @@ func (s *WebsocketSuite) TestConnection() {
 	assert.Equal(s.T(), true, isConnClosed)
 	assert.NotNil(s.T(), err)
 
-	err = s.sut.WriteMessageToDataConnection(msg)
+	err = s.sut.WriteMessageToWebsocketConnection(msg)
 	assert.NotNil(s.T(), err)
 }
 
 func (s *WebsocketSuite) TestConnectionInvalid() {
 	msg := []byte{100}
-	err := s.sut.WriteMessageToDataConnection(msg)
+	err := s.sut.WriteMessageToWebsocketConnection(msg)
 	assert.Nil(s.T(), err)
 
 	// make sure we have enough time to read and write
@@ -94,7 +94,7 @@ func (s *WebsocketSuite) TestConnectionInvalid() {
 	assert.Equal(s.T(), true, isConnClosed)
 	assert.NotNil(s.T(), err)
 
-	err = s.sut.WriteMessageToDataConnection(msg)
+	err = s.sut.WriteMessageToWebsocketConnection(msg)
 	assert.NotNil(s.T(), err)
 }
 

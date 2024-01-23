@@ -18,12 +18,12 @@ func TestConnectionSuite(t *testing.T) {
 type ConnectionSuite struct {
 	suite.Suite
 
-	sut *ShipConnectionImpl
+	sut *ShipConnection
 
-	shipDataProvider *mocks.ShipServiceDataProvider
-	wsDataConn       *mocks.WebsocketDataConnection
+	infoProvider *mocks.ShipConnectionInfoProviderInterface
+	wsDataWriter *mocks.WebsocketDataWriterInterface
 
-	spineDataProcessing *mocks.SpineDataProcessing
+	shipConnectionReader *mocks.ShipConnectionDataReaderInterface
 
 	sentMessage []byte
 }
@@ -31,22 +31,22 @@ type ConnectionSuite struct {
 func (s *ConnectionSuite) BeforeTest(suiteName, testName string) {
 	s.sentMessage = nil
 
-	s.shipDataProvider = mocks.NewShipServiceDataProvider(s.T())
-	s.shipDataProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Return().Maybe()
-	s.shipDataProvider.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Return().Maybe()
-	s.shipDataProvider.EXPECT().IsRemoteServiceForSKIPaired(mock.Anything).Return(false).Maybe()
-	s.shipDataProvider.EXPECT().AllowWaitingForTrust(mock.Anything).Return(false).Maybe()
+	s.infoProvider = mocks.NewShipConnectionInfoProviderInterface(s.T())
+	s.infoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Return().Maybe()
+	s.infoProvider.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Return().Maybe()
+	s.infoProvider.EXPECT().IsRemoteServiceForSKIPaired(mock.Anything).Return(false).Maybe()
+	s.infoProvider.EXPECT().AllowWaitingForTrust(mock.Anything).Return(false).Maybe()
 
-	s.wsDataConn = mocks.NewWebsocketDataConnection(s.T())
-	s.wsDataConn.EXPECT().InitDataProcessing(mock.Anything).Return().Maybe()
-	s.wsDataConn.EXPECT().WriteMessageToDataConnection(mock.Anything).RunAndReturn(func(message []byte) error { s.sentMessage = message; return nil }).Maybe()
-	s.wsDataConn.EXPECT().IsDataConnectionClosed().RunAndReturn(func() (bool, error) { return false, nil }).Maybe()
-	s.wsDataConn.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Return().Maybe()
+	s.wsDataWriter = mocks.NewWebsocketDataWriterInterface(s.T())
+	s.wsDataWriter.EXPECT().InitDataProcessing(mock.Anything).Return().Maybe()
+	s.wsDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).RunAndReturn(func(message []byte) error { s.sentMessage = message; return nil }).Maybe()
+	s.wsDataWriter.EXPECT().IsDataConnectionClosed().RunAndReturn(func() (bool, error) { return false, nil }).Maybe()
+	s.wsDataWriter.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Return().Maybe()
 
-	s.spineDataProcessing = mocks.NewSpineDataProcessing(s.T())
-	s.spineDataProcessing.EXPECT().HandleIncomingSpineMesssage(mock.Anything).Return().Maybe()
+	s.shipConnectionReader = mocks.NewShipConnectionDataReaderInterface(s.T())
+	s.shipConnectionReader.EXPECT().HandleShipPayloadMessage(mock.Anything).Return().Maybe()
 
-	s.sut = NewConnectionHandler(s.shipDataProvider, s.wsDataConn, ShipRoleServer, "LocalShipID", "RemoveDevice", "RemoteShipID")
+	s.sut = NewConnectionHandler(s.infoProvider, s.wsDataWriter, ShipRoleServer, "LocalShipID", "RemoveDevice", "RemoteShipID")
 }
 
 func (s *ConnectionSuite) Test_RemoteSKI() {
@@ -141,7 +141,7 @@ func (s *ConnectionSuite) TestHandleIncomingShipMessage() {
 	msg := []byte{0}
 	msg = append(msg, jsonData...)
 
-	s.sut.HandleIncomingShipMessage(msg)
+	s.sut.HandleIncomingWebsocketMessage(msg)
 
 	spineData := `{"datagram":{}}`
 	jsonData = []byte(spineData)
@@ -157,13 +157,13 @@ func (s *ConnectionSuite) TestHandleIncomingShipMessage() {
 	msg = []byte{0}
 	msg = append(msg, jsonData...)
 
-	s.sut.HandleIncomingShipMessage(msg)
+	s.sut.HandleIncomingWebsocketMessage(msg)
 
-	s.sut.spineDataProcessing = s.spineDataProcessing
+	s.sut.dataReader = s.shipConnectionReader
 
 	s.sut.processBufferedSpineMessages()
 
-	s.sut.HandleIncomingShipMessage(msg)
+	s.sut.HandleIncomingWebsocketMessage(msg)
 }
 
 func (s *ConnectionSuite) TestReportConnectionError() {

@@ -24,11 +24,11 @@ func (s *dataHandlerTest) lastMessage() []byte {
 	return s.sentMessage
 }
 
-var _ api.WebsocketDataConnection = (*dataHandlerTest)(nil)
+var _ api.WebsocketDataWriterInterface = (*dataHandlerTest)(nil)
 
-func (s *dataHandlerTest) InitDataProcessing(dataProcessing api.WebsocketDataProcessing) {}
+func (s *dataHandlerTest) InitDataProcessing(dataProcessing api.WebsocketDataReaderInterface) {}
 
-func (s *dataHandlerTest) WriteMessageToDataConnection(message []byte) error {
+func (s *dataHandlerTest) WriteMessageToWebsocketConnection(message []byte) error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
@@ -39,14 +39,14 @@ func (s *dataHandlerTest) WriteMessageToDataConnection(message []byte) error {
 
 func (s *dataHandlerTest) CloseDataConnection(int, string)       {}
 func (w *dataHandlerTest) IsDataConnectionClosed() (bool, error) { return false, nil }
-func (w *dataHandlerTest) SetupRemoteDevice(ski string, writeI api.SpineDataConnection) api.SpineDataProcessing {
+func (w *dataHandlerTest) SetupRemoteDevice(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
 	return nil
 }
 
-var _ api.ShipServiceDataProvider = (*dataHandlerTest)(nil)
+var _ api.ShipConnectionInfoProviderInterface = (*dataHandlerTest)(nil)
 
 func (s *dataHandlerTest) IsRemoteServiceForSKIPaired(string) bool { return true }
-func (s *dataHandlerTest) HandleConnectionClosed(api.ShipConnection, bool) {
+func (s *dataHandlerTest) HandleConnectionClosed(api.ShipConnectionInterface, bool) {
 	s.handleConnectionClosedInvoked = true
 }
 func (s *dataHandlerTest) ReportServiceShipID(string, string) {}
@@ -55,13 +55,13 @@ func (s *dataHandlerTest) AllowWaitingForTrust(string) bool {
 }
 func (s *dataHandlerTest) HandleShipHandshakeStateUpdate(string, model.ShipState) {}
 
-func initTest(role shipRole) (*ShipConnectionImpl, *dataHandlerTest) {
+func initTest(role shipRole) (*ShipConnection, *dataHandlerTest) {
 	dataHandler := &dataHandlerTest{}
 	conhandler := NewConnectionHandler(dataHandler, dataHandler, role, "LocalShipID", "RemoveDevice", "RemoteShipID")
 
 	return conhandler, dataHandler
 }
 
-func shutdownTest(conhandler *ShipConnectionImpl) {
+func shutdownTest(conhandler *ShipConnection) {
 	conhandler.stopHandshakeTimer()
 }

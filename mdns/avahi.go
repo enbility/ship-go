@@ -22,7 +22,7 @@ func NewAvahiProvider(ifaceIndexes []int32) *AvahiProvider {
 	}
 }
 
-var _ api.MdnsProvider = (*AvahiProvider)(nil)
+var _ api.MdnsProviderInterface = (*AvahiProvider)(nil)
 
 func (a *AvahiProvider) CheckAvailability() bool {
 	dbusConn, err := dbus.SystemBus()

@@ -22,18 +22,18 @@ type MdnsSuite struct {
 
 	sut *MdnsManager
 
-	mdnsService  *mocks.MdnsService
-	mdnsSearch   *mocks.MdnsSearch
-	mdnsProvider *mocks.MdnsProvider
+	mdnsService  *mocks.MdnsInterface
+	mdnsSearch   *mocks.MdnsSearchInterface
+	mdnsProvider *mocks.MdnsProviderInterface
 }
 
 func (s *MdnsSuite) BeforeTest(suiteName, testName string) {
-	s.mdnsService = mocks.NewMdnsService(s.T())
+	s.mdnsService = mocks.NewMdnsInterface(s.T())
 
-	s.mdnsSearch = mocks.NewMdnsSearch(s.T())
+	s.mdnsSearch = mocks.NewMdnsSearchInterface(s.T())
 	s.mdnsSearch.EXPECT().ReportMdnsEntries(mock.Anything).Maybe()
 
-	s.mdnsProvider = mocks.NewMdnsProvider(s.T())
+	s.mdnsProvider = mocks.NewMdnsProviderInterface(s.T())
 	s.mdnsProvider.On("ResolveEntries", mock.Anything, mock.Anything).Maybe().Return()
 	s.mdnsProvider.On("Shutdown").Maybe().Return()
 
