@@ -26,4 +26,22 @@ func (s *ServiceDetailsSuite) Test_ServiceDetails() {
 
 	state := details.ConnectionStateDetail()
 	assert.Equal(s.T(), ConnectionStateNone, state.State())
+
+	ski := details.SKI()
+	assert.Equal(s.T(), testSki, ski)
+
+	details.SetIPv4("127.0.0.1")
+	assert.Equal(s.T(), "127.0.0.1", details.IPv4())
+
+	details.SetShipID("shipid")
+	assert.Equal(s.T(), "shipid", details.ShipID())
+
+	details.SetDeviceType("devicetype")
+	assert.Equal(s.T(), "devicetype", details.DeviceType())
+
+	details.SetRegisterAutoAccept(true)
+	assert.Equal(s.T(), true, details.RegisterAutoAccept())
+
+	details.SetTrusted(true)
+	assert.Equal(s.T(), true, details.Trusted())
 }
