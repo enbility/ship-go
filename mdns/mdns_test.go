@@ -3,7 +3,6 @@ package mdns
 import (
 	"net"
 	"testing"
-	"time"
 
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/mocks"
@@ -23,15 +22,14 @@ type MdnsSuite struct {
 	sut *MdnsManager
 
 	mdnsService  *mocks.MdnsInterface
-	mdnsSearch   *mocks.MdnsSearchInterface
+	mdnsSearch   *mocks.MdnsReportInterface
 	mdnsProvider *mocks.MdnsProviderInterface
 }
 
 func (s *MdnsSuite) BeforeTest(suiteName, testName string) {
 	s.mdnsService = mocks.NewMdnsInterface(s.T())
 
-	s.mdnsSearch = mocks.NewMdnsSearchInterface(s.T())
-	s.mdnsSearch.EXPECT().ReportMdnsEntries(mock.Anything).Maybe()
+	s.mdnsSearch = mocks.NewMdnsReportInterface(s.T())
 
 	s.mdnsProvider = mocks.NewMdnsProviderInterface(s.T())
 	s.mdnsProvider.On("ResolveEntries", mock.Anything, mock.Anything).Maybe().Return()
@@ -41,8 +39,12 @@ func (s *MdnsSuite) BeforeTest(suiteName, testName string) {
 	s.sut.mdnsProvider = s.mdnsProvider
 }
 
-func (s *MdnsSuite) Test_SetupMdnsService() {
-	err := s.sut.SetupMdnsService()
+func (s *MdnsSuite) AfterTest(suiteName, testName string) {
+	s.sut.Shutdown()
+}
+
+func (s *MdnsSuite) Test_Start() {
+	err := s.sut.Start(s.mdnsSearch)
 	assert.Nil(s.T(), err)
 
 	assert.Equal(s.T(), true, s.sut.isAnnounced)
@@ -52,40 +54,47 @@ func (s *MdnsSuite) Test_SetupMdnsService() {
 
 	s.sut.UnannounceMdnsEntry()
 	assert.Equal(s.T(), false, s.sut.isAnnounced)
+}
+
+func (s *MdnsSuite) Test_Start_IFaces() {
+	// we don't have access to iface names on CI
+	if util.IsRunningOnCI() {
+		return
+	}
 
 	ifaces, err := net.Interfaces()
 	assert.NotEqual(s.T(), 0, len(ifaces))
 	assert.Nil(s.T(), err)
 
-	// we don't have access to iface names on CI
-	if !util.IsRunningOnCI() {
-		s.sut.ifaces = []string{ifaces[0].Name}
-		err = s.sut.SetupMdnsService()
-		assert.Nil(s.T(), err)
-	}
+	s.sut.ifaces = []string{ifaces[0].Name}
+	err = s.sut.Start(s.mdnsSearch)
+	assert.Nil(s.T(), err)
+}
 
+func (s *MdnsSuite) Test_Start_IFaces_Invalid() {
 	s.sut.ifaces = []string{"noifacename"}
-	err = s.sut.SetupMdnsService()
+	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
-
-	assert.Equal(s.T(), false, s.sut.isSearchingServices)
-	s.sut.setIsSearchingServices(true)
-	assert.Equal(s.T(), true, s.sut.isSearchingServices)
 
 	s.sut.SetAutoAccept(true)
 	assert.Equal(s.T(), true, s.sut.autoaccept)
 }
 
-func (s *MdnsSuite) Test_ShutdownMdnsService() {
-	s.sut.ShutdownMdnsService()
+func (s *MdnsSuite) Test_Shutdown_Start() {
+	err := s.sut.Start(s.mdnsSearch)
+	assert.Nil(s.T(), err)
+
+	s.sut.Shutdown()
 	assert.Nil(s.T(), s.sut.mdnsProvider)
 
-	s.sut.resolveEntries()
-	s.sut.ShutdownMdnsService()
+	s.sut.Shutdown()
+}
 
-	s.sut.stopResolvingEntries()
-	s.sut.cancelChan = nil
-	s.sut.stopResolvingEntries()
+func (s *MdnsSuite) Test_Shutdown_NoStart() {
+	s.sut.Shutdown()
+	assert.Nil(s.T(), s.sut.mdnsProvider)
+
+	s.sut.Shutdown()
 }
 
 func (s *MdnsSuite) Test_MdnsEntry() {
@@ -115,16 +124,7 @@ func (s *MdnsSuite) Test_MdnsEntry() {
 	assert.Equal(s.T(), 1, len(copyEntries))
 }
 
-func (s *MdnsSuite) Test_MdnsSearch() {
-	assert.Equal(s.T(), false, s.sut.isSearchingServices)
-	s.sut.RegisterMdnsSearch(s.mdnsSearch)
-	assert.Equal(s.T(), true, s.sut.isSearchingServices)
-
-	s.sut.setIsSearchingServices(true)
-	assert.Equal(s.T(), true, s.sut.isSearchingServices)
-
-	s.sut.RegisterMdnsSearch(s.mdnsSearch)
-
+func (s *MdnsSuite) Test_MdnsEntries() {
 	testSki := "test"
 
 	entry := &api.MdnsEntry{
@@ -134,17 +134,20 @@ func (s *MdnsSuite) Test_MdnsSearch() {
 	entries := s.sut.mdnsEntries()
 	assert.Equal(s.T(), 1, len(entries))
 
-	s.sut.setIsSearchingServices(false)
+	err := s.sut.Start(s.mdnsSearch)
+	assert.Nil(s.T(), err)
 
-	s.sut.RegisterMdnsSearch(s.mdnsSearch)
+	s.mdnsSearch.EXPECT().ReportMdnsEntries(mock.Anything).Once()
 
-	// wait a bit as ResolveEntries is called in a goroutine
-	time.Sleep(time.Millisecond * 200)
-
-	s.sut.UnregisterMdnsSearch(s.mdnsSearch)
+	s.sut.RequestMdnsEntries()
 }
 
 func (s *MdnsSuite) Test_ProcessMdnsEntry() {
+	err := s.sut.Start(s.mdnsSearch)
+	assert.Nil(s.T(), err)
+
+	s.mdnsSearch.EXPECT().ReportMdnsEntries(mock.Anything).Maybe()
+
 	elements := make(map[string]string, 1)
 
 	name := "name"
@@ -190,7 +193,6 @@ func (s *MdnsSuite) Test_ProcessMdnsEntry() {
 	s.sut.processMdnsEntry(elements, name, host, ips, port, false)
 	assert.Equal(s.T(), 1, len(s.sut.mdnsEntries()))
 
-	s.sut.searchDelegate = s.mdnsSearch
 	s.sut.processMdnsEntry(elements, name, host, ips, port, false)
 	assert.Equal(s.T(), 1, len(s.sut.mdnsEntries()))
 

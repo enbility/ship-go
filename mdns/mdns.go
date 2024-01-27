@@ -45,21 +45,19 @@ type MdnsManager struct {
 	// Wether remote devices should be automatically accepted
 	autoaccept bool
 
-	isAnnounced         bool
-	isSearchingServices bool
-
-	cancelChan chan bool
+	isAnnounced bool
 
 	// the currently available mDNS entries with the SKI as the key in the map
 	entries map[string]*api.MdnsEntry
 
 	// the registered callback, only connectionsHub is using this
-	searchDelegate api.MdnsSearchInterface
+	report api.MdnsReportInterface
 
 	mdnsProvider api.MdnsProviderInterface
 
-	mux        sync.Mutex
-	entriesMux sync.Mutex
+	shutdownOnce sync.Once
+
+	mux sync.Mutex
 }
 
 func NewMDNS(ski, deviceBrand, deviceModel, deviceType, shipIdentifier, serviceName string, port int, ifaces []string) *MdnsManager {
@@ -73,7 +71,6 @@ func NewMDNS(ski, deviceBrand, deviceModel, deviceType, shipIdentifier, serviceN
 		port:        port,
 		ifaces:      ifaces,
 		entries:     make(map[string]*api.MdnsEntry),
-		cancelChan:  make(chan bool),
 	}
 
 	return m
@@ -107,7 +104,7 @@ func (m *MdnsManager) interfaces() ([]net.Interface, []int32, error) {
 
 var _ api.MdnsInterface = (*MdnsManager)(nil)
 
-func (m *MdnsManager) SetupMdnsService() error {
+func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 	ifaces, ifaceIndexes, err := m.interfaces()
 	if err != nil {
 		return err
@@ -129,6 +126,11 @@ func (m *MdnsManager) SetupMdnsService() error {
 		return err
 	}
 
+	m.report = cb
+
+	logging.Log().Debug("mdns: start search")
+	go m.mdnsProvider.ResolveEntries(m.processMdnsEntry)
+
 	// catch signals
 	go func() {
 		signalC := make(chan os.Signal, 1)
@@ -136,10 +138,24 @@ func (m *MdnsManager) SetupMdnsService() error {
 
 		<-signalC // wait for signal
 
-		m.ShutdownMdnsService()
+		m.Shutdown()
 	}()
 
 	return nil
+}
+
+// Shutdown all of mDNS
+func (m *MdnsManager) Shutdown() {
+	m.shutdownOnce.Do(func() {
+		m.UnannounceMdnsEntry()
+
+		if m.mdnsProvider == nil {
+			return
+		}
+
+		m.mdnsProvider.Shutdown()
+		m.mdnsProvider = nil
+	})
 }
 
 // Announces the service to the network via mDNS
@@ -189,41 +205,21 @@ func (m *MdnsManager) UnannounceMdnsEntry() {
 	m.isAnnounced = false
 }
 
-// Shutdown all of mDNS
-func (m *MdnsManager) ShutdownMdnsService() {
-	m.UnannounceMdnsEntry()
-	m.stopResolvingEntries()
-
-	if m.mdnsProvider == nil {
-		return
-	}
-
-	m.mdnsProvider.Shutdown()
-	m.mdnsProvider = nil
-}
-
 func (m *MdnsManager) SetAutoAccept(accept bool) {
 	m.autoaccept = accept
 	// TODO: if changed, also change the mDNS registry
 }
 
-func (m *MdnsManager) setIsSearchingServices(enable bool) {
+func (m *MdnsManager) mdnsEntries() map[string]*api.MdnsEntry {
 	m.mux.Lock()
 	defer m.mux.Unlock()
-
-	m.isSearchingServices = enable
-}
-
-func (m *MdnsManager) mdnsEntries() map[string]*api.MdnsEntry {
-	m.entriesMux.Lock()
-	defer m.entriesMux.Unlock()
 
 	return m.entries
 }
 
 func (m *MdnsManager) copyMdnsEntries() map[string]*api.MdnsEntry {
-	m.entriesMux.Lock()
-	defer m.entriesMux.Unlock()
+	m.mux.Lock()
+	defer m.mux.Unlock()
 
 	mdnsEntries := make(map[string]*api.MdnsEntry)
 	for k, v := range m.entries {
@@ -236,89 +232,25 @@ func (m *MdnsManager) copyMdnsEntries() map[string]*api.MdnsEntry {
 }
 
 func (m *MdnsManager) mdnsEntry(ski string) (*api.MdnsEntry, bool) {
-	m.entriesMux.Lock()
-	defer m.entriesMux.Unlock()
+	m.mux.Lock()
+	defer m.mux.Unlock()
 
 	entry, ok := m.entries[ski]
 	return entry, ok
 }
 
 func (m *MdnsManager) setMdnsEntry(ski string, entry *api.MdnsEntry) {
-	m.entriesMux.Lock()
-	defer m.entriesMux.Unlock()
+	m.mux.Lock()
+	defer m.mux.Unlock()
 
 	m.entries[ski] = entry
 }
 
 func (m *MdnsManager) removeMdnsEntry(ski string) {
-	m.entriesMux.Lock()
-	defer m.entriesMux.Unlock()
-
-	delete(m.entries, ski)
-}
-
-// Register a callback to be invoked for found mDNS entries
-func (m *MdnsManager) RegisterMdnsSearch(cb api.MdnsSearchInterface) {
-	m.mux.Lock()
-	if m.searchDelegate != cb {
-		m.searchDelegate = cb
-	}
-	m.mux.Unlock()
-
-	if !m.isSearchingServices {
-		m.setIsSearchingServices(true)
-		m.resolveEntries()
-		return
-	}
-
-	// do we already know some entries?
-	if len(m.mdnsEntries()) == 0 {
-		return
-	}
-
-	// maybe entries are already found
-	mdnsEntries := m.copyMdnsEntries()
-
-	go m.searchDelegate.ReportMdnsEntries(mdnsEntries)
-}
-
-// Remove a callback for found mDNS entries and stop searching if no callbacks are left
-func (m *MdnsManager) UnregisterMdnsSearch(cb api.MdnsSearchInterface) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
-	m.searchDelegate = nil
-
-	m.stopResolvingEntries()
-}
-
-// search for mDNS entries and report them
-func (m *MdnsManager) resolveEntries() {
-	if m.mdnsProvider == nil {
-		m.setIsSearchingServices(false)
-		return
-	}
-	go func() {
-		logging.Log().Debug("mdns: start search")
-		m.mdnsProvider.ResolveEntries(m.cancelChan, m.processMdnsEntry)
-
-		m.setIsSearchingServices(false)
-	}()
-}
-
-// stop searching for mDNS entries
-func (m *MdnsManager) stopResolvingEntries() {
-	if m.cancelChan == nil {
-		return
-	}
-
-	if util.IsChannelClosed(m.cancelChan) {
-		return
-	}
-
-	logging.Log().Debug("mdns: stop search")
-
-	m.cancelChan <- true
+	delete(m.entries, ski)
 }
 
 // process an mDNS entry and manage mDNS entries map
@@ -364,9 +296,6 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		model = elements["model"]
 	}
 
-	m.mux.Lock()
-	defer m.mux.Unlock()
-
 	updated := false
 
 	entry, exists := m.mdnsEntry(ski)
@@ -397,7 +326,10 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 			}
 		}
 
-		m.setMdnsEntry(ski, entry)
+		if updated {
+			m.setMdnsEntry(ski, entry)
+		}
+
 	} else if !exists && !remove {
 		updated = true
 		// new
@@ -419,8 +351,15 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		logging.Log().Debug("ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
 	}
 
-	if m.searchDelegate != nil && updated {
-		entries := m.copyMdnsEntries()
-		go m.searchDelegate.ReportMdnsEntries(entries)
+	if m.report == nil || !updated {
+		return
 	}
+
+	entries := m.copyMdnsEntries()
+	go m.report.ReportMdnsEntries(entries)
+}
+
+func (m *MdnsManager) RequestMdnsEntries() {
+	entries := m.copyMdnsEntries()
+	go m.report.ReportMdnsEntries(entries)
 }

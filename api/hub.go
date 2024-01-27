@@ -8,8 +8,6 @@ package api
 // interface for handling the server and remote connections
 type HubInterface interface {
 	PairingDetailForSki(ski string) *ConnectionStateDetail
-	StartBrowseMdnsSearch()
-	StopBrowseMdnsSearch()
 	Start()
 	Shutdown()
 	ServiceForSKI(ski string) *ServiceDetails

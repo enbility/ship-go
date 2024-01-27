@@ -65,35 +65,34 @@ func (_c *MdnsInterface_AnnounceMdnsEntry_Call) RunAndReturn(run func() error) *
 	return _c
 }
 
-// RegisterMdnsSearch provides a mock function with given fields: cb
-func (_m *MdnsInterface) RegisterMdnsSearch(cb api.MdnsSearchInterface) {
-	_m.Called(cb)
+// RequestMdnsEntries provides a mock function with given fields:
+func (_m *MdnsInterface) RequestMdnsEntries() {
+	_m.Called()
 }
 
-// MdnsInterface_RegisterMdnsSearch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RegisterMdnsSearch'
-type MdnsInterface_RegisterMdnsSearch_Call struct {
+// MdnsInterface_RequestMdnsEntries_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RequestMdnsEntries'
+type MdnsInterface_RequestMdnsEntries_Call struct {
 	*mock.Call
 }
 
-// RegisterMdnsSearch is a helper method to define mock.On call
-//   - cb api.MdnsSearchInterface
-func (_e *MdnsInterface_Expecter) RegisterMdnsSearch(cb interface{}) *MdnsInterface_RegisterMdnsSearch_Call {
-	return &MdnsInterface_RegisterMdnsSearch_Call{Call: _e.mock.On("RegisterMdnsSearch", cb)}
+// RequestMdnsEntries is a helper method to define mock.On call
+func (_e *MdnsInterface_Expecter) RequestMdnsEntries() *MdnsInterface_RequestMdnsEntries_Call {
+	return &MdnsInterface_RequestMdnsEntries_Call{Call: _e.mock.On("RequestMdnsEntries")}
 }
 
-func (_c *MdnsInterface_RegisterMdnsSearch_Call) Run(run func(cb api.MdnsSearchInterface)) *MdnsInterface_RegisterMdnsSearch_Call {
+func (_c *MdnsInterface_RequestMdnsEntries_Call) Run(run func()) *MdnsInterface_RequestMdnsEntries_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(api.MdnsSearchInterface))
+		run()
 	})
 	return _c
 }
 
-func (_c *MdnsInterface_RegisterMdnsSearch_Call) Return() *MdnsInterface_RegisterMdnsSearch_Call {
+func (_c *MdnsInterface_RequestMdnsEntries_Call) Return() *MdnsInterface_RequestMdnsEntries_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *MdnsInterface_RegisterMdnsSearch_Call) RunAndReturn(run func(api.MdnsSearchInterface)) *MdnsInterface_RegisterMdnsSearch_Call {
+func (_c *MdnsInterface_RequestMdnsEntries_Call) RunAndReturn(run func()) *MdnsInterface_RequestMdnsEntries_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -131,17 +130,49 @@ func (_c *MdnsInterface_SetAutoAccept_Call) RunAndReturn(run func(bool)) *MdnsIn
 	return _c
 }
 
-// SetupMdnsService provides a mock function with given fields:
-func (_m *MdnsInterface) SetupMdnsService() error {
-	ret := _m.Called()
+// Shutdown provides a mock function with given fields:
+func (_m *MdnsInterface) Shutdown() {
+	_m.Called()
+}
+
+// MdnsInterface_Shutdown_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Shutdown'
+type MdnsInterface_Shutdown_Call struct {
+	*mock.Call
+}
+
+// Shutdown is a helper method to define mock.On call
+func (_e *MdnsInterface_Expecter) Shutdown() *MdnsInterface_Shutdown_Call {
+	return &MdnsInterface_Shutdown_Call{Call: _e.mock.On("Shutdown")}
+}
+
+func (_c *MdnsInterface_Shutdown_Call) Run(run func()) *MdnsInterface_Shutdown_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MdnsInterface_Shutdown_Call) Return() *MdnsInterface_Shutdown_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MdnsInterface_Shutdown_Call) RunAndReturn(run func()) *MdnsInterface_Shutdown_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Start provides a mock function with given fields: cb
+func (_m *MdnsInterface) Start(cb api.MdnsReportInterface) error {
+	ret := _m.Called(cb)
 
 	if len(ret) == 0 {
-		panic("no return value specified for SetupMdnsService")
+		panic("no return value specified for Start")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func() error); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(api.MdnsReportInterface) error); ok {
+		r0 = rf(cb)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -149,61 +180,30 @@ func (_m *MdnsInterface) SetupMdnsService() error {
 	return r0
 }
 
-// MdnsInterface_SetupMdnsService_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetupMdnsService'
-type MdnsInterface_SetupMdnsService_Call struct {
+// MdnsInterface_Start_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Start'
+type MdnsInterface_Start_Call struct {
 	*mock.Call
 }
 
-// SetupMdnsService is a helper method to define mock.On call
-func (_e *MdnsInterface_Expecter) SetupMdnsService() *MdnsInterface_SetupMdnsService_Call {
-	return &MdnsInterface_SetupMdnsService_Call{Call: _e.mock.On("SetupMdnsService")}
+// Start is a helper method to define mock.On call
+//   - cb api.MdnsReportInterface
+func (_e *MdnsInterface_Expecter) Start(cb interface{}) *MdnsInterface_Start_Call {
+	return &MdnsInterface_Start_Call{Call: _e.mock.On("Start", cb)}
 }
 
-func (_c *MdnsInterface_SetupMdnsService_Call) Run(run func()) *MdnsInterface_SetupMdnsService_Call {
+func (_c *MdnsInterface_Start_Call) Run(run func(cb api.MdnsReportInterface)) *MdnsInterface_Start_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		run(args[0].(api.MdnsReportInterface))
 	})
 	return _c
 }
 
-func (_c *MdnsInterface_SetupMdnsService_Call) Return(_a0 error) *MdnsInterface_SetupMdnsService_Call {
+func (_c *MdnsInterface_Start_Call) Return(_a0 error) *MdnsInterface_Start_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *MdnsInterface_SetupMdnsService_Call) RunAndReturn(run func() error) *MdnsInterface_SetupMdnsService_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// ShutdownMdnsService provides a mock function with given fields:
-func (_m *MdnsInterface) ShutdownMdnsService() {
-	_m.Called()
-}
-
-// MdnsInterface_ShutdownMdnsService_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ShutdownMdnsService'
-type MdnsInterface_ShutdownMdnsService_Call struct {
-	*mock.Call
-}
-
-// ShutdownMdnsService is a helper method to define mock.On call
-func (_e *MdnsInterface_Expecter) ShutdownMdnsService() *MdnsInterface_ShutdownMdnsService_Call {
-	return &MdnsInterface_ShutdownMdnsService_Call{Call: _e.mock.On("ShutdownMdnsService")}
-}
-
-func (_c *MdnsInterface_ShutdownMdnsService_Call) Run(run func()) *MdnsInterface_ShutdownMdnsService_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MdnsInterface_ShutdownMdnsService_Call) Return() *MdnsInterface_ShutdownMdnsService_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MdnsInterface_ShutdownMdnsService_Call) RunAndReturn(run func()) *MdnsInterface_ShutdownMdnsService_Call {
+func (_c *MdnsInterface_Start_Call) RunAndReturn(run func(api.MdnsReportInterface) error) *MdnsInterface_Start_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -236,39 +236,6 @@ func (_c *MdnsInterface_UnannounceMdnsEntry_Call) Return() *MdnsInterface_Unanno
 }
 
 func (_c *MdnsInterface_UnannounceMdnsEntry_Call) RunAndReturn(run func()) *MdnsInterface_UnannounceMdnsEntry_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// UnregisterMdnsSearch provides a mock function with given fields: cb
-func (_m *MdnsInterface) UnregisterMdnsSearch(cb api.MdnsSearchInterface) {
-	_m.Called(cb)
-}
-
-// MdnsInterface_UnregisterMdnsSearch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UnregisterMdnsSearch'
-type MdnsInterface_UnregisterMdnsSearch_Call struct {
-	*mock.Call
-}
-
-// UnregisterMdnsSearch is a helper method to define mock.On call
-//   - cb api.MdnsSearchInterface
-func (_e *MdnsInterface_Expecter) UnregisterMdnsSearch(cb interface{}) *MdnsInterface_UnregisterMdnsSearch_Call {
-	return &MdnsInterface_UnregisterMdnsSearch_Call{Call: _e.mock.On("UnregisterMdnsSearch", cb)}
-}
-
-func (_c *MdnsInterface_UnregisterMdnsSearch_Call) Run(run func(cb api.MdnsSearchInterface)) *MdnsInterface_UnregisterMdnsSearch_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(api.MdnsSearchInterface))
-	})
-	return _c
-}
-
-func (_c *MdnsInterface_UnregisterMdnsSearch_Call) Return() *MdnsInterface_UnregisterMdnsSearch_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MdnsInterface_UnregisterMdnsSearch_Call) RunAndReturn(run func(api.MdnsSearchInterface)) *MdnsInterface_UnregisterMdnsSearch_Call {
 	_c.Call.Return(run)
 	return _c
 }

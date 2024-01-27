@@ -34,8 +34,6 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 	boolV := z.sut.CheckAvailability()
 	assert.Equal(z.T(), true, boolV)
 
-	cancelChan := make(chan bool)
-
 	testEntryFound := false
 	dummyTestEntryFound := false
 
@@ -60,7 +58,7 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 			z.mux.Unlock()
 		}
 	}
-	go z.sut.ResolveEntries(cancelChan, cb)
+	go z.sut.ResolveEntries(cb)
 
 	err := z.sut.Announce("dummytest", 4289, []string{})
 	assert.Nil(z.T(), err)
@@ -97,6 +95,4 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 	assert.NotNil(z.T(), err)
 
 	z.sut.Unannounce()
-
-	cancelChan <- true
 }

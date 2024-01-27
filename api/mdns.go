@@ -19,19 +19,18 @@ type MdnsEntry struct {
 }
 
 // implemented by Hub, used by mdns
-type MdnsSearchInterface interface {
+type MdnsReportInterface interface {
 	ReportMdnsEntries(entries map[string]*MdnsEntry)
 }
 
 // implemented by mdns, used by Hub
 type MdnsInterface interface {
-	SetupMdnsService() error
-	ShutdownMdnsService()
+	Start(cb MdnsReportInterface) error
+	Shutdown()
 	AnnounceMdnsEntry() error
 	UnannounceMdnsEntry()
-	RegisterMdnsSearch(cb MdnsSearchInterface)
-	UnregisterMdnsSearch(cb MdnsSearchInterface)
 	SetAutoAccept(bool)
+	RequestMdnsEntries()
 }
 
 // implemented by mdns providers, used by mdns
@@ -40,5 +39,5 @@ type MdnsProviderInterface interface {
 	Shutdown()
 	Announce(serviceName string, port int, txt []string) error
 	Unannounce()
-	ResolveEntries(cancelChan chan bool, callback func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool))
+	ResolveEntries(callback func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool))
 }
