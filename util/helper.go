@@ -31,6 +31,13 @@ func IsChannelClosed[T any](ch <-chan T) bool {
 	}
 }
 
+func CloseChannelIfClosed[T any](ch chan T) {
+	if IsChannelClosed[T](ch) {
+		close(ch)
+		ch = nil
+	}
+}
+
 // standardize the provided SKI strings
 func NormalizeSKI(ski string) string {
 	ski = strings.ReplaceAll(ski, " ", "")
