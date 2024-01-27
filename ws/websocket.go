@@ -14,6 +14,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const connIsClosedError string = "connection is closed"
+
 // Handling of the actual websocket connection to a remote device
 type WebsocketConnection struct {
 	// The actual websocket connection
@@ -103,9 +105,6 @@ func (w *WebsocketConnection) writeShipPump() {
 				return
 			}
 
-			w.muxConWrite.Lock()
-			_ = w.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			w.muxConWrite.Unlock()
 			if !ok {
 				logging.Log().Debug(w.remoteSki, "ship write channel closed")
 				// The write channel has been closed
@@ -113,13 +112,11 @@ func (w *WebsocketConnection) writeShipPump() {
 				return
 			}
 
-			if err := w.writeMessage(websocket.BinaryMessage, message); err != nil {
-				// ignore write errors if the connection got closed
-				if w.isConnClosed() {
-					return
-				}
+			w.muxConWrite.Lock()
+			_ = w.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			w.muxConWrite.Unlock()
 
-				w.closeWithError(err, "error writing to websocket: ")
+			if !w.writeMessage(websocket.BinaryMessage, message) {
 				return
 			}
 
@@ -147,10 +144,7 @@ func (w *WebsocketConnection) handlePing() {
 	w.muxConWrite.Lock()
 	_ = w.conn.SetWriteDeadline(time.Now().Add(writeWait))
 	w.muxConWrite.Unlock()
-	if err := w.writeMessage(websocket.PingMessage, nil); err != nil {
-		w.closeWithError(err, "error writing to websocket: ")
-		return
-	}
+	_ = w.writeMessage(websocket.PingMessage, nil)
 }
 
 func (w *WebsocketConnection) closeWithError(err error, reason string) {
@@ -252,14 +246,14 @@ func (w *WebsocketConnection) InitDataProcessing(dataProcessing api.WebsocketDat
 // write a message to the websocket connection
 func (w *WebsocketConnection) WriteMessageToWebsocketConnection(message []byte) error {
 	if w.isConnClosed() {
-		return errors.New("connection is closed")
+		return errors.New(connIsClosedError)
 	}
 
 	w.muxShipWrite.Lock()
 	defer w.muxShipWrite.Unlock()
 
 	if w.conn == nil || w.shipWriteChannel == nil {
-		return errors.New("connection is closed")
+		return errors.New(connIsClosedError)
 	}
 
 	w.shipWriteChannel <- message
@@ -267,22 +261,35 @@ func (w *WebsocketConnection) WriteMessageToWebsocketConnection(message []byte) 
 }
 
 // make sure websocket Write is only called once at a time
-func (w *WebsocketConnection) writeMessage(messageType int, data []byte) error {
+func (w *WebsocketConnection) writeMessage(messageType int, data []byte) bool {
+	if w.isConnClosed() {
+		return false
+	}
+
 	w.muxConWrite.Lock()
 	defer w.muxConWrite.Unlock()
 
-	return w.conn.WriteMessage(messageType, data)
+	err := w.conn.WriteMessage(messageType, data)
+	if err != nil {
+		// ignore write errors if the connection got closed
+		w.closeWithError(err, "error writing to websocket: ")
+		return false
+	}
+
+	return true
 }
 
 // shutdown the connection and all internals
 func (w *WebsocketConnection) CloseDataConnection(closeCode int, reason string) {
-	if !w.isConnClosed() {
-		if reason != "" {
-			_ = w.writeMessage(websocket.CloseMessage, websocket.FormatCloseMessage(closeCode, reason))
-		}
-		w.setConnClosedError(nil)
-		w.close()
+	if w.isConnClosed() {
+		return
 	}
+
+	if reason != "" {
+		_ = w.writeMessage(websocket.CloseMessage, websocket.FormatCloseMessage(closeCode, reason))
+	}
+	w.setConnClosedError(nil)
+	w.close()
 }
 
 // return if the connection is closed
