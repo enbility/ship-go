@@ -10,7 +10,6 @@ import (
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/logging"
 	"github.com/enbility/ship-go/model"
-	"github.com/enbility/ship-go/util"
 	"github.com/gorilla/websocket"
 )
 
@@ -93,6 +92,7 @@ func (w *WebsocketConnection) writeShipPump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
+		close(w.shipWriteChannel)
 	}()
 
 	for {
@@ -152,28 +152,34 @@ func (w *WebsocketConnection) readShipPump() {
 	w.conn.SetPongHandler(func(string) error { _ = w.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 
 	for {
-		if w.isConnClosed() {
+		select {
+		case <-w.closeChannel:
 			return
+
+		default:
+			if w.isConnClosed() {
+				return
+			}
+
+			message, err := w.readWebsocketMessage()
+			// ignore read errors if the connection got closed
+			if w.isConnClosed() {
+				return
+			}
+
+			if err != nil {
+				logging.Log().Debug(w.remoteSki, "websocket read error: ", err)
+				w.close()
+				w.setConnClosedError(err)
+				w.dataProcessing.ReportConnectionError(err)
+				return
+			}
+
+			text := w.textFromMessage(message)
+			logging.Log().Trace("Recv:", w.remoteSki, text)
+
+			w.dataProcessing.HandleIncomingWebsocketMessage(message)
 		}
-
-		message, err := w.readWebsocketMessage()
-		// ignore read errors if the connection got closed
-		if w.isConnClosed() {
-			return
-		}
-
-		if err != nil {
-			logging.Log().Debug(w.remoteSki, "websocket read error: ", err)
-			w.close()
-			w.setConnClosedError(err)
-			w.dataProcessing.ReportConnectionError(err)
-			return
-		}
-
-		text := w.textFromMessage(message)
-		logging.Log().Trace("Recv:", w.remoteSki, text)
-
-		w.dataProcessing.HandleIncomingWebsocketMessage(message)
 	}
 }
 
@@ -227,16 +233,12 @@ func (w *WebsocketConnection) close() {
 
 		w.setConnClosedError(nil)
 
-		w.muxShipWrite.Lock()
-
-		util.CloseChannelIfClosed(w.closeChannel)
-		util.CloseChannelIfClosed(w.shipWriteChannel)
+		close(w.closeChannel)
 
 		if w.conn != nil {
 			_ = w.conn.Close()
 		}
 
-		w.muxShipWrite.Unlock()
 	})
 }
 

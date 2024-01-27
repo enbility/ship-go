@@ -2,6 +2,7 @@ package mdns
 
 import (
 	"net"
+	"sync"
 
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/logging"
@@ -14,11 +15,16 @@ type AvahiProvider struct {
 
 	avServer     *avahi.Server
 	avEntryGroup *avahi.EntryGroup
+
+	shutdownOnce sync.Once
+
+	shutdownChan chan struct{}
 }
 
 func NewAvahiProvider(ifaceIndexes []int32) *AvahiProvider {
 	return &AvahiProvider{
 		ifaceIndexes: ifaceIndexes,
+		shutdownChan: make(chan struct{}),
 	}
 }
 
@@ -53,13 +59,17 @@ func (a *AvahiProvider) CheckAvailability() bool {
 }
 
 func (a *AvahiProvider) Shutdown() {
-	if a.avServer == nil {
-		return
-	}
+	a.shutdownOnce.Do(func() {
+		if a.avServer == nil {
+			return
+		}
 
-	a.avServer.Close()
-	a.avServer = nil
-	a.avEntryGroup = nil
+		close(a.shutdownChan)
+
+		a.avServer.Close()
+		a.avServer = nil
+		a.avEntryGroup = nil
+	})
 }
 
 func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) error {
@@ -101,9 +111,8 @@ func (a *AvahiProvider) Unannounce() {
 	a.avEntryGroup = nil
 }
 
-func (a *AvahiProvider) ResolveEntries(cancelChan chan bool, callback func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool)) {
+func (a *AvahiProvider) ResolveEntries(callback func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool)) {
 	var err error
-	var end bool
 
 	var avBrowser *avahi.ServiceBrowser
 
@@ -118,10 +127,12 @@ func (a *AvahiProvider) ResolveEntries(cancelChan chan bool, callback func(eleme
 		return
 	}
 
-	for !end {
+	defer a.avServer.ServiceBrowserFree(avBrowser)
+
+	for {
 		select {
-		case <-cancelChan:
-			end = true
+		case <-a.shutdownChan:
+			return
 		case service := <-avBrowser.AddChannel:
 			a.processService(service, false, callback)
 		case service := <-avBrowser.RemoveChannel:
@@ -129,7 +140,6 @@ func (a *AvahiProvider) ResolveEntries(cancelChan chan bool, callback func(eleme
 		}
 	}
 
-	a.avServer.ServiceBrowserFree(avBrowser)
 }
 
 // process an avahi mDNS service

@@ -21,23 +21,6 @@ func DeepCopy[A any](source, dest A) {
 	_ = json.Unmarshal(byt, dest)
 }
 
-// check if a provided channel is closed
-func IsChannelClosed[T any](ch <-chan T) bool {
-	select {
-	case <-ch:
-		return false
-	default:
-		return true
-	}
-}
-
-func CloseChannelIfClosed[T any](ch chan T) {
-	if IsChannelClosed[T](ch) {
-		close(ch)
-		ch = nil
-	}
-}
-
 // standardize the provided SKI strings
 func NormalizeSKI(ski string) string {
 	ski = strings.ReplaceAll(ski, " ", "")

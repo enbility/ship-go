@@ -53,16 +53,16 @@ func (mr *MockMdnsInterfaceMockRecorder) AnnounceMdnsEntry() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AnnounceMdnsEntry", reflect.TypeOf((*MockMdnsInterface)(nil).AnnounceMdnsEntry))
 }
 
-// RegisterMdnsSearch mocks base method.
-func (m *MockMdnsInterface) RegisterMdnsSearch(arg0 api.MdnsSearchInterface) {
+// RequestMdnsEntries mocks base method.
+func (m *MockMdnsInterface) RequestMdnsEntries() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RegisterMdnsSearch", arg0)
+	m.ctrl.Call(m, "RequestMdnsEntries")
 }
 
-// RegisterMdnsSearch indicates an expected call of RegisterMdnsSearch.
-func (mr *MockMdnsInterfaceMockRecorder) RegisterMdnsSearch(arg0 any) *gomock.Call {
+// RequestMdnsEntries indicates an expected call of RequestMdnsEntries.
+func (mr *MockMdnsInterfaceMockRecorder) RequestMdnsEntries() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterMdnsSearch", reflect.TypeOf((*MockMdnsInterface)(nil).RegisterMdnsSearch), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestMdnsEntries", reflect.TypeOf((*MockMdnsInterface)(nil).RequestMdnsEntries))
 }
 
 // SetAutoAccept mocks base method.
@@ -77,30 +77,30 @@ func (mr *MockMdnsInterfaceMockRecorder) SetAutoAccept(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetAutoAccept", reflect.TypeOf((*MockMdnsInterface)(nil).SetAutoAccept), arg0)
 }
 
-// SetupMdnsService mocks base method.
-func (m *MockMdnsInterface) SetupMdnsService() error {
+// Shutdown mocks base method.
+func (m *MockMdnsInterface) Shutdown() {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetupMdnsService")
+	m.ctrl.Call(m, "Shutdown")
+}
+
+// Shutdown indicates an expected call of Shutdown.
+func (mr *MockMdnsInterfaceMockRecorder) Shutdown() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Shutdown", reflect.TypeOf((*MockMdnsInterface)(nil).Shutdown))
+}
+
+// Start mocks base method.
+func (m *MockMdnsInterface) Start(arg0 api.MdnsReportInterface) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Start", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SetupMdnsService indicates an expected call of SetupMdnsService.
-func (mr *MockMdnsInterfaceMockRecorder) SetupMdnsService() *gomock.Call {
+// Start indicates an expected call of Start.
+func (mr *MockMdnsInterfaceMockRecorder) Start(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetupMdnsService", reflect.TypeOf((*MockMdnsInterface)(nil).SetupMdnsService))
-}
-
-// ShutdownMdnsService mocks base method.
-func (m *MockMdnsInterface) ShutdownMdnsService() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ShutdownMdnsService")
-}
-
-// ShutdownMdnsService indicates an expected call of ShutdownMdnsService.
-func (mr *MockMdnsInterfaceMockRecorder) ShutdownMdnsService() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShutdownMdnsService", reflect.TypeOf((*MockMdnsInterface)(nil).ShutdownMdnsService))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockMdnsInterface)(nil).Start), arg0)
 }
 
 // UnannounceMdnsEntry mocks base method.
@@ -113,18 +113,6 @@ func (m *MockMdnsInterface) UnannounceMdnsEntry() {
 func (mr *MockMdnsInterfaceMockRecorder) UnannounceMdnsEntry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnannounceMdnsEntry", reflect.TypeOf((*MockMdnsInterface)(nil).UnannounceMdnsEntry))
-}
-
-// UnregisterMdnsSearch mocks base method.
-func (m *MockMdnsInterface) UnregisterMdnsSearch(arg0 api.MdnsSearchInterface) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UnregisterMdnsSearch", arg0)
-}
-
-// UnregisterMdnsSearch indicates an expected call of UnregisterMdnsSearch.
-func (mr *MockMdnsInterfaceMockRecorder) UnregisterMdnsSearch(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterMdnsSearch", reflect.TypeOf((*MockMdnsInterface)(nil).UnregisterMdnsSearch), arg0)
 }
 
 // MockHubReaderInterface is a mock of HubReaderInterface interface.

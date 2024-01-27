@@ -3,6 +3,7 @@ package mdns
 import (
 	"context"
 	"net"
+	"sync"
 
 	"github.com/DerAndereAndi/zeroconf/v2"
 	"github.com/enbility/ship-go/api"
@@ -13,6 +14,13 @@ type ZeroconfProvider struct {
 	ifaces []net.Interface
 
 	zc *zeroconf.Server
+
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	shutdownOnce sync.Once
+
+	mux sync.Mutex
 }
 
 func NewZeroconfProvider(ifaces []net.Interface) *ZeroconfProvider {
@@ -27,7 +35,16 @@ func (z *ZeroconfProvider) CheckAvailability() bool {
 	return true
 }
 
-func (z *ZeroconfProvider) Shutdown() {}
+func (z *ZeroconfProvider) Shutdown() {
+	z.shutdownOnce.Do(func() {
+		z.Unannounce()
+
+		z.mux.Lock()
+		defer z.mux.Unlock()
+
+		z.cancel()
+	})
+}
 
 func (z *ZeroconfProvider) Announce(serviceName string, port int, txt []string) error {
 	logging.Log().Debug("mdns: using zeroconf")
@@ -53,28 +70,23 @@ func (z *ZeroconfProvider) Unannounce() {
 	z.zc = nil
 }
 
-func (z *ZeroconfProvider) ResolveEntries(cancelChan chan bool, callback func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool)) {
-	var end bool
-
+func (z *ZeroconfProvider) ResolveEntries(callback func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool)) {
 	zcEntries := make(chan *zeroconf.ServiceEntry)
 	zcRemoved := make(chan *zeroconf.ServiceEntry)
-	defer close(zcEntries)
-	defer close(zcRemoved)
 
+	z.mux.Lock()
 	// for Zeroconf we need a context
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	z.ctx, z.cancel = context.WithCancel(context.Background())
+	z.mux.Unlock()
 
 	go func() {
-		_ = zeroconf.Browse(ctx, shipZeroConfServiceType, shipZeroConfDomain, zcEntries, zcRemoved)
+		_ = zeroconf.Browse(z.ctx, shipZeroConfServiceType, shipZeroConfDomain, zcEntries, zcRemoved)
 	}()
 
-	for !end {
+	for {
 		select {
-		case <-ctx.Done():
-			end = true
-		case <-cancelChan:
-			ctx.Done()
+		case <-z.ctx.Done():
+			return
 		case service := <-zcRemoved:
 			// Zeroconf has issues with merging mDNS data and sometimes reports incomplete records
 			if len(service.Text) == 0 {

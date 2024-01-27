@@ -85,12 +85,8 @@ func (s *HubSuite) BeforeTest(suiteName, testName string) {
 	s.serviceProvider.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
 
 	s.mdnsService = mocks.NewMockMdnsInterface(ctrl)
-	// s.mdnsService = mocks.NewMdnsService(s.T())
-	s.mdnsService.EXPECT().SetupMdnsService().Return(nil).AnyTimes()
 	s.mdnsService.EXPECT().AnnounceMdnsEntry().Return(nil).AnyTimes()
 	s.mdnsService.EXPECT().UnannounceMdnsEntry().Return().AnyTimes()
-	s.mdnsService.EXPECT().RegisterMdnsSearch(gomock.Any()).Return().AnyTimes()
-	s.mdnsService.EXPECT().UnregisterMdnsSearch(gomock.Any()).Return().AnyTimes()
 
 	s.wsDataWriter = mocks.NewWebsocketDataWriterInterface(s.T())
 
@@ -108,6 +104,12 @@ func (s *HubSuite) BeforeTest(suiteName, testName string) {
 	s.sut = NewHub(s.serviceProvider, s.mdnsService, 4567, certificate, localService)
 }
 
+func (s *HubSuite) AfterTest(suiteName, testName string) {
+	s.mdnsService.EXPECT().Shutdown().AnyTimes()
+
+	s.sut.Shutdown()
+}
+
 func (s *HubSuite) Test_NewConnectionsHub() {
 	ski := "12af9e"
 	localService := api.NewServiceDetails(ski)
@@ -115,7 +117,13 @@ func (s *HubSuite) Test_NewConnectionsHub() {
 	hub := NewHub(s.serviceProvider, s.mdnsService, 4567, tls.Certificate{}, localService)
 	assert.NotNil(s.T(), hub)
 
+	s.mdnsService.EXPECT().Start(gomock.Any()).Return(nil).Times(1)
+
 	hub.Start()
+
+	s.mdnsService.EXPECT().Shutdown().Times(1)
+
+	hub.Shutdown()
 }
 
 func (s *HubSuite) Test_IsRemoteSKIPaired() {
@@ -135,7 +143,7 @@ func (s *HubSuite) Test_IsRemoteSKIPaired() {
 	assert.Equal(s.T(), false, paired)
 }
 
-func (s *HubSuite) Test_HandleConnecitonClosed() {
+func (s *HubSuite) Test_HandleConnectionClosed() {
 	s.sut.HandleConnectionClosed(s.shipConnection, false)
 
 	s.sut.registerConnection(s.shipConnection)
@@ -146,7 +154,7 @@ func (s *HubSuite) Test_HandleConnecitonClosed() {
 }
 
 func (s *HubSuite) Test_Mdns() {
-	s.sut.checkRestartMdnsSearch()
+	s.sut.checkAutoReannounce()
 
 	pairedServices := s.sut.numberPairedServices()
 	assert.Equal(s.T(), 0, len(s.sut.connections))
@@ -156,10 +164,6 @@ func (s *HubSuite) Test_Mdns() {
 	pairedServices = s.sut.numberPairedServices()
 	assert.Equal(s.T(), 0, len(s.sut.connections))
 	assert.Equal(s.T(), 1, pairedServices)
-
-	s.sut.StartBrowseMdnsSearch()
-
-	s.sut.StopBrowseMdnsSearch()
 }
 
 func (s *HubSuite) Test_Ship() {
@@ -236,11 +240,6 @@ func (s *HubSuite) Test_RegisterConnection() {
 	assert.Equal(s.T(), 1, len(s.sut.connections))
 	con := s.sut.connectionForSKI(s.remoteSki)
 	assert.NotNil(s.T(), con)
-}
-
-func (s *HubSuite) Test_Shutdown() {
-	s.mdnsService.EXPECT().ShutdownMdnsService()
-	s.sut.Shutdown()
 }
 
 func (s *HubSuite) Test_VerifyPeerCertificate() {

@@ -96,12 +96,10 @@ func (h *Hub) Start() {
 	}
 
 	// start mDNS
-	err := h.mdns.SetupMdnsService()
+	err := h.mdns.Start(h)
 	if err != nil {
 		logging.Log().Debug("error during mdns setup:", err)
 	}
-
-	h.checkRestartMdnsSearch()
 }
 
 var _ api.ShipConnectionInfoProviderInterface = (*Hub)(nil)
@@ -140,7 +138,7 @@ func (h *Hub) HandleConnectionClosed(connection api.ShipConnectionInterface, han
 		return
 	}
 
-	h.checkRestartMdnsSearch()
+	h.checkAutoReannounce()
 }
 
 func (h *Hub) SetupRemoteDevice(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
@@ -163,7 +161,7 @@ func (h *Hub) numberPairedServices() int {
 }
 
 // startup mDNS if a paired service is not connected
-func (h *Hub) checkRestartMdnsSearch() {
+func (h *Hub) checkAutoReannounce() {
 	countPairedServices := h.numberPairedServices()
 	h.muxCon.Lock()
 	countConnections := len(h.connections)
@@ -171,19 +169,7 @@ func (h *Hub) checkRestartMdnsSearch() {
 
 	if countPairedServices > countConnections {
 		_ = h.mdns.AnnounceMdnsEntry()
-
-		h.mdns.RegisterMdnsSearch(h)
 	}
-}
-
-func (h *Hub) StartBrowseMdnsSearch() {
-	// TODO: this currently collides with searching for a specific SKI
-	h.mdns.RegisterMdnsSearch(h)
-}
-
-func (h *Hub) StopBrowseMdnsSearch() {
-	// TODO: this currently collides with searching for a specific SKI
-	h.mdns.UnregisterMdnsSearch(h)
 }
 
 // Provides the SHIP ID the remote service reported during the handshake process
@@ -322,7 +308,7 @@ func (h *Hub) connectionForSKI(ski string) api.ShipConnectionInterface {
 
 // close all connections
 func (h *Hub) Shutdown() {
-	h.mdns.ShutdownMdnsService()
+	h.mdns.Shutdown()
 	for _, c := range h.connections {
 		c.CloseConnection(false, 0, "")
 	}
@@ -599,7 +585,7 @@ func (h *Hub) RegisterRemoteSKI(ski string, enable bool) {
 	service.SetTrusted(enable)
 
 	if enable {
-		h.checkRestartMdnsSearch()
+		h.checkAutoReannounce()
 		return
 	}
 
@@ -631,10 +617,7 @@ func (h *Hub) InitiatePairingWithSKI(ski string) {
 
 	h.hubReader.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
 
-	// initiate a search and also a connection if it does not yet exist
-	if !h.isSkiConnected(service.SKI()) {
-		h.mdns.RegisterMdnsSearch(h)
-	}
+	h.mdns.RequestMdnsEntries()
 }
 
 // Cancels the pairing process for a SKI
@@ -753,7 +736,7 @@ func (h *Hub) prepareConnectionInitation(ski string, counter int, entry *api.Mdn
 	service := h.ServiceForSKI(ski)
 
 	if success := h.initateConnection(service, entry); !success {
-		h.checkRestartMdnsSearch()
+		h.checkAutoReannounce()
 	}
 }
 

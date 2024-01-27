@@ -114,9 +114,9 @@ func (_c *MdnsProviderInterface_CheckAvailability_Call) RunAndReturn(run func() 
 	return _c
 }
 
-// ResolveEntries provides a mock function with given fields: cancelChan, callback
-func (_m *MdnsProviderInterface) ResolveEntries(cancelChan chan bool, callback func(map[string]string, string, string, []net.IP, int, bool)) {
-	_m.Called(cancelChan, callback)
+// ResolveEntries provides a mock function with given fields: callback
+func (_m *MdnsProviderInterface) ResolveEntries(callback func(map[string]string, string, string, []net.IP, int, bool)) {
+	_m.Called(callback)
 }
 
 // MdnsProviderInterface_ResolveEntries_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ResolveEntries'
@@ -125,15 +125,14 @@ type MdnsProviderInterface_ResolveEntries_Call struct {
 }
 
 // ResolveEntries is a helper method to define mock.On call
-//   - cancelChan chan bool
 //   - callback func(map[string]string , string , string , []net.IP , int , bool)
-func (_e *MdnsProviderInterface_Expecter) ResolveEntries(cancelChan interface{}, callback interface{}) *MdnsProviderInterface_ResolveEntries_Call {
-	return &MdnsProviderInterface_ResolveEntries_Call{Call: _e.mock.On("ResolveEntries", cancelChan, callback)}
+func (_e *MdnsProviderInterface_Expecter) ResolveEntries(callback interface{}) *MdnsProviderInterface_ResolveEntries_Call {
+	return &MdnsProviderInterface_ResolveEntries_Call{Call: _e.mock.On("ResolveEntries", callback)}
 }
 
-func (_c *MdnsProviderInterface_ResolveEntries_Call) Run(run func(cancelChan chan bool, callback func(map[string]string, string, string, []net.IP, int, bool))) *MdnsProviderInterface_ResolveEntries_Call {
+func (_c *MdnsProviderInterface_ResolveEntries_Call) Run(run func(callback func(map[string]string, string, string, []net.IP, int, bool))) *MdnsProviderInterface_ResolveEntries_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(chan bool), args[1].(func(map[string]string, string, string, []net.IP, int, bool)))
+		run(args[0].(func(map[string]string, string, string, []net.IP, int, bool)))
 	})
 	return _c
 }
@@ -143,7 +142,7 @@ func (_c *MdnsProviderInterface_ResolveEntries_Call) Return() *MdnsProviderInter
 	return _c
 }
 
-func (_c *MdnsProviderInterface_ResolveEntries_Call) RunAndReturn(run func(chan bool, func(map[string]string, string, string, []net.IP, int, bool))) *MdnsProviderInterface_ResolveEntries_Call {
+func (_c *MdnsProviderInterface_ResolveEntries_Call) RunAndReturn(run func(func(map[string]string, string, string, []net.IP, int, bool))) *MdnsProviderInterface_ResolveEntries_Call {
 	_c.Call.Return(run)
 	return _c
 }
