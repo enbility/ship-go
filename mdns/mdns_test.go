@@ -72,11 +72,20 @@ func (s *MdnsSuite) Test_SetupMdnsService() {
 	s.sut.setIsSearchingServices(true)
 	assert.Equal(s.T(), true, s.sut.isSearchingServices)
 
+	s.sut.SetAutoAccept(true)
+	assert.Equal(s.T(), true, s.sut.autoaccept)
 }
 
 func (s *MdnsSuite) Test_ShutdownMdnsService() {
 	s.sut.ShutdownMdnsService()
 	assert.Nil(s.T(), s.sut.mdnsProvider)
+
+	s.sut.resolveEntries()
+	s.sut.ShutdownMdnsService()
+
+	s.sut.stopResolvingEntries()
+	s.sut.cancelChan = nil
+	s.sut.stopResolvingEntries()
 }
 
 func (s *MdnsSuite) Test_MdnsEntry() {
