@@ -87,6 +87,7 @@ func (s *HubSuite) BeforeTest(suiteName, testName string) {
 	s.mdnsService = mocks.NewMockMdnsInterface(ctrl)
 	s.mdnsService.EXPECT().AnnounceMdnsEntry().Return(nil).AnyTimes()
 	s.mdnsService.EXPECT().UnannounceMdnsEntry().Return().AnyTimes()
+	s.mdnsService.EXPECT().RequestMdnsEntries().Return().AnyTimes()
 
 	s.wsDataWriter = mocks.NewWebsocketDataWriterInterface(s.T())
 
