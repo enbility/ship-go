@@ -251,7 +251,7 @@ func (h *Hub) PairingDetailForSki(ski string) *api.ConnectionStateDetail {
 func (h *Hub) mapShipMessageExchangeState(state model.ShipMessageExchangeState, ski string) api.ConnectionState {
 	var connState api.ConnectionState
 
-	// map the SHIP states to a public gState
+	// map the SHIP states to a public ConnectionState
 	switch state {
 	case model.CmiStateInitStart:
 		connState = api.ConnectionStateQueued
