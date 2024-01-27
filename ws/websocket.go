@@ -10,6 +10,7 @@ import (
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/logging"
 	"github.com/enbility/ship-go/model"
+	"github.com/enbility/ship-go/util"
 	"github.com/gorilla/websocket"
 )
 
@@ -229,15 +230,8 @@ func (w *WebsocketConnection) close() {
 
 		w.muxShipWrite.Lock()
 
-		if !isChannelClosed(w.closeChannel) {
-			close(w.closeChannel)
-			w.closeChannel = nil
-		}
-
-		if !isChannelClosed(w.shipWriteChannel) {
-			close(w.shipWriteChannel)
-			w.shipWriteChannel = nil
-		}
+		util.CloseChannelIfClosed(w.closeChannel)
+		util.CloseChannelIfClosed(w.shipWriteChannel)
 
 		if w.conn != nil {
 			_ = w.conn.Close()
@@ -301,14 +295,4 @@ func (w *WebsocketConnection) IsDataConnectionClosed() (bool, error) {
 	}
 
 	return isClosed, err
-}
-
-// check if a provided channel is closed
-func isChannelClosed[T any](ch <-chan T) bool {
-	select {
-	case <-ch:
-		return false
-	default:
-		return true
-	}
 }
