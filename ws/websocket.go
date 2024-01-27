@@ -120,14 +120,7 @@ func (w *WebsocketConnection) writeShipPump() {
 				return
 			}
 
-			var text string
-			if len(message) > 2 {
-				text = string(message[1:])
-			} else if bytes.Equal(message, model.ShipInit) {
-				text = "ship init"
-			} else {
-				text = "unknown single byte"
-			}
+			text := w.textFromMessage(message)
 			logging.Log().Trace("Send:", w.remoteSki, text)
 
 		case <-ticker.C:
@@ -177,18 +170,22 @@ func (w *WebsocketConnection) readShipPump() {
 			return
 		}
 
-		var text string
-		if len(message) > 2 {
-			text = string(message[1:])
-		} else if bytes.Equal(message, model.ShipInit) {
-			text = "ship init"
-		} else {
-			text = "unknown single byte"
-		}
+		text := w.textFromMessage(message)
 		logging.Log().Trace("Recv:", w.remoteSki, text)
 
 		w.dataProcessing.HandleIncomingWebsocketMessage(message)
 	}
+}
+
+func (w *WebsocketConnection) textFromMessage(msg []byte) string {
+	text := "unknown single byte"
+	if len(msg) > 2 {
+		text = string(msg[1:])
+	} else if bytes.Equal(msg, model.ShipInit) {
+		text = "ship init"
+	}
+
+	return text
 }
 
 // read a message from the websocket connection
@@ -202,15 +199,23 @@ func (w *WebsocketConnection) readWebsocketMessage() ([]byte, error) {
 		return nil, err
 	}
 
-	if msgType != websocket.BinaryMessage {
-		return nil, errors.New("message is not a binary message")
-	}
-
-	if len(b) < 2 {
-		return nil, fmt.Errorf("invalid ship message length")
+	if err := w.checkWebsocketMessage(msgType, b); err != nil {
+		return nil, err
 	}
 
 	return b, nil
+}
+
+func (w *WebsocketConnection) checkWebsocketMessage(msgType int, data []byte) error {
+	if msgType != websocket.BinaryMessage {
+		return errors.New("message is not a binary message")
+	}
+
+	if len(data) < 2 {
+		return fmt.Errorf("invalid ship message length")
+	}
+
+	return nil
 }
 
 // close the current websocket connection
@@ -245,14 +250,10 @@ func (w *WebsocketConnection) InitDataProcessing(dataProcessing api.WebsocketDat
 
 // write a message to the websocket connection
 func (w *WebsocketConnection) WriteMessageToWebsocketConnection(message []byte) error {
-	if w.isConnClosed() {
-		return errors.New(connIsClosedError)
-	}
-
 	w.muxShipWrite.Lock()
 	defer w.muxShipWrite.Unlock()
 
-	if w.conn == nil || w.shipWriteChannel == nil {
+	if w.isConnClosed() || w.shipWriteChannel == nil {
 		return errors.New(connIsClosedError)
 	}
 
