@@ -96,6 +96,20 @@ func (s *WebsocketSuite) TestConnectionInvalid() {
 
 	err = s.sut.WriteMessageToWebsocketConnection(msg)
 	assert.NotNil(s.T(), err)
+
+	s.sut.CloseDataConnection(500, "test")
+
+	result := s.sut.writeMessage(websocket.BinaryMessage, []byte{})
+	assert.Equal(s.T(), false, result)
+
+	s.sut.conn = nil
+
+	data, err := s.sut.readWebsocketMessage()
+	assert.NotNil(s.T(), err)
+	assert.Nil(s.T(), data)
+
+	err = s.sut.checkWebsocketMessage(websocket.TextMessage, []byte{})
+	assert.NotNil(s.T(), err)
 }
 
 func (s *WebsocketSuite) TestConnectionClose() {
