@@ -91,6 +91,8 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 
 	z.sut.Unannounce()
 
+	time.Sleep(time.Second * 3)
+
 	err = z.sut.Announce("", 4289, []string{"test=test"})
 	assert.NotNil(z.T(), err)
 
