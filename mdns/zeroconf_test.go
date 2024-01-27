@@ -30,66 +30,88 @@ func (z *ZeroconfSuite) AfterTest(suiteName, testName string) {
 	z.sut.Shutdown()
 }
 
+type mDNSEntry struct {
+	elements   map[string]string
+	name, host string
+	addresses  []net.IP
+	port       int
+}
+
+func searchElement(list []mDNSEntry, name string) (mDNSEntry, bool) {
+	for _, item := range list {
+		if item.name == name {
+			return item, true
+		}
+	}
+	return mDNSEntry{}, false
+}
+
 func (z *ZeroconfSuite) Test_ZeroConf() {
 	boolV := z.sut.CheckAvailability()
 	assert.Equal(z.T(), true, boolV)
 
-	testEntryFound := false
-	dummyTestEntryFound := false
+	var addedEntries, removedEntries []mDNSEntry
 
 	cb := func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool) {
 		// we expect at least one entry
 		assert.NotEqual(z.T(), "", name)
 
-		// additional checks for our test announcement entry
-		if name == "test" {
-			assert.Equal(z.T(), 4289, port)
-			assert.Equal(z.T(), map[string]string{"test": "test"}, elements)
-			z.mux.Lock()
-			testEntryFound = true
-			z.mux.Unlock()
+		entry := mDNSEntry{
+			elements:  elements,
+			name:      name,
+			host:      host,
+			addresses: addresses,
+			port:      port,
 		}
 
-		if name == "dummytest" {
-			assert.Equal(z.T(), 4289, port)
-			assert.Equal(z.T(), map[string]string{}, elements)
-			z.mux.Lock()
-			dummyTestEntryFound = true
-			z.mux.Unlock()
+		z.mux.Lock()
+		if remove {
+			removedEntries = append(removedEntries, entry)
+		} else {
+			addedEntries = append(addedEntries, entry)
 		}
+		z.mux.Unlock()
 	}
+
 	go z.sut.ResolveEntries(cb)
 
-	err := z.sut.Announce("dummytest", 4289, []string{})
+	err := z.sut.Announce("dummytest", 4289, []string{"more=more"})
 	assert.Nil(z.T(), err)
 
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second * 2)
 
 	z.mux.Lock()
-	assert.Equal(z.T(), true, dummyTestEntryFound)
-	dummyTestEntryFound = false
+	_, found := searchElement(addedEntries, "dummytest")
 	z.mux.Unlock()
+	assert.Equal(z.T(), true, found)
 
 	z.sut.Unannounce()
 
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second * 2)
 
 	z.mux.Lock()
-	assert.Equal(z.T(), true, dummyTestEntryFound)
+	_, found = searchElement(removedEntries, "dummytest")
 	z.mux.Unlock()
+	assert.Equal(z.T(), true, found)
 
 	err = z.sut.Announce("test", 4289, []string{"test=test"})
 	assert.Nil(z.T(), err)
 
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second * 2)
 
 	z.mux.Lock()
-	assert.Equal(z.T(), true, testEntryFound)
+	_, found = searchElement(addedEntries, "test")
 	z.mux.Unlock()
+	assert.Equal(z.T(), true, found)
 
 	z.sut.Unannounce()
 
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second * 2)
+
+	z.mux.Lock()
+	_, found = searchElement(removedEntries, "test")
+	z.mux.Unlock()
+	assert.Equal(z.T(), true, found)
 
 	err = z.sut.Announce("", 4289, []string{"test=test"})
 	assert.NotNil(z.T(), err)
