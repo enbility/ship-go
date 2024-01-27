@@ -367,18 +367,16 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
-	updated := true
+	updated := false
 
 	entry, exists := m.mdnsEntry(ski)
 
 	if remove && exists {
+		updated = true
 		// remove
 		// there will be a remove for each address with avahi, but we'll delete it right away
 		m.removeMdnsEntry(ski)
 	} else if exists {
-		// update
-		updated = false
-
 		// avahi sends an item for each network address, merge them
 
 		// we assume only network addresses are added
@@ -401,6 +399,7 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 
 		m.setMdnsEntry(ski, entry)
 	} else if !exists && !remove {
+		updated = true
 		// new
 		newEntry := &api.MdnsEntry{
 			Name:       name,
@@ -418,8 +417,6 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		m.setMdnsEntry(ski, newEntry)
 
 		logging.Log().Debug("ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
-	} else {
-		return
 	}
 
 	if m.searchDelegate != nil && updated {
