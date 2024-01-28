@@ -243,7 +243,7 @@ func (c *ShipConnection) setHandshakeTimer(timerType timeoutTimerType, duration 
 
 // stop the handshake timer and close the channel
 func (c *ShipConnection) stopHandshakeTimer() {
-	if !c.getHandshakeTimerRunnging() {
+	if !c.getHandshakeTimerRunning() {
 		return
 	}
 
@@ -261,7 +261,7 @@ func (c *ShipConnection) setHandshakeTimerRunning(value bool) {
 	c.handshakeTimerRunning = value
 }
 
-func (c *ShipConnection) getHandshakeTimerRunnging() bool {
+func (c *ShipConnection) getHandshakeTimerRunning() bool {
 	c.handshakeTimerMux.Lock()
 	defer c.handshakeTimerMux.Unlock()
 
