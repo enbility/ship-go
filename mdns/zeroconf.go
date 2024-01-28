@@ -42,7 +42,9 @@ func (z *ZeroconfProvider) Shutdown() {
 		z.mux.Lock()
 		defer z.mux.Unlock()
 
-		z.cancel()
+		if z.cancel != nil {
+			z.cancel()
+		}
 	})
 }
 
