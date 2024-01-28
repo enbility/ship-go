@@ -70,7 +70,7 @@ func (z *ZeroconfProvider) Unannounce() {
 	z.zc = nil
 }
 
-func (z *ZeroconfProvider) ResolveEntries(callback func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool)) {
+func (z *ZeroconfProvider) ResolveEntries(callback api.MdnsResolveCB) {
 	zcEntries := make(chan *zeroconf.ServiceEntry)
 	zcRemoved := make(chan *zeroconf.ServiceEntry)
 
@@ -89,7 +89,7 @@ func (z *ZeroconfProvider) ResolveEntries(callback func(elements map[string]stri
 			return
 		case service := <-zcRemoved:
 			// Zeroconf has issues with merging mDNS data and sometimes reports incomplete records
-			if len(service.Text) == 0 {
+			if service == nil || len(service.Text) == 0 {
 				continue
 			}
 
@@ -100,7 +100,7 @@ func (z *ZeroconfProvider) ResolveEntries(callback func(elements map[string]stri
 
 		case service := <-zcEntries:
 			// Zeroconf has issues with merging mDNS data and sometimes reports incomplete records
-			if len(service.Text) == 0 {
+			if service == nil || len(service.Text) == 0 {
 				continue
 			}
 
