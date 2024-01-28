@@ -551,15 +551,17 @@ func (h *Hub) keepThisConnection(conn *websocket.Conn, incomingRequest bool, rem
 		}
 		logging.Log().Debugf("closing %s double connection, as the existing connection will be used", connType)
 		if conn != nil {
-			go func() {
-				_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "double connection"))
-				time.Sleep(time.Millisecond * 100)
-				_ = conn.Close()
-			}()
+			go h.sendWSCloseMessage(conn)
 		}
 	}
 
 	return keep
+}
+
+func (h *Hub) sendWSCloseMessage(conn *websocket.Conn) {
+	_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "double connection"))
+	time.Sleep(time.Millisecond * 100)
+	_ = conn.Close()
 }
 
 // return the service for a given SKI or an error if not found
