@@ -77,14 +77,14 @@ func (a *AvahiProvider) Shutdown() {
 func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) error {
 	logging.Log().Debug("mdns: using avahi")
 
-	entryGroup, err := a.avServer.EntryGroupNew()
-	if err != nil {
-		return err
-	}
-
 	var btxt [][]byte
 	for _, t := range txt {
 		btxt = append(btxt, []byte(t))
+	}
+
+	entryGroup, err := a.avServer.EntryGroupNew()
+	if err != nil {
+		return err
 	}
 
 	for _, iface := range a.ifaceIndexes {
