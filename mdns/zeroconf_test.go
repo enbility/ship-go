@@ -46,6 +46,10 @@ func searchElement(list []mDNSEntry, name string) (mDNSEntry, bool) {
 	return mDNSEntry{}, false
 }
 
+func (z *ZeroconfSuite) Test_Shutdown() {
+	z.sut.Shutdown()
+}
+
 func (z *ZeroconfSuite) Test_ZeroConf() {
 	boolV := z.sut.CheckAvailability()
 	assert.Equal(z.T(), true, boolV)
