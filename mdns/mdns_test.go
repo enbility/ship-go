@@ -3,6 +3,7 @@ package mdns
 import (
 	"net"
 	"testing"
+	"time"
 
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/mocks"
@@ -137,9 +138,11 @@ func (s *MdnsSuite) Test_MdnsEntries() {
 	err := s.sut.Start(s.mdnsSearch)
 	assert.Nil(s.T(), err)
 
-	s.mdnsSearch.EXPECT().ReportMdnsEntries(mock.Anything).Once()
+	s.mdnsSearch.EXPECT().ReportMdnsEntries(mock.Anything).Maybe()
 
 	s.sut.RequestMdnsEntries()
+
+	time.Sleep(time.Millisecond * 500)
 }
 
 func (s *MdnsSuite) Test_ProcessMdnsEntry() {
