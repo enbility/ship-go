@@ -2,7 +2,10 @@ package ship
 
 import (
 	"encoding/json"
+	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/enbility/ship-go/mocks"
 	"github.com/enbility/ship-go/model"
@@ -26,10 +29,14 @@ type ConnectionSuite struct {
 	shipConnectionReader *mocks.ShipConnectionDataReaderInterface
 
 	sentMessage []byte
+
+	mux sync.Mutex
 }
 
 func (s *ConnectionSuite) BeforeTest(suiteName, testName string) {
+	s.mux.Lock()
 	s.sentMessage = nil
+	s.mux.Unlock()
 
 	s.infoProvider = mocks.NewShipConnectionInfoProviderInterface(s.T())
 	s.infoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Return().Maybe()
@@ -39,8 +46,17 @@ func (s *ConnectionSuite) BeforeTest(suiteName, testName string) {
 
 	s.wsDataWriter = mocks.NewWebsocketDataWriterInterface(s.T())
 	s.wsDataWriter.EXPECT().InitDataProcessing(mock.Anything).Return().Maybe()
-	s.wsDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).RunAndReturn(func(message []byte) error { s.sentMessage = message; return nil }).Maybe()
-	s.wsDataWriter.EXPECT().IsDataConnectionClosed().RunAndReturn(func() (bool, error) { return false, nil }).Maybe()
+	s.wsDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).
+		RunAndReturn(func(message []byte) error {
+			s.mux.Lock()
+			defer s.mux.Unlock()
+
+			s.sentMessage = message
+
+			return nil
+		}).
+		Maybe()
+	s.wsDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
 	s.wsDataWriter.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Return().Maybe()
 
 	s.shipConnectionReader = mocks.NewShipConnectionDataReaderInterface(s.T())
@@ -66,10 +82,51 @@ func (s *ConnectionSuite) TestRun() {
 	assert.Equal(s.T(), model.CmiStateServerWait, state)
 }
 
+func (s *ConnectionSuite) Test_HandleShipCloseMessage() {
+	s.sut.handleShipMessage(false, []byte{})
+	state, err := s.sut.ShipHandshakeState()
+	assert.Nil(s.T(), err)
+	assert.Equal(s.T(), model.CmiStateServerWait, state)
+
+	closeMsg := model.ConnectionClose{
+		ConnectionClose: model.ConnectionCloseType{
+			Phase: model.ConnectionClosePhaseTypeAnnounce,
+		},
+	}
+
+	msg, err := s.sut.shipMessage(model.MsgTypeControl, closeMsg)
+	assert.Nil(s.T(), err)
+	assert.NotNil(s.T(), msg)
+
+	s.sut.handleShipMessage(false, msg)
+
+	closeMsg = model.ConnectionClose{
+		ConnectionClose: model.ConnectionCloseType{
+			Phase: model.ConnectionClosePhaseTypeConfirm,
+		},
+	}
+
+	msg, err = s.sut.shipMessage(model.MsgTypeControl, closeMsg)
+	assert.Nil(s.T(), err)
+	assert.NotNil(s.T(), msg)
+
+	s.sut.handleShipMessage(false, msg)
+}
+
 func (s *ConnectionSuite) TestShipHandshakeState() {
 	state, err := s.sut.ShipHandshakeState()
 	assert.Nil(s.T(), err)
 	assert.Equal(s.T(), model.CmiStateInitStart, state)
+}
+
+func (s *ConnectionSuite) Test_HandleErrorState() {
+	s.sut.setState(model.SmeStateError, errors.New("error"))
+
+	state, err := s.sut.ShipHandshakeState()
+	assert.NotNil(s.T(), err)
+	assert.Equal(s.T(), model.SmeStateError, state)
+
+	s.sut.handleState(false, []byte{})
 }
 
 func (s *ConnectionSuite) TestApprovePendingHandshake() {
@@ -220,4 +277,18 @@ func (s *ConnectionSuite) TestSendSpineMessage() {
 
 	err := s.sut.sendSpineData([]byte(data))
 	assert.Nil(s.T(), err)
+}
+
+func (s *ConnectionSuite) Test_HandshakeTimer() {
+	s.sut.setState(model.CmiStateInitStart, nil)
+	assert.Equal(s.T(), model.CmiStateInitStart, s.sut.getState())
+
+	s.sut.setHandshakeTimer(timeoutTimerTypeWaitForReady, time.Duration(time.Millisecond*500))
+	assert.Equal(s.T(), true, s.sut.getHandshakeTimerRunning())
+
+	time.Sleep(time.Second * 1)
+	assert.Equal(s.T(), model.CmiStateServerWait, s.sut.getState())
+	assert.Equal(s.T(), timeoutTimerTypeWaitForReady, s.sut.getHandshakeTimerType())
+	assert.Equal(s.T(), true, s.sut.getHandshakeTimerRunning())
+
 }
