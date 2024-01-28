@@ -51,6 +51,7 @@ func (c *ShipConnection) setState(newState model.ShipMessageExchangeState, err e
 	oldState := c.smeState
 
 	c.smeState = newState
+	logging.Log().Trace(c.RemoteSKI(), "SHIP state changed to:", newState)
 
 	switch newState {
 	case model.SmeHelloStateReadyInit:
@@ -92,7 +93,7 @@ func (c *ShipConnection) getState() model.ShipMessageExchangeState {
 func (c *ShipConnection) handleState(timeout bool, message []byte) {
 	switch c.getState() {
 	case model.SmeStateError:
-		logging.Log().Debug(c.RemoteSKI, "connection is in error state")
+		logging.Log().Debug(c.RemoteSKI(), "connection is in error state")
 		return
 
 	// cmiStateInit
@@ -211,7 +212,7 @@ func (c *ShipConnection) endHandshakeWithError(err error) {
 
 	c.setState(model.SmeStateError, err)
 
-	logging.Log().Debug(c.RemoteSKI, "SHIP handshake error:", err)
+	logging.Log().Debug(c.RemoteSKI(), "SHIP handshake error:", err)
 
 	c.CloseConnection(true, 0, err.Error())
 
