@@ -1,6 +1,8 @@
 package mdns
 
 import (
+	"errors"
+	"fmt"
 	"net"
 	"sync"
 
@@ -111,7 +113,7 @@ func (a *AvahiProvider) Unannounce() {
 	a.avEntryGroup = nil
 }
 
-func (a *AvahiProvider) ResolveEntries(callback func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool)) {
+func (a *AvahiProvider) ResolveEntries(callback api.MdnsResolveCB) {
 	var err error
 
 	var avBrowser *avahi.ServiceBrowser
@@ -134,9 +136,13 @@ func (a *AvahiProvider) ResolveEntries(callback func(elements map[string]string,
 		case <-a.shutdownChan:
 			return
 		case service := <-avBrowser.AddChannel:
-			a.processService(service, false, callback)
+			if err := a.processService(service, false, callback); err != nil {
+				logging.Log().Debug("mdns: avahi -", err)
+			}
 		case service := <-avBrowser.RemoveChannel:
-			a.processService(service, true, callback)
+			if err := a.processService(service, true, callback); err != nil {
+				logging.Log().Debug("mdns: avahi -", err)
+			}
 		}
 	}
 
@@ -144,7 +150,7 @@ func (a *AvahiProvider) ResolveEntries(callback func(elements map[string]string,
 
 // process an avahi mDNS service
 // as avahi returns a service per interface, we need to combine them
-func (a *AvahiProvider) processService(service avahi.Service, remove bool, callback func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool)) {
+func (a *AvahiProvider) processService(service avahi.Service, remove bool, cb api.MdnsResolveCB) error {
 	// check if the service is within the allowed list
 	allow := false
 	if len(a.ifaceIndexes) == 1 && a.ifaceIndexes[0] == avahi.InterfaceUnspec {
@@ -159,35 +165,38 @@ func (a *AvahiProvider) processService(service avahi.Service, remove bool, callb
 	}
 
 	if !allow {
-		logging.Log().Debug("avahi - ignoring service as its interface is not in the allowed list:", service.Name)
-		return
+		return fmt.Errorf("ignoring service as its interface is not in the allowed list: %s", service.Name)
 	}
 
 	resolved, err := a.avServer.ResolveService(service.Interface, service.Protocol, service.Name, service.Type, service.Domain, avahi.ProtoUnspec, 0)
 	if err != nil {
-		logging.Log().Debug("avahi - error resolving service:", service, "error:", err)
-		return
+		return fmt.Errorf("error resolving service: %s error: %s", service.Name, err)
 	}
 
+	return a.processResolvedService(resolved, remove, cb)
+}
+
+func (a *AvahiProvider) processResolvedService(service avahi.Service, remove bool, cb api.MdnsResolveCB) error {
 	// convert [][]byte to []string manually
 	var txt []string
-	for _, element := range resolved.Txt {
+	for _, element := range service.Txt {
 		txt = append(txt, string(element))
 	}
 	elements := parseTxt(txt)
 
 	// convert address to net.IP
-	address := net.ParseIP(resolved.Address)
+	address := net.ParseIP(service.Address)
 	// if the address can not be used, ignore the entry
 	if address == nil || address.IsUnspecified() {
-		logging.Log().Debug("avahi - service provides unusable address:", service.Name)
-		return
+		return fmt.Errorf("service provides unusable address: %s", service.Name)
 	}
 
 	// Ignore IPv6 addresses for now
 	if address.To4() == nil {
-		return
+		return errors.New("no IPv4 addresses available")
 	}
 
-	callback(elements, resolved.Name, resolved.Host, []net.IP{address}, int(resolved.Port), remove)
+	cb(elements, service.Name, service.Host, []net.IP{address}, int(service.Port), remove)
+
+	return nil
 }

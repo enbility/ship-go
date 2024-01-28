@@ -33,11 +33,14 @@ type MdnsInterface interface {
 	RequestMdnsEntries()
 }
 
+// implemented by mdns, used by Providers
+type MdnsResolveCB func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool)
+
 // implemented by mdns providers, used by mdns
 type MdnsProviderInterface interface {
 	CheckAvailability() bool
 	Shutdown()
 	Announce(serviceName string, port int, txt []string) error
 	Unannounce()
-	ResolveEntries(callback func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool))
+	ResolveEntries(cb MdnsResolveCB)
 }
