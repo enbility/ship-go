@@ -127,6 +127,48 @@ func (s *HubSuite) Test_NewConnectionsHub() {
 	hub.Shutdown()
 }
 
+func (s *HubSuite) Test_SetupRemoteDevice() {
+	ski := "12af9e"
+	localService := api.NewServiceDetails(ski)
+
+	hub := NewHub(s.serviceProvider, s.mdnsService, 4567, tls.Certificate{}, localService)
+	assert.NotNil(s.T(), hub)
+
+	readerI := mocks.NewShipConnectionDataReaderInterface(s.T())
+	s.serviceProvider.EXPECT().SetupRemoteDevice(gomock.Any(), gomock.Any()).Return(readerI)
+
+	reader := hub.SetupRemoteDevice(ski, nil)
+
+	assert.NotNil(s.T(), reader)
+}
+
+func (s *HubSuite) Test_SendWSCloseMessage() {
+	req := httptest.NewRequest("GET", "http://example.com/foo", nil)
+	w := httptest.NewRecorder()
+	s.sut.ServeHTTP(w, req)
+
+	server := httptest.NewServer(s.sut)
+	wsURL := strings.Replace(server.URL, "http://", "ws://", -1)
+
+	// Connect to the server
+	con, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	assert.Nil(s.T(), err)
+
+	ski := "12af9e"
+	localService := api.NewServiceDetails(ski)
+
+	hub := NewHub(s.serviceProvider, s.mdnsService, 4567, tls.Certificate{}, localService)
+	assert.NotNil(s.T(), hub)
+
+	hub.sendWSCloseMessage(con)
+
+	_ = con.Close()
+	server.CloseClientConnections()
+	server.Close()
+
+	time.Sleep(time.Second)
+}
+
 func (s *HubSuite) Test_IsRemoteSKIPaired() {
 	paired := s.sut.IsRemoteServiceForSKIPaired(s.remoteSki)
 	assert.Equal(s.T(), false, paired)
