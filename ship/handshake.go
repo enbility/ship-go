@@ -151,7 +151,7 @@ func (c *ShipConnection) handleState(timeout bool, message []byte) {
 
 	case model.SmeHelloStateAbortDone, model.SmeHelloStateRemoteAbortDone:
 		go func() {
-			time.Sleep(time.Second)
+			<-time.After(time.Second)
 			c.CloseConnection(false, 4452, "Node rejected by application")
 		}()
 

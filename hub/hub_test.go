@@ -246,7 +246,7 @@ func (s *HubSuite) Test_MapShipMessageExchangeState() {
 	state = s.sut.mapShipMessageExchangeState(model.SmeHelloStateReadyInit, s.remoteSki)
 	assert.Equal(s.T(), api.ConnectionStateInProgress, state)
 
-	state = s.sut.mapShipMessageExchangeState(model.SmeHelloStatePendingInit, s.remoteSki)
+	state = s.sut.mapShipMessageExchangeState(model.SmeHelloStatePendingListen, s.remoteSki)
 	assert.Equal(s.T(), api.ConnectionStateReceivedPairingRequest, state)
 
 	state = s.sut.mapShipMessageExchangeState(model.SmeHelloStateOk, s.remoteSki)
