@@ -211,7 +211,13 @@ func (h *Hub) HandleShipHandshakeStateUpdate(ski string, state model.ShipState) 
 	if existingState != pairingState || existingDetails.Error() != state.Error {
 		service.SetConnectionStateDetail(pairingDetail)
 
-		h.hubReader.ServicePairingDetailUpdate(ski, pairingDetail)
+		// always send a delayed update, as the processing of the new state has to be done
+		// and the SHIP message has to be received by the other service before
+		// acting upon the new state is safe
+		go func() {
+			<-time.After(time.Millisecond * 500)
+			h.hubReader.ServicePairingDetailUpdate(ski, pairingDetail)
+		}()
 	}
 }
 
@@ -244,9 +250,10 @@ func (h *Hub) mapShipMessageExchangeState(state model.ShipMessageExchangeState, 
 	case model.CmiStateClientSend, model.CmiStateClientWait, model.CmiStateClientEvaluate,
 		model.CmiStateServerWait, model.CmiStateServerEvaluate:
 		connState = api.ConnectionStateInitiated
-	case model.SmeHelloStateReadyInit, model.SmeHelloStateReadyListen, model.SmeHelloStateReadyTimeout:
+	case model.SmeHelloStateReadyInit, model.SmeHelloStateReadyListen, model.SmeHelloStateReadyTimeout,
+		model.SmeHelloStatePendingInit, model.SmeHelloStatePendingTimeout:
 		connState = api.ConnectionStateInProgress
-	case model.SmeHelloStatePendingInit, model.SmeHelloStatePendingListen, model.SmeHelloStatePendingTimeout:
+	case model.SmeHelloStatePendingListen:
 		connState = api.ConnectionStateReceivedPairingRequest
 	case model.SmeHelloStateOk:
 		connState = api.ConnectionStateTrusted
@@ -560,7 +567,7 @@ func (h *Hub) keepThisConnection(conn *websocket.Conn, incomingRequest bool, rem
 
 func (h *Hub) sendWSCloseMessage(conn *websocket.Conn) {
 	_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "double connection"))
-	time.Sleep(time.Millisecond * 100)
+	<-time.After(time.Millisecond * 100)
 	_ = conn.Close()
 }
 
