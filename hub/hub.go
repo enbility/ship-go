@@ -420,7 +420,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// normalize the incoming SKI
 	remoteService := api.NewServiceDetails(ski)
-	logging.Log().Debug("incoming connection request from", remoteService.SKI)
+	logging.Log().Debug("incoming connection request from", remoteService.SKI())
 
 	// Check if the remote service is paired
 	service := h.ServiceForSKI(remoteService.SKI())
@@ -454,7 +454,7 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 		return nil
 	}
 
-	logging.Log().Debugf("initiating connection to %s at %s:%s%s", remoteService.SKI, host, port, path)
+	logging.Log().Debugf("initiating connection to %s at %s:%s%s", remoteService.SKI(), host, port, path)
 
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
@@ -763,9 +763,9 @@ func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.Md
 			return false
 		}
 
-		logging.Log().Debug("trying to connect to", remoteService.SKI, "at", address)
+		logging.Log().Debug("trying to connect to", remoteService.SKI(), "at", address)
 		if err = h.connectFoundService(remoteService, address.String(), strconv.Itoa(entry.Port), entry.Path); err != nil {
-			logging.Log().Debug("connection to", remoteService.SKI, "failed: ", err)
+			logging.Log().Debug("connection to", remoteService.SKI(), "failed: ", err)
 		} else {
 			return true
 		}
@@ -773,9 +773,9 @@ func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.Md
 
 	// connectdion via IP address failed, try hostname
 	if len(entry.Host) > 0 {
-		logging.Log().Debug("trying to connect to", remoteService.SKI, "at", entry.Host)
+		logging.Log().Debug("trying to connect to", remoteService.SKI(), "at", entry.Host)
 		if err = h.connectFoundService(remoteService, entry.Host, strconv.Itoa(entry.Port), entry.Path); err != nil {
-			logging.Log().Debugf("connection to %s failed: %s", remoteService.SKI, err)
+			logging.Log().Debugf("connection to %s failed: %s", remoteService.SKI(), err)
 		} else {
 			return true
 		}
