@@ -23,3 +23,5 @@ require (
 	golang.org/x/tools v0.17.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/holoplot/go-avahi => github.com/DerAndereAndi/go-avahi v0.0.0-20240123155759-b4b6b2b50b4d
