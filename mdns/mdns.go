@@ -17,6 +17,14 @@ import (
 
 const shipWebsocketPath = "/ship/"
 
+type MdnsProviderSelection uint
+
+const (
+	MdnsProviderSelectionAll            MdnsProviderSelection = iota // Automatically use avahi if available, otherwise use Go native Zeroconf, default
+	MdnsProviderSelectionAvahiOnly                                   // Only use avahi
+	MdnsProviderSelectionGoZeroConfOnly                              // Only us Go native zeroconf
+)
+
 type MdnsManager struct {
 	ski string
 
@@ -57,20 +65,27 @@ type MdnsManager struct {
 
 	shutdownOnce sync.Once
 
+	providerSelection MdnsProviderSelection
+
 	mux sync.Mutex
 }
 
-func NewMDNS(ski, deviceBrand, deviceModel, deviceType, shipIdentifier, serviceName string, port int, ifaces []string) *MdnsManager {
+func NewMDNS(
+	ski, deviceBrand, deviceModel, deviceType, shipIdentifier, serviceName string,
+	port int,
+	ifaces []string,
+	providerSelection MdnsProviderSelection) *MdnsManager {
 	m := &MdnsManager{
-		ski:         ski,
-		deviceBrand: deviceBrand,
-		deviceModel: deviceModel,
-		deviceType:  deviceType,
-		identifier:  shipIdentifier,
-		serviceName: serviceName,
-		port:        port,
-		ifaces:      ifaces,
-		entries:     make(map[string]*api.MdnsEntry),
+		ski:               ski,
+		deviceBrand:       deviceBrand,
+		deviceModel:       deviceModel,
+		deviceType:        deviceType,
+		identifier:        shipIdentifier,
+		serviceName:       serviceName,
+		port:              port,
+		ifaces:            ifaces,
+		providerSelection: providerSelection,
+		entries:           make(map[string]*api.MdnsEntry),
 	}
 
 	return m
@@ -110,15 +125,29 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 		return err
 	}
 
-	m.mdnsProvider = NewAvahiProvider(ifaceIndexes)
-	if !m.mdnsProvider.CheckAvailability() {
-		m.mdnsProvider.Shutdown()
-
-		// Avahi is not availble, use Zeroconf
-		m.mdnsProvider = NewZeroconfProvider(ifaces)
+	switch m.providerSelection {
+	case MdnsProviderSelectionAll:
+		// First try avahi, if not available use zerconf
+		m.mdnsProvider = NewAvahiProvider(ifaceIndexes)
 		if !m.mdnsProvider.CheckAvailability() {
-			return errors.New("No mDNS provider available")
+			m.mdnsProvider.Shutdown()
+
+			// Avahi is not availble, use Zeroconf
+			m.mdnsProvider = NewZeroconfProvider(ifaces)
+			if !m.mdnsProvider.CheckAvailability() {
+				return errors.New("No mDNS provider available")
+			}
 		}
+	case MdnsProviderSelectionAvahiOnly:
+		// Only use Avahi
+		m.mdnsProvider = NewAvahiProvider(ifaceIndexes)
+		if !m.mdnsProvider.CheckAvailability() {
+			m.mdnsProvider.Shutdown()
+			return errors.New("Avahi mDNS provider not available")
+		}
+	case MdnsProviderSelectionGoZeroConfOnly:
+		// Only use Zeroconf
+		m.mdnsProvider = NewZeroconfProvider(ifaces)
 	}
 
 	// on startup always start mDNS announcement

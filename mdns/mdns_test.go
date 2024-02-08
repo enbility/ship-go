@@ -36,12 +36,33 @@ func (s *MdnsSuite) BeforeTest(suiteName, testName string) {
 	s.mdnsProvider.On("ResolveEntries", mock.Anything, mock.Anything).Maybe().Return()
 	s.mdnsProvider.On("Shutdown").Maybe().Return()
 
-	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem", "shipid", "serviceName", 4729, nil)
+	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem", "shipid", "serviceName", 4729, nil, MdnsProviderSelectionAll)
 	s.sut.mdnsProvider = s.mdnsProvider
 }
 
 func (s *MdnsSuite) AfterTest(suiteName, testName string) {
 	s.sut.Shutdown()
+}
+
+func (s *MdnsSuite) Test_AvahiOnly() {
+	s.sut.Shutdown()
+
+	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem", "shipid", "serviceName", 4729, nil, MdnsProviderSelectionAvahiOnly)
+	s.sut.mdnsProvider = s.mdnsProvider
+
+	_ = s.sut.Start(s.mdnsSearch)
+	// Can't do an assertion check, as the result depends on the
+	// system this test is being ran on
+}
+
+func (s *MdnsSuite) Test_GoZeroConfOnly() {
+	s.sut.Shutdown()
+
+	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem", "shipid", "serviceName", 4729, nil, MdnsProviderSelectionGoZeroConfOnly)
+	s.sut.mdnsProvider = s.mdnsProvider
+
+	err := s.sut.Start(s.mdnsSearch)
+	assert.Nil(s.T(), err)
 }
 
 func (s *MdnsSuite) Test_Start() {
