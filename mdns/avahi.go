@@ -1,7 +1,6 @@
 package mdns
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -193,7 +192,7 @@ func (a *AvahiProvider) processResolvedService(service avahi.Service, remove boo
 
 	// Ignore IPv6 addresses for now
 	if address.To4() == nil {
-		return errors.New("no IPv4 addresses available")
+		return fmt.Errorf("no IPv4 addresses available %s", service.Name)
 	}
 
 	cb(elements, service.Name, service.Host, []net.IP{address}, int(service.Port), remove)
