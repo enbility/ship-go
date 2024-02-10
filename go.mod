@@ -6,7 +6,7 @@ require (
 	github.com/DerAndereAndi/zeroconf/v2 v2.0.0-20231028092313-1ae0ab54a2df
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/gorilla/websocket v1.5.1
-	github.com/holoplot/go-avahi v0.0.0-20231130181535-fd8f1d0307ed
+	github.com/holoplot/go-avahi v0.0.0-20240210093433-b8dc0fc11e7e
 	github.com/stretchr/testify v1.8.4
 	gitlab.com/c0b/go-ordered-json v0.0.0-20201030195603-febf46534d5a
 	go.uber.org/mock v0.4.0
@@ -23,5 +23,3 @@ require (
 	golang.org/x/tools v0.17.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/holoplot/go-avahi => github.com/DerAndereAndi/go-avahi v0.0.0-20240123155759-b4b6b2b50b4d
