@@ -41,8 +41,8 @@ type testStruct struct {
 type HubSuite struct {
 	suite.Suite
 
-	serviceProvider *mocks.MockHubReaderInterface
-	mdnsService     *mocks.MockMdnsInterface
+	hubReader   *mocks.MockHubReaderInterface
+	mdnsService *mocks.MockMdnsInterface
 
 	// serviceProvider  *mocks.ServiceProvider
 	// mdnsService      *mocks.MdnsService
@@ -76,13 +76,13 @@ func (s *HubSuite) BeforeTest(suiteName, testName string) {
 	ctrl := gomock.NewController(s.T())
 	// use gomock mocks instead of mockery, as those will panic with a data race error in these tests
 
-	s.serviceProvider = mocks.NewMockHubReaderInterface(ctrl)
+	s.hubReader = mocks.NewMockHubReaderInterface(ctrl)
 	// s.serviceProvider = mocks.NewServiceProvider(s.T())
-	s.serviceProvider.EXPECT().RemoteSKIConnected(gomock.Any()).Return().AnyTimes()
-	s.serviceProvider.EXPECT().ServiceShipIDUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
-	s.serviceProvider.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
-	s.serviceProvider.EXPECT().RemoteSKIDisconnected(gomock.Any()).Return().AnyTimes()
-	s.serviceProvider.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
+	s.hubReader.EXPECT().RemoteSKIConnected(gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().RemoteSKIDisconnected(gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().ServiceShipIDUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
 
 	s.mdnsService = mocks.NewMockMdnsInterface(ctrl)
 	s.mdnsService.EXPECT().AnnounceMdnsEntry().Return(nil).AnyTimes()
@@ -102,7 +102,7 @@ func (s *HubSuite) BeforeTest(suiteName, testName string) {
 	localService := api.NewServiceDetails("localSKI")
 
 	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
-	s.sut = NewHub(s.serviceProvider, s.mdnsService, 4567, certificate, localService)
+	s.sut = NewHub(s.hubReader, s.mdnsService, 4567, certificate, localService)
 }
 
 func (s *HubSuite) AfterTest(suiteName, testName string) {
@@ -115,7 +115,7 @@ func (s *HubSuite) Test_NewConnectionsHub() {
 	ski := "12af9e"
 	localService := api.NewServiceDetails(ski)
 
-	hub := NewHub(s.serviceProvider, s.mdnsService, 4567, tls.Certificate{}, localService)
+	hub := NewHub(s.hubReader, s.mdnsService, 4567, tls.Certificate{}, localService)
 	assert.NotNil(s.T(), hub)
 
 	s.mdnsService.EXPECT().Start(gomock.Any()).Return(nil).Times(1)
@@ -131,11 +131,11 @@ func (s *HubSuite) Test_SetupRemoteDevice() {
 	ski := "12af9e"
 	localService := api.NewServiceDetails(ski)
 
-	hub := NewHub(s.serviceProvider, s.mdnsService, 4567, tls.Certificate{}, localService)
+	hub := NewHub(s.hubReader, s.mdnsService, 4567, tls.Certificate{}, localService)
 	assert.NotNil(s.T(), hub)
 
 	readerI := mocks.NewShipConnectionDataReaderInterface(s.T())
-	s.serviceProvider.EXPECT().SetupRemoteDevice(gomock.Any(), gomock.Any()).Return(readerI)
+	s.hubReader.EXPECT().SetupRemoteDevice(gomock.Any(), gomock.Any()).Return(readerI)
 
 	reader := hub.SetupRemoteDevice(ski, nil)
 
@@ -157,7 +157,7 @@ func (s *HubSuite) Test_SendWSCloseMessage() {
 	ski := "12af9e"
 	localService := api.NewServiceDetails(ski)
 
-	hub := NewHub(s.serviceProvider, s.mdnsService, 4567, tls.Certificate{}, localService)
+	hub := NewHub(s.hubReader, s.mdnsService, 4567, tls.Certificate{}, localService)
 	assert.NotNil(s.T(), hub)
 
 	hub.sendWSCloseMessage(con)
@@ -561,11 +561,11 @@ func (s *HubSuite) Test_ConnectionAttemptRunning() {
 }
 
 func (s *HubSuite) Test_InitiatePairingWithSKI() {
-	s.sut.InitiatePairingWithSKI(s.remoteSki)
+	s.sut.InitiateOrApprovePairingWithSKI(s.remoteSki)
 	assert.Equal(s.T(), 0, len(s.sut.connections))
 
 	s.sut.registerConnection(s.shipConnection)
-	s.sut.InitiatePairingWithSKI(s.remoteSki)
+	s.sut.InitiateOrApprovePairingWithSKI(s.remoteSki)
 	assert.Equal(s.T(), 1, len(s.sut.connections))
 }
 
@@ -587,7 +587,7 @@ func (s *HubSuite) Test_ReportMdnsEntries() {
 
 	entries := make(map[string]*api.MdnsEntry)
 
-	s.serviceProvider.EXPECT().VisibleMDNSRecordsUpdated(gomock.Any()).AnyTimes()
+	s.hubReader.EXPECT().VisibleRemoteServicesUpdated(gomock.Any()).AnyTimes()
 	s.sut.ReportMdnsEntries(entries)
 
 	entries[testski1] = &api.MdnsEntry{
