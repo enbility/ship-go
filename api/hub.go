@@ -5,40 +5,58 @@ package api
 
 /* Hub */
 
-// interface for handling the server and remote connections
+// Interface for handling the server and remote connections
 type HubInterface interface {
-	PairingDetailForSki(ski string) *ConnectionStateDetail
+	// Start the ConnectionsHub with all its services
 	Start()
+
+	// close all connections
 	Shutdown()
+
+	// return the service for a SKI
 	ServiceForSKI(ski string) *ServiceDetails
+
+	// Provide the current pairing state for a SKI
+	PairingDetailForSki(ski string) *ConnectionStateDetail
+
+	// Sets the SKI as being paired or not
 	RegisterRemoteSKI(ski string, enable bool)
-	InitiatePairingWithSKI(ski string)
-	CancelPairingWithSKI(ski string)
+
+	// Disconnect a connection to an SKI
 	DisconnectSKI(ski string, reason string)
+
+	// Triggers the pairing process for a SKI
+	InitiateOrApprovePairingWithSKI(ski string)
+
+	// Cancels the pairing process for a SKI
+	CancelPairingWithSKI(ski string)
 }
 
-// Used to pass information from the hub to the eebus service
+// Interface to pass information from the hub to the eebus service
 //
-// Implemented by eebus Service, used by Hub
+// Implemented by eebus service implementation, used by Hub
 type HubReaderInterface interface {
-	// report a newly discovered remote EEBUS service
-	VisibleMDNSRecordsUpdated(entries []*MdnsEntry)
-
 	// report a connection to a SKI
 	RemoteSKIConnected(ski string)
 
 	// report a disconnection to a SKI
 	RemoteSKIDisconnected(ski string)
 
-	// provide the SHIP ID received during SHIP handshake process
-	// the ID needs to be stored and then provided for remote services so it can be compared and verified
-	ServiceShipIDUpdate(ski string, shipID string)
-
-	// provides the current handshake state for a given SKI
-	ServicePairingDetailUpdate(ski string, detail *ConnectionStateDetail)
-
 	// report an approved handshake by a remote device
 	SetupRemoteDevice(ski string, writeI ShipConnectionDataWriterInterface) ShipConnectionDataReaderInterface
+
+	// report all currently visible EEBUS services
+	VisibleRemoteServicesUpdated(entries []RemoteService)
+
+	// Provides the SHIP ID the remote service reported during the handshake process
+	// This needs to be persisted and passed on for future remote service connections
+	// when using `PairRemoteService`
+	ServiceShipIDUpdate(ski string, shipdID string)
+
+	// Provides the current pairing state for the remote service
+	// This is called whenever the state changes and can be used to
+	// provide user information for the pairing/connection process
+	ServicePairingDetailUpdate(ski string, detail *ConnectionStateDetail)
 
 	// return if the user is still able to trust the connection
 	AllowWaitingForTrust(ski string) bool

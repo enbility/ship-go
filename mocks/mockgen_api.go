@@ -214,14 +214,14 @@ func (mr *MockHubReaderInterfaceMockRecorder) SetupRemoteDevice(arg0, arg1 any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetupRemoteDevice", reflect.TypeOf((*MockHubReaderInterface)(nil).SetupRemoteDevice), arg0, arg1)
 }
 
-// VisibleMDNSRecordsUpdated mocks base method.
-func (m *MockHubReaderInterface) VisibleMDNSRecordsUpdated(arg0 []*api.MdnsEntry) {
+// VisibleRemoteServicesUpdated mocks base method.
+func (m *MockHubReaderInterface) VisibleRemoteServicesUpdated(arg0 []api.RemoteService) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "VisibleMDNSRecordsUpdated", arg0)
+	m.ctrl.Call(m, "VisibleRemoteServicesUpdated", arg0)
 }
 
-// VisibleMDNSRecordsUpdated indicates an expected call of VisibleMDNSRecordsUpdated.
-func (mr *MockHubReaderInterfaceMockRecorder) VisibleMDNSRecordsUpdated(arg0 any) *gomock.Call {
+// VisibleRemoteServicesUpdated indicates an expected call of VisibleRemoteServicesUpdated.
+func (mr *MockHubReaderInterfaceMockRecorder) VisibleRemoteServicesUpdated(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VisibleMDNSRecordsUpdated", reflect.TypeOf((*MockHubReaderInterface)(nil).VisibleMDNSRecordsUpdated), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VisibleRemoteServicesUpdated", reflect.TypeOf((*MockHubReaderInterface)(nil).VisibleRemoteServicesUpdated), arg0)
 }
