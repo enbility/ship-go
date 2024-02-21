@@ -333,28 +333,28 @@ func (h *Hub) prepareConnectionInitation(ski string, counter int, entry *api.Mdn
 func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.MdnsEntry) bool {
 	var err error
 
-	// try connecting via an IP address first
-	for _, address := range entry.Addresses {
-		// connection attempt is not relevant if the device is no longer paired
-		// or it is not queued for pairing
-		pairingState := h.ServiceForSKI(remoteService.SKI()).ConnectionStateDetail().State()
-		if !h.IsRemoteServiceForSKIPaired(remoteService.SKI()) && pairingState != api.ConnectionStateQueued {
-			return false
-		}
+	// connection attempt is not relevant if the device is no longer paired
+	// or it is not queued for pairing
+	pairingState := h.ServiceForSKI(remoteService.SKI()).ConnectionStateDetail().State()
+	if !h.IsRemoteServiceForSKIPaired(remoteService.SKI()) && pairingState != api.ConnectionStateQueued {
+		return false
+	}
 
-		logging.Log().Debug("trying to connect to", remoteService.SKI(), "at", address)
-		if err = h.connectFoundService(remoteService, address.String(), strconv.Itoa(entry.Port), entry.Path); err != nil {
-			logging.Log().Debug("connection to", remoteService.SKI(), "failed: ", err)
+	// try connetion via hostname
+	if len(entry.Host) > 0 {
+		logging.Log().Debug("trying to connect to", remoteService.SKI(), "at", entry.Host)
+		if err = h.connectFoundService(remoteService, entry.Host, strconv.Itoa(entry.Port), entry.Path); err != nil {
+			logging.Log().Debugf("connection to %s failed: %s", remoteService.SKI(), err)
 		} else {
 			return true
 		}
 	}
 
-	// connectdion via IP address failed, try hostname
-	if len(entry.Host) > 0 {
-		logging.Log().Debug("trying to connect to", remoteService.SKI(), "at", entry.Host)
-		if err = h.connectFoundService(remoteService, entry.Host, strconv.Itoa(entry.Port), entry.Path); err != nil {
-			logging.Log().Debugf("connection to %s failed: %s", remoteService.SKI(), err)
+	// try connecting via the provided IP addresses
+	for _, address := range entry.Addresses {
+		logging.Log().Debug("trying to connect to", remoteService.SKI(), "at", address)
+		if err = h.connectFoundService(remoteService, address.String(), strconv.Itoa(entry.Port), entry.Path); err != nil {
+			logging.Log().Debug("connection to", remoteService.SKI(), "failed: ", err)
 		} else {
 			return true
 		}
