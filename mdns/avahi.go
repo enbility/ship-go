@@ -172,23 +172,23 @@ func (a *AvahiProvider) processService(service avahi.Service, remove bool, cb ap
 	}
 
 	if remove {
-		return a.processRemovedService(service, remove, cb)
+		return a.processRemovedService(service, cb)
 	}
 
-	return a.processAddedService(service, remove, cb)
+	return a.processAddedService(service, cb)
 }
 
-func (a *AvahiProvider) processRemovedService(service avahi.Service, remove bool, cb api.MdnsResolveCB) error {
+func (a *AvahiProvider) processRemovedService(service avahi.Service, cb api.MdnsResolveCB) error {
 
 	// get the elements for the service
 	elements := a.serviceElements[getServiceUniqueKey(service)]
 
-	cb(elements, service.Name, service.Host, nil, -1, remove)
+	cb(elements, service.Name, service.Host, nil, -1, true)
 
 	return nil
 }
 
-func (a *AvahiProvider) processAddedService(service avahi.Service, remove bool, cb api.MdnsResolveCB) error {
+func (a *AvahiProvider) processAddedService(service avahi.Service, cb api.MdnsResolveCB) error {
 
 	// resolve the new service
 	resolved, err := a.avServer.ResolveService(service.Interface, service.Protocol, service.Name, service.Type, service.Domain, avahi.ProtoUnspec, 0)
@@ -217,7 +217,7 @@ func (a *AvahiProvider) processAddedService(service avahi.Service, remove bool, 
 	// add the elements to the map
 	a.serviceElements[getServiceUniqueKey(service)] = elements
 
-	cb(elements, resolved.Name, resolved.Host, []net.IP{address}, int(resolved.Port), remove)
+	cb(elements, resolved.Name, resolved.Host, []net.IP{address}, int(resolved.Port), false)
 
 	return nil
 }
