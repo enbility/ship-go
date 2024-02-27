@@ -34,20 +34,27 @@ func (a *AvahiSuite) Test_Avahi() {
 	// As we do not have an Avahi server running for automated testing
 	// these tests are very limited
 
-	boolV := a.sut.CheckAvailability()
-	assert.Equal(a.T(), false, boolV)
+	available := a.sut.CheckAvailability()
 
-	err := a.sut.Announce("dummytest", 4289, []string{"more=more"})
-	assert.NotNil(a.T(), err)
+	if available {
+		err := a.sut.Announce("dummytest", 4289, []string{"more=more"})
+		assert.Nil(a.T(), err)
 
-	a.sut.Unannounce()
+		a.sut.Unannounce()
+	} else {
+		err := a.sut.Announce("dummytest", 4289, []string{"more=more"})
+		assert.NotNil(a.T(), err)
 
-	//a.sut.ResolveEntries(processMdnsEntry)
+		a.sut.Unannounce()
+
+		a.sut.ResolveEntries(processMdnsEntry)
+	}
 
 	testService := avahi.Service{
 		Interface: 0,
 	}
-	err = a.sut.processService(testService, false, processMdnsEntry)
+
+	err := a.sut.processService(testService, false, processMdnsEntry)
 	assert.NotNil(a.T(), err)
 
 	testService = avahi.Service{
