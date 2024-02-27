@@ -175,7 +175,13 @@ func (a *AvahiProvider) processService(service avahi.Service, remove bool, cb ap
 		return a.processRemovedService(service, cb)
 	}
 
-	return a.processAddedService(service, cb)
+	// resolve the new service
+	resolved, err := a.avServer.ResolveService(service.Interface, service.Protocol, service.Name, service.Type, service.Domain, avahi.ProtoUnspec, 0)
+	if err != nil {
+		return fmt.Errorf("error resolving service: %s error: %s", service.Name, err)
+	}
+
+	return a.processAddedService(resolved, cb)
 }
 
 func (a *AvahiProvider) processRemovedService(service avahi.Service, cb api.MdnsResolveCB) error {
@@ -190,34 +196,28 @@ func (a *AvahiProvider) processRemovedService(service avahi.Service, cb api.Mdns
 
 func (a *AvahiProvider) processAddedService(service avahi.Service, cb api.MdnsResolveCB) error {
 
-	// resolve the new service
-	resolved, err := a.avServer.ResolveService(service.Interface, service.Protocol, service.Name, service.Type, service.Domain, avahi.ProtoUnspec, 0)
-	if err != nil {
-		return fmt.Errorf("error resolving service: %s error: %s", service.Name, err)
-	}
-
 	// convert [][]byte to []string manually
 	var txt []string
-	for _, element := range resolved.Txt {
+	for _, element := range service.Txt {
 		txt = append(txt, string(element))
 	}
 	elements := parseTxt(txt)
 
-	address := net.ParseIP(resolved.Address)
+	address := net.ParseIP(service.Address)
 	// if the address can not be used, ignore the entry
 	if address == nil || address.IsUnspecified() {
-		return fmt.Errorf("service provides unusable address: %s", resolved.Name)
+		return fmt.Errorf("service provides unusable address: %s", service.Name)
 	}
 
 	// Ignore IPv6 addresses for now
 	if address.To4() == nil {
-		return fmt.Errorf("no IPv4 addresses available %s", resolved.Name)
+		return fmt.Errorf("no IPv4 addresses available %s", service.Name)
 	}
 
 	// add the elements to the map
 	a.serviceElements[getServiceUniqueKey(service)] = elements
 
-	cb(elements, resolved.Name, resolved.Host, []net.IP{address}, int(resolved.Port), false)
+	cb(elements, service.Name, service.Host, []net.IP{address}, int(service.Port), false)
 
 	return nil
 }
