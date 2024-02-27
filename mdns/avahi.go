@@ -19,13 +19,17 @@ type AvahiProvider struct {
 
 	shutdownOnce sync.Once
 
+	// Used to store the service elements for each service, so that we can recall them when a service is removed
+	serviceElements map[string]map[string]string
+
 	shutdownChan chan struct{}
 }
 
 func NewAvahiProvider(ifaceIndexes []int32) *AvahiProvider {
 	return &AvahiProvider{
-		ifaceIndexes: ifaceIndexes,
-		shutdownChan: make(chan struct{}),
+		ifaceIndexes:    ifaceIndexes,
+		shutdownChan:    make(chan struct{}),
+		serviceElements: make(map[string]map[string]string),
 	}
 }
 
@@ -167,15 +171,31 @@ func (a *AvahiProvider) processService(service avahi.Service, remove bool, cb ap
 		return fmt.Errorf("ignoring service as its interface is not in the allowed list: %s", service.Name)
 	}
 
+	if remove {
+		return a.processRemovedService(service, cb)
+	}
+
+	// resolve the new service
 	resolved, err := a.avServer.ResolveService(service.Interface, service.Protocol, service.Name, service.Type, service.Domain, avahi.ProtoUnspec, 0)
 	if err != nil {
 		return fmt.Errorf("error resolving service: %s error: %s", service.Name, err)
 	}
 
-	return a.processResolvedService(resolved, remove, cb)
+	return a.processAddedService(resolved, cb)
 }
 
-func (a *AvahiProvider) processResolvedService(service avahi.Service, remove bool, cb api.MdnsResolveCB) error {
+func (a *AvahiProvider) processRemovedService(service avahi.Service, cb api.MdnsResolveCB) error {
+
+	// get the elements for the service
+	elements := a.serviceElements[getServiceUniqueKey(service)]
+
+	cb(elements, service.Name, service.Host, nil, -1, true)
+
+	return nil
+}
+
+func (a *AvahiProvider) processAddedService(service avahi.Service, cb api.MdnsResolveCB) error {
+
 	// convert [][]byte to []string manually
 	var txt []string
 	for _, element := range service.Txt {
@@ -183,7 +203,6 @@ func (a *AvahiProvider) processResolvedService(service avahi.Service, remove boo
 	}
 	elements := parseTxt(txt)
 
-	// convert address to net.IP
 	address := net.ParseIP(service.Address)
 	// if the address can not be used, ignore the entry
 	if address == nil || address.IsUnspecified() {
@@ -195,7 +214,15 @@ func (a *AvahiProvider) processResolvedService(service avahi.Service, remove boo
 		return fmt.Errorf("no IPv4 addresses available %s", service.Name)
 	}
 
-	cb(elements, service.Name, service.Host, []net.IP{address}, int(service.Port), remove)
+	// add the elements to the map
+	a.serviceElements[getServiceUniqueKey(service)] = elements
+
+	cb(elements, service.Name, service.Host, []net.IP{address}, int(service.Port), false)
 
 	return nil
+}
+
+// Create a unique key for a ship service
+func getServiceUniqueKey(service avahi.Service) string {
+	return fmt.Sprintf("%s-%s-%s-%d-%d", service.Name, service.Type, service.Domain, service.Protocol, service.Interface)
 }
