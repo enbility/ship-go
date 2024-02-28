@@ -51,10 +51,13 @@ type Hub struct {
 	// list of currently known/reported mDNS entries
 	knownMdnsEntries []*api.MdnsEntry
 
+	hasStarted bool
+
 	muxCon        sync.Mutex
 	muxConAttempt sync.Mutex
 	muxReg        sync.Mutex
 	muxMdns       sync.Mutex
+	muxStarted    sync.Mutex
 }
 
 func NewHub(hubReader api.HubReaderInterface,
@@ -82,6 +85,10 @@ var _ api.HubInterface = (*Hub)(nil)
 
 // Start the ConnectionsHub with all its services
 func (h *Hub) Start() {
+	h.muxStarted.Lock()
+	h.hasStarted = true
+	h.muxStarted.Unlock()
+
 	// start the websocket server
 	if err := h.startWebsocketServer(); err != nil {
 		logging.Log().Debug("error during websocket server starting:", err)
