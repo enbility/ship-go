@@ -24,7 +24,7 @@ func (h *Hub) PairingDetailForSki(ski string) *api.ConnectionStateDetail {
 }
 
 // maps ShipMessageExchangeState to PairingState
-func (h *Hub) mapShipMessageExchangeState(state model.ShipMessageExchangeState, ski string) api.ConnectionState {
+func (h *Hub) mapShipMessageExchangeState(state model.ShipMessageExchangeState, _ string) api.ConnectionState {
 	var connState api.ConnectionState
 
 	// map the SHIP states to a public ConnectionState
