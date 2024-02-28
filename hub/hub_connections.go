@@ -59,7 +59,7 @@ func (h *Hub) startWebsocketServer() error {
 
 	go func() {
 		if err := h.httpServer.ListenAndServeTLS("", ""); err != nil {
-			logging.Log().Debug("websocket server error:", err)
+			logging.Log().Error("websocket server error:", err)
 			// TODO: decide how to handle this case
 		}
 	}()
