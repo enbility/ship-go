@@ -2,6 +2,7 @@ package hub
 
 import (
 	"github.com/enbility/ship-go/api"
+	"github.com/enbility/ship-go/logging"
 	"github.com/enbility/ship-go/model"
 )
 
@@ -67,6 +68,14 @@ func (h *Hub) mapShipMessageExchangeState(state model.ShipMessageExchangeState, 
 // Should be used for services which completed the pairing process and
 // which were stored as having the process completed
 func (h *Hub) RegisterRemoteSKI(ski string, enable bool) {
+	// this should only be invoked before start is invoked
+	h.muxStarted.Lock()
+	if h.hasStarted {
+		logging.Log().Error("RegisterRemoteSKI should only be called before the service started!")
+		return
+	}
+	h.muxStarted.Unlock()
+
 	service := h.ServiceForSKI(ski)
 	service.SetTrusted(enable)
 
