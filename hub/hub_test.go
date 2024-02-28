@@ -88,8 +88,6 @@ func (s *HubSuite) BeforeTest(suiteName, testName string) {
 	s.mdnsService.EXPECT().AnnounceMdnsEntry().Return(nil).AnyTimes()
 	s.mdnsService.EXPECT().UnannounceMdnsEntry().Return().AnyTimes()
 	s.mdnsService.EXPECT().RequestMdnsEntries().Return().AnyTimes()
-	s.mdnsService.EXPECT().Start(gomock.Any()).Return(nil).AnyTimes()
-	s.mdnsService.EXPECT().Shutdown().AnyTimes()
 
 	s.wsDataWriter = mocks.NewWebsocketDataWriterInterface(s.T())
 
@@ -193,12 +191,14 @@ func (s *HubSuite) Test_IsRemoteSKIPaired() {
 	hub := NewHub(s.hubReader, s.mdnsService, 4567, tls.Certificate{}, localService)
 	assert.NotNil(s.T(), hub)
 
+	s.mdnsService.EXPECT().Start(gomock.Any()).Return(nil).Times(1)
 	hub.Start()
 
 	hub.RegisterRemoteSKI(s.remoteSki, false)
 	paired = s.sut.IsRemoteServiceForSKIPaired(s.remoteSki)
 	assert.Equal(s.T(), false, paired)
 
+	s.mdnsService.EXPECT().Shutdown().Times(1)
 	hub.Shutdown()
 }
 
