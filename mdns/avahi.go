@@ -23,6 +23,8 @@ type AvahiProvider struct {
 	serviceElements map[string]map[string]string
 
 	shutdownChan chan struct{}
+
+	mux sync.Mutex
 }
 
 func NewAvahiProvider(ifaceIndexes []int32) *AvahiProvider {
@@ -36,6 +38,9 @@ func NewAvahiProvider(ifaceIndexes []int32) *AvahiProvider {
 var _ api.MdnsProviderInterface = (*AvahiProvider)(nil)
 
 func (a *AvahiProvider) CheckAvailability() bool {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+
 	dbusConn, err := dbus.SystemBus()
 	if err != nil {
 		return false
@@ -64,6 +69,9 @@ func (a *AvahiProvider) CheckAvailability() bool {
 }
 
 func (a *AvahiProvider) Shutdown() {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+
 	a.shutdownOnce.Do(func() {
 		if a.avServer == nil {
 			return
@@ -78,6 +86,9 @@ func (a *AvahiProvider) Shutdown() {
 }
 
 func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) error {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+
 	logging.Log().Debug("mdns: using avahi")
 
 	var btxt [][]byte
@@ -108,6 +119,9 @@ func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) err
 }
 
 func (a *AvahiProvider) Unannounce() {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+
 	if a.avEntryGroup == nil {
 		return
 	}
@@ -117,22 +131,41 @@ func (a *AvahiProvider) Unannounce() {
 }
 
 func (a *AvahiProvider) ResolveEntries(callback api.MdnsResolveCB) {
+	a.mux.Lock()
+
 	var err error
 
 	var avBrowser *avahi.ServiceBrowser
 
+	if a.avServer == nil {
+		a.mux.Unlock()
+		return
+	}
+
 	// instead of limiting search on specific allowed interfaces, we allow all and filter the results
 	if avBrowser, err = a.avServer.ServiceBrowserNew(avahi.InterfaceUnspec, avahi.ProtoUnspec, shipZeroConfServiceType, shipZeroConfDomain, 0); err != nil {
 		logging.Log().Debug("mdns: error setting up avahi browser:", err)
+		a.mux.Unlock()
 		return
 	}
 
 	if avBrowser == nil {
 		logging.Log().Debug("mdns: avahi browser is not available")
+		a.mux.Unlock()
 		return
 	}
 
-	defer a.avServer.ServiceBrowserFree(avBrowser)
+	a.mux.Unlock()
+
+	defer func() {
+		a.mux.Lock()
+
+		if a.avServer != nil {
+			a.avServer.ServiceBrowserFree(avBrowser)
+		}
+
+		a.mux.Unlock()
+	}()
 
 	for {
 		select {
