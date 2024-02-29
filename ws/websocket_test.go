@@ -102,6 +102,9 @@ func (s *WebsocketSuite) TestConnectionInvalid() {
 	result := s.sut.writeMessage(websocket.BinaryMessage, []byte{})
 	assert.Equal(s.T(), false, result)
 
+	err = s.sut.writeMessageWithoutErrorHandling(websocket.BinaryMessage, []byte{})
+	assert.NotNil(s.T(), err)
+
 	s.sut.conn = nil
 
 	data, err := s.sut.readWebsocketMessage()
