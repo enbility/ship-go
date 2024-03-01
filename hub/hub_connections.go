@@ -446,8 +446,9 @@ func (h *Hub) isConnectionAttemptRunning(ski string) bool {
 // register a new ship Connection
 func (h *Hub) registerConnection(connection api.ShipConnectionInterface) {
 	h.muxCon.Lock()
+	defer h.muxCon.Unlock()
+
 	h.connections[connection.RemoteSKI()] = connection
-	h.muxCon.Unlock()
 }
 
 // return the connection for a specific SKI
