@@ -89,12 +89,9 @@ func (h *Hub) RegisterRemoteSKI(ski string, enable bool) {
 // Disconnect a connection to an SKI, used by a service implementation
 // e.g. if heartbeats go wrong
 func (h *Hub) DisconnectSKI(ski string, reason string) {
-	h.muxCon.Lock()
-	defer h.muxCon.Unlock()
 
-	// The connection with the higher SKI should retain the connection
-	con, ok := h.connections[ski]
-	if !ok {
+	con := h.connectionForSKI(ski)
+	if con == nil {
 		return
 	}
 
