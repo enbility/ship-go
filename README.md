@@ -12,8 +12,6 @@ Basic understanding of the EEBUS concepts SHIP and SPINE to use this library is 
 
 This repository was started as part of the [eebus-go](https://github.com/enbility/eebus-go) before it was moved into its own repository and this separate go package.
 
-Basic understanding of the EEBUS concepts SHIP and SPINE to use this library is required. Please check the corresponding specifications on the [EEBUS downloads website](https://www.eebus.org/media-downloads/).
-
 ## Overview
 
 Includes:
