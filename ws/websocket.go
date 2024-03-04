@@ -269,29 +269,37 @@ func (w *WebsocketConnection) writeMessage(messageType int, data []byte) bool {
 		return false
 	}
 
-	w.muxConWrite.Lock()
-	defer w.muxConWrite.Unlock()
-
-	err := w.conn.WriteMessage(messageType, data)
+	err := w.writeMessageWithoutErrorHandling(messageType, data)
 	if err != nil {
 		// ignore write errors if the connection got closed
 		w.closeWithError(err, "error writing to websocket: ")
+		logging.Log().Debug("WRITE ERROR: ", err)
 		return false
 	}
 
 	return true
 }
 
-// shutdown the connection and all internals
-func (w *WebsocketConnection) CloseDataConnection(closeCode int, reason string) {
+// make sure websocket Write is only called once at a time
+func (w *WebsocketConnection) writeMessageWithoutErrorHandling(messageType int, data []byte) error {
 	if w.isConnClosed() {
-		return
+		return errors.New(connIsClosedError)
 	}
 
+	w.muxConWrite.Lock()
+	defer w.muxConWrite.Unlock()
+
+	return w.conn.WriteMessage(messageType, data)
+}
+
+// shutdown the connection and all internals
+func (w *WebsocketConnection) CloseDataConnection(closeCode int, reason string) {
+
+	// send a close message to the remote side if we have a reason
 	if reason != "" {
-		_ = w.writeMessage(websocket.CloseMessage, websocket.FormatCloseMessage(closeCode, reason))
+		_ = w.writeMessageWithoutErrorHandling(websocket.CloseMessage, websocket.FormatCloseMessage(closeCode, reason))
 	}
-	w.setConnClosedError(nil)
+
 	w.close()
 }
 
