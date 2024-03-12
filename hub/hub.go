@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"context"
 	"crypto/tls"
 	"net/http"
 	"sync"
@@ -106,6 +107,9 @@ func (h *Hub) Shutdown() {
 	h.mdns.Shutdown()
 	for _, c := range h.connections {
 		c.CloseConnection(false, 0, "")
+	}
+	if err := h.httpServer.Shutdown(context.Background()); err != nil {
+		logging.Log().Error("HTTP server shutdown:", err)
 	}
 }
 
