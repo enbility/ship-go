@@ -64,17 +64,21 @@ func (h *Hub) mapShipMessageExchangeState(state model.ShipMessageExchangeState, 
 	return connState
 }
 
+func (h *Hub) checkHasStarted() bool {
+	h.muxStarted.Lock()
+	defer h.muxStarted.Unlock()
+	return h.hasStarted
+}
+
 // Sets the SKI as being paired or not
 // Should be used for services which completed the pairing process and
 // which were stored as having the process completed
 func (h *Hub) RegisterRemoteSKI(ski string, enable bool) {
 	// this should only be invoked before start is invoked
-	h.muxStarted.Lock()
-	if h.hasStarted {
+	if h.checkHasStarted() {
 		logging.Log().Error("RegisterRemoteSKI should only be called before the service started!")
 		return
 	}
-	h.muxStarted.Unlock()
 
 	service := h.ServiceForSKI(ski)
 	service.SetTrusted(enable)
