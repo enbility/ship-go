@@ -524,6 +524,11 @@ func (s *HubSuite) Test_InitiateConnection() {
 	assert.Equal(s.T(), false, result)
 }
 
+func (s *HubSuite) Test_checkHasStarted() {
+	checked := s.sut.checkHasStarted()
+	assert.Equal(s.T(), s.sut.hasStarted, checked)
+}
+
 func (s *HubSuite) Test_IncreaseConnectionAttemptCounter() {
 	for _, test := range s.tests {
 		s.sut.increaseConnectionAttemptCounter(s.remoteSki)
