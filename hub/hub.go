@@ -108,6 +108,9 @@ func (h *Hub) Shutdown() {
 	for _, c := range h.connections {
 		c.CloseConnection(false, 0, "")
 	}
+	if h.httpServer == nil {
+		return
+	}
 	if err := h.httpServer.Shutdown(context.Background()); err != nil {
 		logging.Log().Error("HTTP server shutdown:", err)
 	}
