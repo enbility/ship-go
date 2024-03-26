@@ -68,7 +68,8 @@ func (h *Hub) AllowWaitingForTrust(ski string) bool {
 func (h *Hub) HandleShipHandshakeStateUpdate(ski string, state model.ShipState) {
 	// overwrite service Paired value
 	if state.State == model.SmeHelloStateOk {
-		h.RegisterRemoteSKI(ski, true)
+		service := h.ServiceForSKI(ski)
+		service.SetTrusted(true)
 	}
 
 	pairingState := h.mapShipMessageExchangeState(state.State, ski)
