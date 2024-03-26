@@ -1,5 +1,6 @@
 package cert
 
+//nolint:gosec
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"

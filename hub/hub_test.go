@@ -1,5 +1,6 @@
 package hub
 
+//nolint:gosec
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
