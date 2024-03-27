@@ -22,6 +22,9 @@ type ShipConnectionInfoProviderInterface interface {
 	// check if the SKI is paired
 	IsRemoteServiceForSKIPaired(string) bool
 
+	// check if auto accept is true
+	IsAutoAcceptEnabled() bool
+
 	// report closing of a connection and if handshake did complete
 	HandleConnectionClosed(ShipConnectionInterface, bool)
 
