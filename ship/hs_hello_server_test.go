@@ -79,6 +79,7 @@ func (s *HelloSuite) BeforeTest(suiteName, testName string) {
 	s.mockShipInfo = mocks.NewShipConnectionInfoProviderInterface(s.T())
 	s.mockShipInfo.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Return().Maybe()
 	s.mockShipInfo.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Return().Maybe()
+	s.mockShipInfo.EXPECT().IsAutoAcceptEnabled().Return(false).Maybe()
 
 	s.sut = NewConnectionHandler(s.mockShipInfo, s.mockWSWrite, ShipRoleServer, "LocalShipID", "RemoveDevice", "RemoteShipID")
 }
