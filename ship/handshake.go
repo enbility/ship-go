@@ -119,12 +119,14 @@ func (c *ShipConnection) handleState(timeout bool, message []byte) {
 	// smeHello
 
 	case model.SmeHelloState:
-		// check if the service is already trusted or the role is client,
+		// check if the service is already trusted, auto accept is true or the role is client,
 		// which means it was initiated from this service usually by triggering the
 		// pairing service
 		// go to substate ready if so, otherwise to substate pending
 
-		if c.infoProvider.IsRemoteServiceForSKIPaired(c.remoteSKI) || c.role == ShipRoleClient {
+		if c.infoProvider.IsRemoteServiceForSKIPaired(c.remoteSKI) ||
+			c.infoProvider.IsAutoAcceptEnabled() ||
+			c.role == ShipRoleClient {
 			c.setState(model.SmeHelloStateReadyInit, nil)
 		} else {
 			c.setState(model.SmeHelloStatePendingInit, nil)

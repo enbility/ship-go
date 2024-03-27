@@ -16,6 +16,11 @@ func (h *Hub) IsRemoteServiceForSKIPaired(ski string) bool {
 	return service.Trusted()
 }
 
+// check if auto accept is true
+func (h *Hub) IsAutoAcceptEnabled() bool {
+	return h.localService.RegisterAutoAccept()
+}
+
 // report closing of a connection and if handshake did complete
 func (h *Hub) HandleConnectionClosed(connection api.ShipConnectionInterface, handshakeCompleted bool) {
 	remoteSki := connection.RemoteSKI()

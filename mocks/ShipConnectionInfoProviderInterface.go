@@ -136,6 +136,51 @@ func (_c *ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Cal
 	return _c
 }
 
+// IsAutoAcceptEnabled provides a mock function with given fields:
+func (_m *ShipConnectionInfoProviderInterface) IsAutoAcceptEnabled() bool {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for IsAutoAcceptEnabled")
+	}
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	return r0
+}
+
+// ShipConnectionInfoProviderInterface_IsAutoAcceptEnabled_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IsAutoAcceptEnabled'
+type ShipConnectionInfoProviderInterface_IsAutoAcceptEnabled_Call struct {
+	*mock.Call
+}
+
+// IsAutoAcceptEnabled is a helper method to define mock.On call
+func (_e *ShipConnectionInfoProviderInterface_Expecter) IsAutoAcceptEnabled() *ShipConnectionInfoProviderInterface_IsAutoAcceptEnabled_Call {
+	return &ShipConnectionInfoProviderInterface_IsAutoAcceptEnabled_Call{Call: _e.mock.On("IsAutoAcceptEnabled")}
+}
+
+func (_c *ShipConnectionInfoProviderInterface_IsAutoAcceptEnabled_Call) Run(run func()) *ShipConnectionInfoProviderInterface_IsAutoAcceptEnabled_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *ShipConnectionInfoProviderInterface_IsAutoAcceptEnabled_Call) Return(_a0 bool) *ShipConnectionInfoProviderInterface_IsAutoAcceptEnabled_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ShipConnectionInfoProviderInterface_IsAutoAcceptEnabled_Call) RunAndReturn(run func() bool) *ShipConnectionInfoProviderInterface_IsAutoAcceptEnabled_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // IsRemoteServiceForSKIPaired provides a mock function with given fields: _a0
 func (_m *ShipConnectionInfoProviderInterface) IsRemoteServiceForSKIPaired(_a0 string) bool {
 	ret := _m.Called(_a0)

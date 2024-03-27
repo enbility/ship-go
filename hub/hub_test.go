@@ -238,6 +238,9 @@ func (s *HubSuite) Test_Ship() {
 
 	s.sut.ReportServiceShipID(s.remoteSki, "test")
 
+	accept := s.sut.IsAutoAcceptEnabled()
+	assert.Equal(s.T(), false, accept)
+
 	trust := s.sut.AllowWaitingForTrust(s.remoteSki)
 	assert.Equal(s.T(), true, trust)
 
