@@ -75,7 +75,7 @@ func (h *Hub) checkHasStarted() bool {
 // which were stored as having the process completed
 func (h *Hub) RegisterRemoteSKI(ski string, enable bool) {
 	// this should only be invoked before start is invoked
-	if h.checkHasStarted() {
+	if h.checkHasStarted() && enable {
 		logging.Log().Error("RegisterRemoteSKI should only be called before the service started!")
 		return
 	}
