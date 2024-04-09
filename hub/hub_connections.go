@@ -167,13 +167,16 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 	}
 
 	address := fmt.Sprintf("wss://%s:%s%s", host, port, path)
-	conn, _, err := dialer.Dial(address, nil)
-	if err != nil {
+	conn, resp, err := dialer.Dial(address, nil)
+	if err == nil {
+		defer resp.Body.Close()
+	} else {
 		address = fmt.Sprintf("wss://%s:%s", host, port)
-		conn, _, err = dialer.Dial(address, nil)
-	}
-	if err != nil {
-		return err
+		conn, resp, err = dialer.Dial(address, nil)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
 	}
 
 	tlsConn := conn.UnderlyingConn().(*tls.Conn)

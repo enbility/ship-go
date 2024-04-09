@@ -102,7 +102,6 @@ func (h *Hub) RegisterRemoteSKI(ski string, enable bool) {
 // Disconnect a connection to an SKI, used by a service implementation
 // e.g. if heartbeats go wrong
 func (h *Hub) DisconnectSKI(ski string, reason string) {
-
 	con := h.connectionForSKI(ski)
 	if con == nil {
 		return

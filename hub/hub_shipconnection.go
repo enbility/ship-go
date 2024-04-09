@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"errors"
 	"time"
 
 	"github.com/enbility/ship-go/api"
@@ -78,7 +79,7 @@ func (h *Hub) HandleShipHandshakeStateUpdate(ski string, state model.ShipState) 
 	}
 
 	pairingState := h.mapShipMessageExchangeState(state.State, ski)
-	if state.Error != nil && state.Error != api.ErrConnectionNotFound {
+	if state.Error != nil && !errors.Is(state.Error, api.ErrConnectionNotFound) {
 		pairingState = api.ConnectionStateError
 	}
 
@@ -88,7 +89,7 @@ func (h *Hub) HandleShipHandshakeStateUpdate(ski string, state model.ShipState) 
 
 	existingDetails := service.ConnectionStateDetail()
 	existingState := existingDetails.State()
-	if existingState != pairingState || existingDetails.Error() != state.Error {
+	if existingState != pairingState || !errors.Is(existingDetails.Error(), state.Error) {
 		service.SetConnectionStateDetail(pairingDetail)
 
 		// always send a delayed update, as the processing of the new state has to be done

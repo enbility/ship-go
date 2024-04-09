@@ -181,7 +181,6 @@ func (a *AvahiProvider) ResolveEntries(callback api.MdnsResolveCB) {
 			}
 		}
 	}
-
 }
 
 // process an avahi mDNS service
@@ -211,14 +210,13 @@ func (a *AvahiProvider) processService(service avahi.Service, remove bool, cb ap
 	// resolve the new service
 	resolved, err := a.avServer.ResolveService(service.Interface, service.Protocol, service.Name, service.Type, service.Domain, avahi.ProtoUnspec, 0)
 	if err != nil {
-		return fmt.Errorf("error resolving service: %s error: %s", service.Name, err)
+		return fmt.Errorf("error resolving service: %s error: %w", service.Name, err)
 	}
 
 	return a.processAddedService(resolved, cb)
 }
 
 func (a *AvahiProvider) processRemovedService(service avahi.Service, cb api.MdnsResolveCB) error {
-
 	// get the elements for the service
 	elements := a.serviceElements[getServiceUniqueKey(service)]
 
@@ -228,7 +226,6 @@ func (a *AvahiProvider) processRemovedService(service avahi.Service, cb api.Mdns
 }
 
 func (a *AvahiProvider) processAddedService(service avahi.Service, cb api.MdnsResolveCB) error {
-
 	// convert [][]byte to []string manually
 	var txt []string
 	for _, element := range service.Txt {

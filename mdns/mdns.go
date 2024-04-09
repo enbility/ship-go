@@ -358,7 +358,6 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		if updated {
 			m.setMdnsEntry(ski, entry)
 		}
-
 	} else if !exists && !remove {
 		updated = true
 		// new

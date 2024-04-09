@@ -152,7 +152,7 @@ func (s *HubSuite) Test_SendWSCloseMessage() {
 	wsURL := strings.Replace(server.URL, "http://", "ws://", -1)
 
 	// Connect to the server
-	con, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	con, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	assert.Nil(s.T(), err)
 
 	ski := "12af9e"
@@ -163,6 +163,7 @@ func (s *HubSuite) Test_SendWSCloseMessage() {
 
 	hub.sendWSCloseMessage(con)
 
+	resp.Body.Close()
 	_ = con.Close()
 	server.CloseClientConnections()
 	server.Close()
@@ -334,16 +335,18 @@ func (s *HubSuite) Test_ServeHTTP_01() {
 	wsURL := strings.Replace(server.URL, "http://", "ws://", -1)
 
 	// Connect to the server
-	con, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	con, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	assert.Nil(s.T(), err)
+	resp.Body.Close()
 	_ = con.Close()
 
 	dialer := &websocket.Dialer{
 		Subprotocols: []string{api.ShipWebsocketSubProtocol},
 	}
-	con, _, err = dialer.Dial(wsURL, nil)
+	con, resp, err = dialer.Dial(wsURL, nil)
 	assert.Nil(s.T(), err)
 
+	resp.Body.Close()
 	_ = con.Close()
 	server.CloseClientConnections()
 	server.Close()
@@ -373,9 +376,10 @@ func (s *HubSuite) Test_ServeHTTP_02() {
 		},
 		Subprotocols: []string{api.ShipWebsocketSubProtocol},
 	}
-	con, _, err := dialer.Dial(wsURL, nil)
+	con, resp, err := dialer.Dial(wsURL, nil)
 	assert.Nil(s.T(), err)
 
+	resp.Body.Close()
 	_ = con.Close()
 
 	validCert, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
@@ -389,9 +393,10 @@ func (s *HubSuite) Test_ServeHTTP_02() {
 		},
 		Subprotocols: []string{api.ShipWebsocketSubProtocol},
 	}
-	con, _, err = dialer.Dial(wsURL, nil)
+	con, resp, err = dialer.Dial(wsURL, nil)
 	assert.Nil(s.T(), err)
 
+	resp.Body.Close()
 	_ = con.Close()
 	server.CloseClientConnections()
 	server.Close()
