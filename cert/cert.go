@@ -28,6 +28,48 @@ var CipherSuites = []uint16{
 // commonName is the CN of the certificate
 // Example for commonName: "deviceModel-deviceSerialNumber"
 func CreateCertificate(organizationalUnit, organization, country, commonName string) (tls.Certificate, error) {
+	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	// Create a random serial big int value
+	maxValue := new(big.Int)
+	maxValue.Exp(big.NewInt(2), big.NewInt(130), nil).Sub(maxValue, big.NewInt(1))
+	serialNumber, err := rand.Int(rand.Reader, maxValue)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	subject := pkix.Name{
+		OrganizationalUnit: []string{organizationalUnit},
+		Organization:       []string{organization},
+		Country:            []string{country},
+		CommonName:         commonName,
+	}
+
+	rootTemplate := &x509.Certificate{
+		SignatureAlgorithm:    x509.ECDSAWithSHA256,
+		SerialNumber:          serialNumber,
+		Subject:               subject,
+		NotBefore:             time.Now(),                                // Valid starting now
+		NotAfter:              time.Now().Add(time.Hour * 24 * 365 * 10), // Valid for 10 years
+		KeyUsage:              x509.KeyUsageCRLSign | x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+
+	rootCertBytes, err := x509.CreateCertificate(rand.Reader, rootTemplate, rootTemplate, &rootKey.PublicKey, rootKey)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	rootCert, err := x509.ParseCertificate(rootCertBytes)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return tls.Certificate{}, err
@@ -42,34 +84,19 @@ func CreateCertificate(organizationalUnit, organization, country, commonName str
 	// #nosec G401
 	ski := sha1.Sum(asn1)
 
-	subject := pkix.Name{
-		OrganizationalUnit: []string{organizationalUnit},
-		Organization:       []string{organization},
-		Country:            []string{country},
-		CommonName:         commonName,
-	}
-
-	// Create a random serial big int value
-	maxValue := new(big.Int)
-	maxValue.Exp(big.NewInt(2), big.NewInt(130), nil).Sub(maxValue, big.NewInt(1))
-	serialNumber, err := rand.Int(rand.Reader, maxValue)
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-
-	template := x509.Certificate{
+	template := &x509.Certificate{
 		SignatureAlgorithm:    x509.ECDSAWithSHA256,
 		SerialNumber:          serialNumber,
 		Subject:               subject,
 		NotBefore:             time.Now(),                                // Valid starting now
 		NotAfter:              time.Now().Add(time.Hour * 24 * 365 * 10), // Valid for 10 years
-		KeyUsage:              x509.KeyUsageDigitalSignature,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 		SubjectKeyId:          ski[:],
+		AuthorityKeyId:        ski[:],
 	}
 
-	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, rootCert, &privateKey.PublicKey, rootKey)
 	if err != nil {
 		return tls.Certificate{}, err
 	}
