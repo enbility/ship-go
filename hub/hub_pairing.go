@@ -2,7 +2,6 @@ package hub
 
 import (
 	"github.com/enbility/ship-go/api"
-	"github.com/enbility/ship-go/logging"
 	"github.com/enbility/ship-go/model"
 )
 
@@ -73,20 +72,39 @@ func (h *Hub) checkHasStarted() bool {
 // Sets the SKI as being paired or not
 // Should be used for services which completed the pairing process and
 // which were stored as having the process completed
-func (h *Hub) RegisterRemoteSKI(ski string, enable bool) {
-	// this should only be invoked before start is invoked
-	if h.checkHasStarted() && enable {
-		logging.Log().Error("RegisterRemoteSKI should only be called before the service started!")
-		return
-	}
+func (h *Hub) RegisterRemoteSKI(ski string) {
+	// if the hub has not started, simply add it
+	if !h.checkHasStarted() {
+		service := h.ServiceForSKI(ski)
+		service.SetTrusted(true)
 
-	service := h.ServiceForSKI(ski)
-	service.SetTrusted(enable)
-
-	if enable {
 		h.checkAutoReannounce()
 		return
 	}
+
+	// if the hub has started, trigger a search and conneciton attempt
+	conn := h.connectionForSKI(ski)
+
+	// remotely initiated?
+	if conn != nil {
+		conn.ApprovePendingHandshake()
+
+		return
+	}
+
+	// locally initiated
+	service := h.ServiceForSKI(ski)
+	service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
+
+	h.hubReader.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
+
+	h.mdns.RequestMdnsEntries()
+}
+
+// Remove pairing for the SKI
+func (h *Hub) UnregisterRemoteSKI(ski string) {
+	service := h.ServiceForSKI(ski)
+	service.SetTrusted(false)
 
 	h.removeConnectionAttemptCounter(ski)
 
@@ -108,26 +126,6 @@ func (h *Hub) DisconnectSKI(ski string, reason string) {
 	}
 
 	con.CloseConnection(true, 0, reason)
-}
-
-// Triggers the pairing process for a SKI
-func (h *Hub) InitiateOrApprovePairingWithSKI(ski string) {
-	conn := h.connectionForSKI(ski)
-
-	// remotely initiated
-	if conn != nil {
-		conn.ApprovePendingHandshake()
-
-		return
-	}
-
-	// locally initiated
-	service := h.ServiceForSKI(ski)
-	service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
-
-	h.hubReader.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
-
-	h.mdns.RequestMdnsEntries()
 }
 
 // Cancels the pairing process for a SKI

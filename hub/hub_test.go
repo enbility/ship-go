@@ -176,14 +176,14 @@ func (s *HubSuite) Test_IsRemoteSKIPaired() {
 	assert.Equal(s.T(), false, paired)
 
 	s.sut.registerConnection(s.shipConnection)
-	s.sut.RegisterRemoteSKI(s.remoteSki, true)
+	s.sut.RegisterRemoteSKI(s.remoteSki)
 
 	paired = s.sut.IsRemoteServiceForSKIPaired(s.remoteSki)
 	assert.Equal(s.T(), true, paired)
 
 	// remove the connection, so the test doesn't try to close it
 	delete(s.sut.connections, s.remoteSki)
-	s.sut.RegisterRemoteSKI(s.remoteSki, false)
+	s.sut.UnregisterRemoteSKI(s.remoteSki)
 	paired = s.sut.IsRemoteServiceForSKIPaired(s.remoteSki)
 	assert.Equal(s.T(), false, paired)
 
@@ -196,12 +196,23 @@ func (s *HubSuite) Test_IsRemoteSKIPaired() {
 	s.mdnsService.EXPECT().Start(gomock.Any()).Return(nil).Times(1)
 	hub.Start()
 
-	hub.RegisterRemoteSKI(s.remoteSki, false)
+	hub.UnregisterRemoteSKI(s.remoteSki)
 	paired = s.sut.IsRemoteServiceForSKIPaired(s.remoteSki)
 	assert.Equal(s.T(), false, paired)
 
 	s.mdnsService.EXPECT().Shutdown().Times(1)
 	hub.Shutdown()
+}
+
+func (s *HubSuite) Test_RegisterRemoteSKI_AfterStart() {
+	s.sut.hasStarted = true
+
+	s.sut.RegisterRemoteSKI(s.remoteSki)
+	assert.Equal(s.T(), 0, len(s.sut.connections))
+
+	s.sut.registerConnection(s.shipConnection)
+	s.sut.RegisterRemoteSKI(s.remoteSki)
+	assert.Equal(s.T(), 1, len(s.sut.connections))
 }
 
 func (s *HubSuite) Test_HandleConnectionClosed() {
@@ -221,7 +232,7 @@ func (s *HubSuite) Test_Mdns() {
 	assert.Equal(s.T(), 0, len(s.sut.connections))
 	assert.Equal(s.T(), 0, pairedServices)
 
-	s.sut.RegisterRemoteSKI(s.remoteSki, true)
+	s.sut.RegisterRemoteSKI(s.remoteSki)
 	pairedServices = s.sut.numberPairedServices()
 	assert.Equal(s.T(), 0, len(s.sut.connections))
 	assert.Equal(s.T(), 1, pairedServices)
@@ -502,7 +513,7 @@ func (s *HubSuite) Test_prepareConnectionInitiation() {
 	assert.Equal(s.T(), 0, counter)
 	s.sut.prepareConnectionInitation(s.remoteSki, 0, entry)
 
-	s.sut.RegisterRemoteSKI(s.remoteSki, false)
+	s.sut.UnregisterRemoteSKI(s.remoteSki)
 	service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
 
 	counter = s.sut.increaseConnectionAttemptCounter(s.remoteSki)
@@ -526,7 +537,7 @@ func (s *HubSuite) Test_InitiateConnection() {
 	result = s.sut.initateConnection(service, entry)
 	assert.Equal(s.T(), false, result)
 
-	s.sut.RegisterRemoteSKI(s.remoteSki, true)
+	s.sut.RegisterRemoteSKI(s.remoteSki)
 	service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
 
 	result = s.sut.initateConnection(service, entry)
@@ -588,15 +599,6 @@ func (s *HubSuite) Test_ConnectionAttemptRunning() {
 	s.sut.setConnectionAttemptRunning(s.remoteSki, false)
 	status = s.sut.isConnectionAttemptRunning(s.remoteSki)
 	assert.Equal(s.T(), false, status)
-}
-
-func (s *HubSuite) Test_InitiatePairingWithSKI() {
-	s.sut.InitiateOrApprovePairingWithSKI(s.remoteSki)
-	assert.Equal(s.T(), 0, len(s.sut.connections))
-
-	s.sut.registerConnection(s.shipConnection)
-	s.sut.InitiateOrApprovePairingWithSKI(s.remoteSki)
-	assert.Equal(s.T(), 1, len(s.sut.connections))
 }
 
 func (s *HubSuite) Test_CancelPairingWithSKI() {

@@ -19,14 +19,14 @@ type HubInterface interface {
 	// Provide the current pairing state for a SKI
 	PairingDetailForSki(ski string) *ConnectionStateDetail
 
-	// Sets the SKI as being paired or not
-	RegisterRemoteSKI(ski string, enable bool)
+	// Pair with the SKI
+	RegisterRemoteSKI(ski string)
+
+	// Unpair the SKI
+	UnregisterRemoteSKI(ski string)
 
 	// Disconnect a connection to an SKI
 	DisconnectSKI(ski string, reason string)
-
-	// Triggers the pairing process for a SKI
-	InitiateOrApprovePairingWithSKI(ski string)
 
 	// Cancels the pairing process for a SKI
 	CancelPairingWithSKI(ski string)
