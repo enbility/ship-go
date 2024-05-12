@@ -129,6 +129,8 @@ func (s *HubSuite) Test_NewConnectionsHub() {
 }
 
 func (s *HubSuite) Test_AutoAccept() {
+	s.mdnsService.EXPECT().SetAutoAccept(gomock.Any()).Return().AnyTimes()
+
 	s.sut.SetAutoAccept(true)
 	value := s.sut.IsAutoAcceptEnabled()
 	assert.True(s.T(), value)
