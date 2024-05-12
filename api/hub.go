@@ -19,6 +19,11 @@ type HubInterface interface {
 	// Provide the current pairing state for a SKI
 	PairingDetailForSki(ski string) *ConnectionStateDetail
 
+	// Enables or disables to automatically accept incoming pairing and connection requests
+	//
+	// Default: false
+	SetAutoAccept(bool)
+
 	// Pair with the SKI
 	RegisterRemoteSKI(ski string)
 

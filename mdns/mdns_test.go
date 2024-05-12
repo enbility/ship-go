@@ -31,6 +31,7 @@ func (s *MdnsSuite) BeforeTest(suiteName, testName string) {
 	s.mdnsService = mocks.NewMdnsInterface(s.T())
 
 	s.mdnsSearch = mocks.NewMdnsReportInterface(s.T())
+	s.mdnsSearch.On("ReportMdnsEntries", mock.Anything).Maybe().Return()
 
 	s.mdnsProvider = mocks.NewMdnsProviderInterface(s.T())
 	s.mdnsProvider.On("ResolveEntries", mock.Anything, mock.Anything).Maybe().Return()
@@ -63,6 +64,10 @@ func (s *MdnsSuite) Test_GoZeroConfOnly() {
 
 	err := s.sut.Start(s.mdnsSearch)
 	assert.Nil(s.T(), err)
+	assert.False(s.T(), s.sut.autoaccept)
+
+	s.sut.SetAutoAccept(true)
+	assert.True(s.T(), s.sut.autoaccept)
 }
 
 func (s *MdnsSuite) Test_Start() {

@@ -40,6 +40,8 @@ type Hub struct {
 
 	hubReader api.HubReaderInterface
 
+	autoaccept bool
+
 	// The list of known remote services
 	remoteServices map[string]*api.ServiceDetails
 

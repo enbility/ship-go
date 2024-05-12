@@ -26,8 +26,8 @@ type ServiceDetails struct {
 	// The EEBUS device type of the device model
 	deviceType string
 
-	// Flags if the service auto auto accepts other services
-	registerAutoAccept bool
+	// Flags if the service auto accepts other services
+	autoAccept bool
 
 	// Flags if the service is trusted and should be reconnected to
 	// Should be enabled after the connection process resulted
@@ -100,18 +100,18 @@ func (s *ServiceDetails) SetDeviceType(deviceType string) {
 	s.deviceType = deviceType
 }
 
-func (s *ServiceDetails) RegisterAutoAccept() bool {
+func (s *ServiceDetails) AutoAccept() bool {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
-	return s.registerAutoAccept
+	return s.autoAccept
 }
 
-func (s *ServiceDetails) SetRegisterAutoAccept(value bool) {
+func (s *ServiceDetails) SetAutoAccept(value bool) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
-	s.registerAutoAccept = value
+	s.autoAccept = value
 }
 
 func (s *ServiceDetails) Trusted() bool {

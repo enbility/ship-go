@@ -87,39 +87,6 @@ func (_c *HubInterface_DisconnectSKI_Call) RunAndReturn(run func(string, string)
 	return _c
 }
 
-// InitiateOrApprovePairingWithSKI provides a mock function with given fields: ski
-func (_m *HubInterface) InitiateOrApprovePairingWithSKI(ski string) {
-	_m.Called(ski)
-}
-
-// HubInterface_InitiateOrApprovePairingWithSKI_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InitiateOrApprovePairingWithSKI'
-type HubInterface_InitiateOrApprovePairingWithSKI_Call struct {
-	*mock.Call
-}
-
-// InitiateOrApprovePairingWithSKI is a helper method to define mock.On call
-//   - ski string
-func (_e *HubInterface_Expecter) InitiateOrApprovePairingWithSKI(ski interface{}) *HubInterface_InitiateOrApprovePairingWithSKI_Call {
-	return &HubInterface_InitiateOrApprovePairingWithSKI_Call{Call: _e.mock.On("InitiateOrApprovePairingWithSKI", ski)}
-}
-
-func (_c *HubInterface_InitiateOrApprovePairingWithSKI_Call) Run(run func(ski string)) *HubInterface_InitiateOrApprovePairingWithSKI_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string))
-	})
-	return _c
-}
-
-func (_c *HubInterface_InitiateOrApprovePairingWithSKI_Call) Return() *HubInterface_InitiateOrApprovePairingWithSKI_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *HubInterface_InitiateOrApprovePairingWithSKI_Call) RunAndReturn(run func(string)) *HubInterface_InitiateOrApprovePairingWithSKI_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // PairingDetailForSki provides a mock function with given fields: ski
 func (_m *HubInterface) PairingDetailForSki(ski string) *api.ConnectionStateDetail {
 	ret := _m.Called(ski)
@@ -245,6 +212,39 @@ func (_c *HubInterface_ServiceForSKI_Call) Return(_a0 *api.ServiceDetails) *HubI
 }
 
 func (_c *HubInterface_ServiceForSKI_Call) RunAndReturn(run func(string) *api.ServiceDetails) *HubInterface_ServiceForSKI_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetAutoAccept provides a mock function with given fields: _a0
+func (_m *HubInterface) SetAutoAccept(_a0 bool) {
+	_m.Called(_a0)
+}
+
+// HubInterface_SetAutoAccept_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetAutoAccept'
+type HubInterface_SetAutoAccept_Call struct {
+	*mock.Call
+}
+
+// SetAutoAccept is a helper method to define mock.On call
+//   - _a0 bool
+func (_e *HubInterface_Expecter) SetAutoAccept(_a0 interface{}) *HubInterface_SetAutoAccept_Call {
+	return &HubInterface_SetAutoAccept_Call{Call: _e.mock.On("SetAutoAccept", _a0)}
+}
+
+func (_c *HubInterface_SetAutoAccept_Call) Run(run func(_a0 bool)) *HubInterface_SetAutoAccept_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(bool))
+	})
+	return _c
+}
+
+func (_c *HubInterface_SetAutoAccept_Call) Return() *HubInterface_SetAutoAccept_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *HubInterface_SetAutoAccept_Call) RunAndReturn(run func(bool)) *HubInterface_SetAutoAccept_Call {
 	_c.Call.Return(run)
 	return _c
 }
