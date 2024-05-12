@@ -128,6 +128,16 @@ func (s *HubSuite) Test_NewConnectionsHub() {
 	hub.Shutdown()
 }
 
+func (s *HubSuite) Test_AutoAccept() {
+	s.sut.SetAutoAccept(true)
+	value := s.sut.IsAutoAcceptEnabled()
+	assert.True(s.T(), value)
+
+	s.sut.SetAutoAccept(false)
+	value = s.sut.IsAutoAcceptEnabled()
+	assert.False(s.T(), value)
+}
+
 func (s *HubSuite) Test_SetupRemoteDevice() {
 	ski := "12af9e"
 	localService := api.NewServiceDetails(ski)

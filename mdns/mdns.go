@@ -191,7 +191,7 @@ func (m *MdnsManager) Shutdown() {
 // A CEM service should always invoke this on startup
 // Any other service should only invoke this whenever it is not connected to a CEM service
 func (m *MdnsManager) AnnounceMdnsEntry() error {
-	if m.isAnnounced || m.mdnsProvider == nil {
+	if m.mdnsProvider == nil {
 		return nil
 	}
 
@@ -236,7 +236,16 @@ func (m *MdnsManager) UnannounceMdnsEntry() {
 
 func (m *MdnsManager) SetAutoAccept(accept bool) {
 	m.autoaccept = accept
-	// TODO: if changed, also change the mDNS registry
+
+	// if announcement is off, don't enforce a new announcement
+	if !m.isAnnounced {
+		return
+	}
+
+	// Update the announcement as autoaccept changed
+	if err := m.AnnounceMdnsEntry(); err != nil {
+		logging.Log().Debug("mdns: changing mdns entry failed", err)
+	}
 }
 
 func (m *MdnsManager) mdnsEntries() map[string]*api.MdnsEntry {

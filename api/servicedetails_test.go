@@ -39,8 +39,8 @@ func (s *ServiceDetailsSuite) Test_ServiceDetails() {
 	details.SetDeviceType("devicetype")
 	assert.Equal(s.T(), "devicetype", details.DeviceType())
 
-	details.SetRegisterAutoAccept(true)
-	assert.Equal(s.T(), true, details.RegisterAutoAccept())
+	details.SetAutoAccept(true)
+	assert.Equal(s.T(), true, details.AutoAccept())
 
 	details.SetTrusted(true)
 	assert.Equal(s.T(), true, details.Trusted())

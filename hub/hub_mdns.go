@@ -32,6 +32,8 @@ func (h *Hub) ReportMdnsEntries(entries map[string]*api.MdnsEntry) {
 			continue
 		}
 
+		service.SetAutoAccept(entry.Register)
+
 		// patch the addresses list if an IPv4 address was provided
 		if service.IPv4() != "" {
 			if ip := net.ParseIP(service.IPv4()); ip != nil {
