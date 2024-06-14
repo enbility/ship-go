@@ -59,14 +59,14 @@ func createInvalidCertificate(organizationalUnit, organization, country, commonN
 		return tls.Certificate{}, err
 	}
 
-	// Create the EEBUS service SKI using the private key
-	asn1, err := x509.MarshalECPrivateKey(privateKey)
+	// Create the EEBUS service SKI using the public key
+	publicKey, err := privateKey.PublicKey.ECDH()
 	if err != nil {
 		return tls.Certificate{}, err
 	}
 	// SHIP 12.2: Required to be created according to RFC 3280 4.2.1.2
 	// #nosec G401
-	ski := sha1.Sum(asn1)
+	ski := sha1.Sum(publicKey.Bytes())
 
 	subject := pkix.Name{
 		OrganizationalUnit: []string{organizationalUnit},
