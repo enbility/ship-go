@@ -8,6 +8,7 @@ import (
 
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/logging"
+	"github.com/enbility/ship-go/util"
 )
 
 // used for randomizing the connection initiation delay
@@ -122,6 +123,8 @@ func (h *Hub) Shutdown() {
 func (h *Hub) ServiceForSKI(ski string) *api.ServiceDetails {
 	h.muxReg.Lock()
 	defer h.muxReg.Unlock()
+
+	ski = util.NormalizeSKI(ski)
 
 	service, ok := h.remoteServices[ski]
 	if !ok {

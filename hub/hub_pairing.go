@@ -3,6 +3,7 @@ package hub
 import (
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/model"
+	"github.com/enbility/ship-go/util"
 )
 
 // Provide the current pairing state for a SKI
@@ -90,6 +91,8 @@ func (h *Hub) checkHasStarted() bool {
 // Should be used for services which completed the pairing process and
 // which were stored as having the process completed
 func (h *Hub) RegisterRemoteSKI(ski string) {
+	ski = util.NormalizeSKI(ski)
+
 	// if the hub has not started, simply add it
 	if !h.checkHasStarted() {
 		service := h.ServiceForSKI(ski)
