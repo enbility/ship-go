@@ -114,6 +114,7 @@ func (h *Hub) RegisterRemoteSKI(ski string) {
 
 	// locally initiated
 	service := h.ServiceForSKI(ski)
+	service.SetTrusted(true)
 	service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
 
 	h.hubReader.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
