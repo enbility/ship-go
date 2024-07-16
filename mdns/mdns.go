@@ -397,6 +397,10 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 }
 
 func (m *MdnsManager) RequestMdnsEntries() {
+	if m.report == nil {
+		return
+	}
+
 	entries := m.copyMdnsEntries()
 	go m.report.ReportMdnsEntries(entries)
 }
