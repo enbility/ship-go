@@ -160,5 +160,9 @@ func (h *Hub) checkAutoReannounce() {
 
 	if countPairedServices > countConnections {
 		_ = h.mdns.AnnounceMdnsEntry()
+
+		// also check currently known mDNS entries to see if they
+		// already contain the not connected remote service
+		h.mdns.RequestMdnsEntries()
 	}
 }
