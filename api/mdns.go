@@ -20,7 +20,7 @@ type MdnsEntry struct {
 
 // implemented by Hub, used by mdns
 type MdnsReportInterface interface {
-	ReportMdnsEntries(entries map[string]*MdnsEntry)
+	ReportMdnsEntries(entries map[string]*MdnsEntry, newEntries bool)
 }
 
 // implemented by mdns, used by Hub

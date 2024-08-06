@@ -411,7 +411,7 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 	}
 
 	entries := m.copyMdnsEntries()
-	go m.report.ReportMdnsEntries(entries)
+	go m.report.ReportMdnsEntries(entries, true)
 }
 
 func (m *MdnsManager) RequestMdnsEntries() {
@@ -420,5 +420,5 @@ func (m *MdnsManager) RequestMdnsEntries() {
 	}
 
 	entries := m.copyMdnsEntries()
-	go m.report.ReportMdnsEntries(entries)
+	go m.report.ReportMdnsEntries(entries, false)
 }
