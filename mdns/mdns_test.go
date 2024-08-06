@@ -31,7 +31,7 @@ func (s *MdnsSuite) BeforeTest(suiteName, testName string) {
 	s.mdnsService = mocks.NewMdnsInterface(s.T())
 
 	s.mdnsSearch = mocks.NewMdnsReportInterface(s.T())
-	s.mdnsSearch.On("ReportMdnsEntries", mock.Anything).Maybe().Return()
+	s.mdnsSearch.On("ReportMdnsEntries", mock.Anything, mock.Anything).Maybe().Return()
 
 	s.mdnsProvider = mocks.NewMdnsProviderInterface(s.T())
 	s.mdnsProvider.On("ResolveEntries", mock.Anything, mock.Anything).Maybe().Return()
@@ -164,7 +164,7 @@ func (s *MdnsSuite) Test_MdnsEntries() {
 	err := s.sut.Start(s.mdnsSearch)
 	assert.Nil(s.T(), err)
 
-	s.mdnsSearch.EXPECT().ReportMdnsEntries(mock.Anything).Maybe()
+	s.mdnsSearch.EXPECT().ReportMdnsEntries(mock.Anything, mock.Anything).Maybe()
 
 	s.sut.RequestMdnsEntries()
 
@@ -175,7 +175,7 @@ func (s *MdnsSuite) Test_ProcessMdnsEntry() {
 	err := s.sut.Start(s.mdnsSearch)
 	assert.Nil(s.T(), err)
 
-	s.mdnsSearch.EXPECT().ReportMdnsEntries(mock.Anything).Maybe()
+	s.mdnsSearch.EXPECT().ReportMdnsEntries(mock.Anything, mock.Anything).Maybe()
 
 	elements := make(map[string]string, 1)
 
