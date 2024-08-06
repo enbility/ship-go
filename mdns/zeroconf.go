@@ -58,12 +58,18 @@ func (z *ZeroconfProvider) Announce(serviceName string, port int, txt []string) 
 		return err
 	}
 
+	z.mux.Lock()
+	defer z.mux.Unlock()
+
 	z.zc = mDNSServer
 
 	return nil
 }
 
 func (z *ZeroconfProvider) Unannounce() {
+	z.mux.Lock()
+	defer z.mux.Unlock()
+
 	if z.zc == nil {
 		return
 	}
