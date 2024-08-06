@@ -102,8 +102,11 @@ func (h *Hub) RegisterRemoteSKI(ski string) {
 		return
 	}
 
-	// if the hub has started, trigger a search and conneciton attempt
+	// if the hub has started, trigger a search and connection attempt
 	conn := h.connectionForSKI(ski)
+
+	service := h.ServiceForSKI(ski)
+	service.SetTrusted(true)
 
 	// remotely initiated?
 	if conn != nil {
@@ -113,8 +116,6 @@ func (h *Hub) RegisterRemoteSKI(ski string) {
 	}
 
 	// locally initiated
-	service := h.ServiceForSKI(ski)
-	service.SetTrusted(true)
 	service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
 
 	h.hubReader.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
