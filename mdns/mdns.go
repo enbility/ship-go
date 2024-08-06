@@ -67,7 +67,8 @@ type MdnsManager struct {
 
 	providerSelection MdnsProviderSelection
 
-	mux sync.Mutex
+	mux,
+	muxAnnounced sync.Mutex
 }
 
 func NewMDNS(
@@ -217,28 +218,45 @@ func (m *MdnsManager) AnnounceMdnsEntry() error {
 		return err
 	}
 
-	m.isAnnounced = true
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
+	m.setIsServiceAnnounce(true)
 
 	return nil
 }
 
 // Stop the mDNS announcement on the network
 func (m *MdnsManager) UnannounceMdnsEntry() {
-	if !m.isAnnounced || m.mdnsProvider == nil {
+	if !m.isServiceAnnounced() || m.mdnsProvider == nil {
 		return
 	}
 
 	m.mdnsProvider.Unannounce()
 	logging.Log().Debug("mdns: stop announcement")
 
-	m.isAnnounced = false
+	m.setIsServiceAnnounce(false)
+}
+
+func (m *MdnsManager) isServiceAnnounced() bool {
+	m.muxAnnounced.Lock()
+	defer m.muxAnnounced.Unlock()
+
+	return m.isAnnounced
+}
+
+func (m *MdnsManager) setIsServiceAnnounce(value bool) {
+	m.muxAnnounced.Lock()
+	defer m.muxAnnounced.Unlock()
+
+	m.isAnnounced = value
 }
 
 func (m *MdnsManager) SetAutoAccept(accept bool) {
 	m.autoaccept = accept
 
 	// if announcement is off, don't enforce a new announcement
-	if !m.isAnnounced {
+	if !m.isServiceAnnounced() {
 		return
 	}
 
