@@ -632,7 +632,7 @@ func (s *HubSuite) Test_ReportMdnsEntries() {
 	entries := make(map[string]*api.MdnsEntry)
 
 	s.hubReader.EXPECT().VisibleRemoteServicesUpdated(gomock.Any()).AnyTimes()
-	s.sut.ReportMdnsEntries(entries)
+	s.sut.ReportMdnsEntries(entries, true)
 
 	entries[testski1] = &api.MdnsEntry{
 		Ski: testski1,
@@ -648,7 +648,7 @@ func (s *HubSuite) Test_ReportMdnsEntries() {
 	service2.SetTrusted(true)
 	service2.SetIPv4("127.0.0.1")
 
-	s.sut.ReportMdnsEntries(entries)
+	s.sut.ReportMdnsEntries(entries, true)
 }
 
 func createInvalidCertificate(organizationalUnit, organization, country, commonName string) (tls.Certificate, error) {
