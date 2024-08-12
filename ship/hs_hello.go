@@ -103,7 +103,7 @@ func (c *ShipConnection) handshakeHello_PendingInit() {
 
 	c.setState(model.SmeHelloStatePendingListen, nil)
 
-	if !c.infoProvider.AllowWaitingForTrust(c.remoteShipID) {
+	if !c.infoProvider.AllowWaitingForTrust(c.remoteSKI) {
 		c.setAndHandleState(model.SmeHelloStateAbort)
 	}
 }

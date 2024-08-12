@@ -11,10 +11,7 @@ import (
 var _ api.MdnsReportInterface = (*Hub)(nil)
 
 // Process reported mDNS services
-func (h *Hub) ReportMdnsEntries(entries map[string]*api.MdnsEntry) {
-	h.muxMdns.Lock()
-	defer h.muxMdns.Unlock()
-
+func (h *Hub) ReportMdnsEntries(entries map[string]*api.MdnsEntry, newEntries bool) {
 	var mdnsEntries []*api.MdnsEntry
 
 	for ski, entry := range entries {
@@ -52,7 +49,11 @@ func (h *Hub) ReportMdnsEntries(entries map[string]*api.MdnsEntry) {
 		return a < b
 	})
 
-	h.knownMdnsEntries = mdnsEntries
+	if newEntries {
+		h.muxMdns.Lock()
+		h.knownMdnsEntries = mdnsEntries
+		h.muxMdns.Unlock()
+	}
 
 	var remoteServices []api.RemoteService
 
