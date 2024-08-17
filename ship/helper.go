@@ -14,6 +14,7 @@ func JsonFromEEBUSJson(json []byte) []byte {
 	result = bytes.ReplaceAll(result, []byte("},{"), []byte(","))
 	result = bytes.ReplaceAll(result, []byte("}]"), []byte("}"))
 	result = bytes.ReplaceAll(result, []byte("[]"), []byte("{}"))
+	// The PMCP device mistakenly adds an `0x00` byte at the end of many messages.
 	result = bytes.Trim(result, "\x00")
 	return result
 }
