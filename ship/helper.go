@@ -14,7 +14,7 @@ func JsonFromEEBUSJson(json []byte) []byte {
 	result = bytes.ReplaceAll(result, []byte("},{"), []byte(","))
 	result = bytes.ReplaceAll(result, []byte("}]"), []byte("}"))
 	result = bytes.ReplaceAll(result, []byte("[]"), []byte("{}"))
-
+	result = bytes.Trim(result, "\x00")
 	return result
 }
 
