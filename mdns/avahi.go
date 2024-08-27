@@ -24,7 +24,8 @@ type AvahiProvider struct {
 
 	shutdownChan chan struct{}
 
-	mux sync.Mutex
+	mux   sync.Mutex
+	muxEl sync.RWMutex // used for serviceElements
 }
 
 func NewAvahiProvider(ifaceIndexes []int32) *AvahiProvider {
@@ -217,8 +218,12 @@ func (a *AvahiProvider) processService(service avahi.Service, remove bool, cb ap
 }
 
 func (a *AvahiProvider) processRemovedService(service avahi.Service, cb api.MdnsResolveCB) error {
+	logging.Log().Tracef("mdns: avahi - process remove service: %v", service)
+
 	// get the elements for the service
+	a.muxEl.RLock()
 	elements := a.serviceElements[getServiceUniqueKey(service)]
+	a.muxEl.RUnlock()
 
 	cb(elements, service.Name, service.Host, nil, -1, true)
 
@@ -233,19 +238,18 @@ func (a *AvahiProvider) processAddedService(service avahi.Service, cb api.MdnsRe
 	}
 	elements := parseTxt(txt)
 
+	logging.Log().Trace("mdns: avahi - process add service:", service.Name, service.Type, service.Domain, service.Host, service.Address, service.Port, elements)
+
 	address := net.ParseIP(service.Address)
 	// if the address can not be used, ignore the entry
 	if address == nil || address.IsUnspecified() {
 		return fmt.Errorf("service provides unusable address: %s", service.Name)
 	}
 
-	// Ignore IPv6 addresses for now
-	if address.To4() == nil {
-		return fmt.Errorf("no IPv4 addresses available %s", service.Name)
-	}
-
 	// add the elements to the map
+	a.muxEl.Lock()
 	a.serviceElements[getServiceUniqueKey(service)] = elements
+	a.muxEl.Unlock()
 
 	cb(elements, service.Name, service.Host, []net.IP{address}, int(service.Port), false)
 
