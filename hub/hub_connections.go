@@ -356,7 +356,13 @@ func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.Md
 	// try connecting via the provided IP addresses
 	for _, address := range entry.Addresses {
 		logging.Log().Debug("trying to connect to", remoteService.SKI(), "at", address)
-		if err = h.connectFoundService(remoteService, address.String(), strconv.Itoa(entry.Port), entry.Path); err != nil {
+		// IPv4
+		addressValue := address.String()
+		if address.To4() == nil {
+			// IPv6
+			addressValue = "[" + address.String() + "]"
+		}
+		if err = h.connectFoundService(remoteService, addressValue, strconv.Itoa(entry.Port), entry.Path); err != nil {
 			logging.Log().Debug("connection to", remoteService.SKI(), "failed: ", err)
 		} else {
 			return true

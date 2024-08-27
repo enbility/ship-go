@@ -71,7 +71,7 @@ func (a *AvahiSuite) Test_Avahi() {
 
 	testService.Address = "2001:db8::68"
 	err = a.sut.processAddedService(testService, processMdnsEntry)
-	assert.NotNil(a.T(), err)
+	assert.Nil(a.T(), err)
 
 	testService.Address = "127.0.0.1"
 	err = a.sut.processAddedService(testService, processMdnsEntry)

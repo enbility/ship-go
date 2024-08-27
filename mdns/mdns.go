@@ -315,6 +315,7 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 	mapItems := []string{"txtvers", "id", "path", "ski", "register"}
 	for _, item := range mapItems {
 		if _, ok := elements[item]; !ok {
+			logging.Log().Debug("mdns: txt - missing mandatory element", item)
 			return
 		}
 	}
@@ -322,6 +323,7 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 	txtvers := elements["txtvers"]
 	// value of mandatory txtvers has to be 1 or the response be ignored: SHIP 7.3.2
 	if txtvers != "1" {
+		logging.Log().Debug("mdns: txt - unknown txtvers", txtvers)
 		return
 	}
 
@@ -331,12 +333,14 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 
 	// ignore own service
 	if ski == m.ski {
+		logging.Log().Debug("mdns: ignore own service", ski)
 		return
 	}
 
 	register := elements["register"]
 	// register has to be a boolean
 	if register != "true" && register != "false" {
+		logging.Log().Debug("mdns: txt - register value is not a text boolean", register)
 		return
 	}
 
@@ -361,6 +365,8 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		// remove
 		// there will be a remove for each address with avahi, but we'll delete it right away
 		m.removeMdnsEntry(ski)
+
+		logging.Log().Debug("mdns: remove - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
 	} else if exists {
 		// avahi sends an item for each network address, merge them
 
@@ -384,6 +390,8 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 
 		if updated {
 			m.setMdnsEntry(ski, entry)
+
+			logging.Log().Debug("mdns: update - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
 		}
 	} else if !exists && !remove {
 		updated = true
@@ -403,7 +411,7 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		}
 		m.setMdnsEntry(ski, newEntry)
 
-		logging.Log().Debug("ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
+		logging.Log().Debug("mdns: new - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
 	}
 
 	if m.report == nil || !updated {
