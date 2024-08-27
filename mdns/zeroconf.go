@@ -115,8 +115,7 @@ func (z *ZeroconfProvider) ResolveEntries(callback api.MdnsResolveCB) {
 			elements := parseTxt(service.Text)
 
 			addresses := service.AddrIPv4
-			// Only use IPv4 for now
-			// addresses = append(addresses, service.AddrIPv6...)
+			addresses = append(addresses, service.AddrIPv6...)
 			callback(elements, service.Instance, service.HostName, addresses, service.Port, false)
 		}
 	}
