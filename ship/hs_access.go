@@ -70,7 +70,6 @@ func (c *ShipConnection) handshakeAccessMethods_Request(message []byte) {
 
 			c.infoProvider.ReportServiceShipID(c.remoteSKI, c.remoteShipID)
 		}
-
 	} else {
 		c.endHandshakeWithError(fmt.Errorf("access methods: invalid response: %s", dataString))
 		return

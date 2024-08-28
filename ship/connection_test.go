@@ -290,5 +290,4 @@ func (s *ConnectionSuite) Test_HandshakeTimer() {
 	assert.Equal(s.T(), model.CmiStateServerWait, s.sut.getState())
 	assert.Equal(s.T(), timeoutTimerTypeWaitForReady, s.sut.getHandshakeTimerType())
 	assert.Equal(s.T(), true, s.sut.getHandshakeTimerRunning())
-
 }
