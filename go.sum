@@ -1,13 +1,13 @@
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/enbility/go-avahi v0.0.0-20240829083637-9ae2ef5f5ed2 h1:voP4zFVNvVWxlV22T1EUAdZ0VlqVV1pkFLhoTTPgwbA=
+github.com/enbility/go-avahi v0.0.0-20240829083637-9ae2ef5f5ed2/go.mod h1:KJXUEgg/b4XZzS+OFfqnykHREsinuNSL/IzJ+nU43P8=
 github.com/enbility/zeroconf/v2 v2.0.0-20240827101515-f3956627c450 h1:39tnpfiV5OVfYb9sOqYmoivBzTHyNLWSYIxd9Qng1eg=
 github.com/enbility/zeroconf/v2 v2.0.0-20240827101515-f3956627c450/go.mod h1:1sUbJ+VE7yLNyRzGoCMjoDWtdZ+bW4aYBKx2+Rw+9hs=
 github.com/godbus/dbus/v5 v5.1.0 h1:4KLkAxT3aOY8Li4FRJe/KvhoNFFxo0m6fNuFUO8QJUk=
 github.com/godbus/dbus/v5 v5.1.0/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
-github.com/holoplot/go-avahi v0.0.0-20240210093433-b8dc0fc11e7e h1:XOKmPp6CgtFByseoBaL5Ew9b6NWSie+nr6pMFeO0Tvc=
-github.com/holoplot/go-avahi v0.0.0-20240210093433-b8dc0fc11e7e/go.mod h1:WRfsMEGa+MvsfqqKmS7Ye1jrnfRW6kfF/CTP9UMZj0Q=
 github.com/miekg/dns v1.1.62 h1:cN8OuEF1/x5Rq6Np+h1epln8OiyPWV+lROx9LxcGgIQ=
 github.com/miekg/dns v1.1.62/go.mod h1:mvDlcItzm+br7MToIKqkglaGhlFMHJ9DTNNWONWXbNQ=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

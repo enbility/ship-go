@@ -5,10 +5,10 @@ import (
 	"net"
 	"sync"
 
+	"github.com/enbility/go-avahi"
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/logging"
 	"github.com/godbus/dbus/v5"
-	"github.com/holoplot/go-avahi"
 )
 
 type AvahiProvider struct {
