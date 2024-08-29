@@ -164,15 +164,23 @@ func (c *ShipConnection) CloseConnection(safe bool, code int, reason string) {
 			// SHIP 13.4.7: Connection Termination Announce
 			closeMessage := model.ConnectionClose{
 				ConnectionClose: model.ConnectionCloseType{
-					Phase:  model.ConnectionClosePhaseTypeAnnounce,
-					Reason: util.Ptr(model.ConnectionCloseReasonType(reason)),
+					Phase:   model.ConnectionClosePhaseTypeAnnounce,
+					MaxTime: util.Ptr(uint(500)),
+					Reason:  util.Ptr(model.ConnectionCloseReasonType(reason)),
 				},
 			}
 
 			_ = c.sendShipModel(model.MsgTypeEnd, closeMessage)
 
 			if state != model.SmeStateError {
-				c.infoProvider.HandleConnectionClosed(c, handshakeEnd)
+				go func() {
+					// wait a bit to let it send
+					<-time.After(500 * time.Millisecond)
+
+					//
+					c.dataWriter.CloseDataConnection(4001, "close")
+					c.infoProvider.HandleConnectionClosed(c, handshakeEnd)
+				}()
 				return
 			}
 		}
