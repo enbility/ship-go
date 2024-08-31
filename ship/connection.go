@@ -172,17 +172,15 @@ func (c *ShipConnection) CloseConnection(safe bool, code int, reason string) {
 
 			_ = c.sendShipModel(model.MsgTypeEnd, closeMessage)
 
-			if state != model.SmeStateError {
-				go func() {
-					// wait a bit to let it send
-					<-time.After(500 * time.Millisecond)
+			go func() {
+				// wait a bit to let it send
+				<-time.After(500 * time.Millisecond)
 
-					//
-					c.dataWriter.CloseDataConnection(4001, "close")
-					c.infoProvider.HandleConnectionClosed(c, handshakeEnd)
-				}()
-				return
-			}
+				//
+				c.dataWriter.CloseDataConnection(4001, "close")
+				c.infoProvider.HandleConnectionClosed(c, handshakeEnd)
+			}()
+			return
 		}
 
 		closeCode := 4001
