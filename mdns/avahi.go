@@ -103,7 +103,8 @@ func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) err
 	}
 
 	for _, iface := range a.ifaceIndexes {
-		err = entryGroup.AddService(iface, avahi.ProtoUnspec, 0, serviceName, shipZeroConfServiceType, shipZeroConfDomain, "", uint16(port), btxt)
+		// conversion is safe, as port values are always positive
+		err = entryGroup.AddService(iface, avahi.ProtoUnspec, 0, serviceName, shipZeroConfServiceType, shipZeroConfDomain, "", uint16(port), btxt) // #nosec G115
 		if err != nil {
 			return err
 		}
