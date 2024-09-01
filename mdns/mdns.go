@@ -106,7 +106,8 @@ func (m *MdnsManager) interfaces() ([]net.Interface, []int32, error) {
 				return nil, nil, err
 			}
 			ifaces[i] = *iface
-			ifaceIndexes[i] = int32(iface.Index)
+			// conversion is safe, as the index is always positive and not higher than int32
+			ifaceIndexes[i] = int32(iface.Index) // #nosec G115
 		}
 	}
 
