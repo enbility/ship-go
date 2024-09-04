@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -352,6 +354,17 @@ func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.Md
 			return true
 		}
 	}
+
+	// try IPv4 addresses before IPv6 addresses
+	slices.SortFunc(entry.Addresses, func(a, b net.IP) int {
+		if a.To4() != nil && b.To4() == nil {
+			return -1
+		}
+		if a.To4() == nil && b.To4() != nil {
+			return 1
+		}
+		return 0
+	})
 
 	// try connecting via the provided IP addresses
 	for _, address := range entry.Addresses {

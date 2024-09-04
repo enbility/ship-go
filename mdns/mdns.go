@@ -345,6 +345,16 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		return
 	}
 
+	// remove IPv6 local link addresses
+	var newAddresses []net.IP
+	for _, address := range addresses {
+		if address.To4() == nil && address.IsLinkLocalUnicast() {
+			continue
+		}
+		newAddresses = append(newAddresses, address)
+	}
+	addresses = newAddresses
+
 	var deviceType, model, brand string
 
 	if _, ok := elements["brand"]; ok {
