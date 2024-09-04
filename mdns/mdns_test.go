@@ -218,7 +218,7 @@ func (s *MdnsSuite) Test_ProcessMdnsEntry() {
 	s.sut.processMdnsEntry(elements, name, host, ips, port, false)
 	assert.Equal(s.T(), 1, len(s.sut.mdnsEntries()))
 
-	ips = []net.IP{[]byte("127.0.0.1")}
+	ips = []net.IP{[]byte("127.0.0.1"), []byte{0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 	s.sut.processMdnsEntry(elements, name, host, ips, port, false)
 	assert.Equal(s.T(), 1, len(s.sut.mdnsEntries()))
 
