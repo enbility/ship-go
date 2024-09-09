@@ -3,7 +3,7 @@ module github.com/enbility/ship-go
 go 1.21.1
 
 require (
-	github.com/enbility/go-avahi v0.0.0-20240909132205-2f1ebf4f5896
+	github.com/enbility/go-avahi v0.0.0-20240909195612-d5de6b280d7a
 	github.com/enbility/zeroconf/v2 v2.0.0-20240827101515-f3956627c450
 	github.com/gorilla/websocket v1.5.3
 	github.com/stretchr/testify v1.9.0

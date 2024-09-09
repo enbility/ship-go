@@ -38,9 +38,8 @@ type MdnsResolveCB func(elements map[string]string, name, host string, addresses
 
 // implemented by mdns providers, used by mdns
 type MdnsProviderInterface interface {
-	Start(autoReconnect bool) bool
+	Start(autoReconnect bool, cb MdnsResolveCB) bool
 	Shutdown()
 	Announce(serviceName string, port int, txt []string) error
 	Unannounce()
-	ResolveEntries(cb MdnsResolveCB)
 }

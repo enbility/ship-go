@@ -68,39 +68,6 @@ func (_c *MdnsProviderInterface_Announce_Call) RunAndReturn(run func(string, int
 	return _c
 }
 
-// ResolveEntries provides a mock function with given fields: cb
-func (_m *MdnsProviderInterface) ResolveEntries(cb api.MdnsResolveCB) {
-	_m.Called(cb)
-}
-
-// MdnsProviderInterface_ResolveEntries_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ResolveEntries'
-type MdnsProviderInterface_ResolveEntries_Call struct {
-	*mock.Call
-}
-
-// ResolveEntries is a helper method to define mock.On call
-//   - cb api.MdnsResolveCB
-func (_e *MdnsProviderInterface_Expecter) ResolveEntries(cb interface{}) *MdnsProviderInterface_ResolveEntries_Call {
-	return &MdnsProviderInterface_ResolveEntries_Call{Call: _e.mock.On("ResolveEntries", cb)}
-}
-
-func (_c *MdnsProviderInterface_ResolveEntries_Call) Run(run func(cb api.MdnsResolveCB)) *MdnsProviderInterface_ResolveEntries_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(api.MdnsResolveCB))
-	})
-	return _c
-}
-
-func (_c *MdnsProviderInterface_ResolveEntries_Call) Return() *MdnsProviderInterface_ResolveEntries_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MdnsProviderInterface_ResolveEntries_Call) RunAndReturn(run func(api.MdnsResolveCB)) *MdnsProviderInterface_ResolveEntries_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // Shutdown provides a mock function with given fields:
 func (_m *MdnsProviderInterface) Shutdown() {
 	_m.Called()
@@ -133,17 +100,17 @@ func (_c *MdnsProviderInterface_Shutdown_Call) RunAndReturn(run func()) *MdnsPro
 	return _c
 }
 
-// Start provides a mock function with given fields: autoReconnect
-func (_m *MdnsProviderInterface) Start(autoReconnect bool) bool {
-	ret := _m.Called(autoReconnect)
+// Start provides a mock function with given fields: autoReconnect, cb
+func (_m *MdnsProviderInterface) Start(autoReconnect bool, cb api.MdnsResolveCB) bool {
+	ret := _m.Called(autoReconnect, cb)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Start")
 	}
 
 	var r0 bool
-	if rf, ok := ret.Get(0).(func(bool) bool); ok {
-		r0 = rf(autoReconnect)
+	if rf, ok := ret.Get(0).(func(bool, api.MdnsResolveCB) bool); ok {
+		r0 = rf(autoReconnect, cb)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
@@ -158,13 +125,14 @@ type MdnsProviderInterface_Start_Call struct {
 
 // Start is a helper method to define mock.On call
 //   - autoReconnect bool
-func (_e *MdnsProviderInterface_Expecter) Start(autoReconnect interface{}) *MdnsProviderInterface_Start_Call {
-	return &MdnsProviderInterface_Start_Call{Call: _e.mock.On("Start", autoReconnect)}
+//   - cb api.MdnsResolveCB
+func (_e *MdnsProviderInterface_Expecter) Start(autoReconnect interface{}, cb interface{}) *MdnsProviderInterface_Start_Call {
+	return &MdnsProviderInterface_Start_Call{Call: _e.mock.On("Start", autoReconnect, cb)}
 }
 
-func (_c *MdnsProviderInterface_Start_Call) Run(run func(autoReconnect bool)) *MdnsProviderInterface_Start_Call {
+func (_c *MdnsProviderInterface_Start_Call) Run(run func(autoReconnect bool, cb api.MdnsResolveCB)) *MdnsProviderInterface_Start_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(bool))
+		run(args[0].(bool), args[1].(api.MdnsResolveCB))
 	})
 	return _c
 }
@@ -174,7 +142,7 @@ func (_c *MdnsProviderInterface_Start_Call) Return(_a0 bool) *MdnsProviderInterf
 	return _c
 }
 
-func (_c *MdnsProviderInterface_Start_Call) RunAndReturn(run func(bool) bool) *MdnsProviderInterface_Start_Call {
+func (_c *MdnsProviderInterface_Start_Call) RunAndReturn(run func(bool, api.MdnsResolveCB) bool) *MdnsProviderInterface_Start_Call {
 	_c.Call.Return(run)
 	return _c
 }
