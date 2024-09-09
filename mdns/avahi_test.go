@@ -3,6 +3,7 @@ package mdns
 import (
 	"net"
 	"testing"
+	"time"
 
 	"github.com/enbility/go-avahi"
 	"github.com/stretchr/testify/assert"
@@ -34,7 +35,7 @@ func (a *AvahiSuite) Test_Avahi() {
 	// As we do not have an Avahi server running for automated testing
 	// these tests are very limited
 
-	available := a.sut.CheckAvailability()
+	available := a.sut.Start(false)
 
 	if available {
 		err := a.sut.Announce("dummytest", 4289, []string{"more=more"})
@@ -96,4 +97,58 @@ func (a *AvahiSuite) Test_Avahi() {
 	a.sut.ifaceIndexes = []int32{avahi.InterfaceUnspec}
 	err = a.sut.processService(testService, false, processMdnsEntry)
 	assert.NotNil(a.T(), err)
+}
+
+func (a *AvahiSuite) Test_Avahi_ResolveEntries() {
+	// As we do not have an Avahi server running for automated testing
+	// these tests are very limited
+	available := a.sut.Start(true)
+	if !available {
+		a.T().Skip("Avahi not available")
+	}
+
+	cb := func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool) {
+		assert.NotEqual(a.T(), "", name)
+	}
+
+	go a.sut.ResolveEntries(cb)
+
+	time.Sleep(time.Second * 2)
+
+	a.sut.Shutdown()
+}
+
+func (a *AvahiSuite) Test_Avahi_Reconnect() {
+	// As we do not have an Avahi server running for automated testing
+	// these tests are very limited
+	available := a.sut.Start(true)
+
+	if !available {
+		a.T().Skip("Avahi not available")
+	}
+
+	a.sut.Start(true)
+
+	assert.True(a.T(), available)
+
+	a.sut.avServer.Shutdown()
+
+	// wait, as the cb will be invoked async
+	time.Sleep(time.Second * 2)
+
+	a.sut.mux.Lock()
+	assert.NotNil(a.T(), a.sut.avServer)
+	a.sut.mux.Unlock()
+
+	a.sut.Shutdown()
+
+	available = a.sut.Start(true)
+	assert.True(a.T(), available)
+	a.sut.mux.Lock()
+	assert.NotNil(a.T(), a.sut.avServer)
+	a.sut.mux.Unlock()
+
+	a.sut.Shutdown()
+
+	a.sut.Shutdown()
 }

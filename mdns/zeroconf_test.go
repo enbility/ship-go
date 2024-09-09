@@ -51,7 +51,7 @@ func (z *ZeroconfSuite) Test_Shutdown() {
 }
 
 func (z *ZeroconfSuite) Test_ZeroConf() {
-	boolV := z.sut.CheckAvailability()
+	boolV := z.sut.Start(false)
 	assert.Equal(z.T(), true, boolV)
 
 	var addedEntries, removedEntries []mDNSEntry

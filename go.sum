@@ -1,7 +1,7 @@
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/enbility/go-avahi v0.0.0-20240829083637-9ae2ef5f5ed2 h1:voP4zFVNvVWxlV22T1EUAdZ0VlqVV1pkFLhoTTPgwbA=
-github.com/enbility/go-avahi v0.0.0-20240829083637-9ae2ef5f5ed2/go.mod h1:KJXUEgg/b4XZzS+OFfqnykHREsinuNSL/IzJ+nU43P8=
+github.com/enbility/go-avahi v0.0.0-20240909124322-b95cc883ca51 h1:kge19QCEhINiKPsAmP83sTYpM1Iy07DBOGQRrF/UoDQ=
+github.com/enbility/go-avahi v0.0.0-20240909124322-b95cc883ca51/go.mod h1:KJXUEgg/b4XZzS+OFfqnykHREsinuNSL/IzJ+nU43P8=
 github.com/enbility/zeroconf/v2 v2.0.0-20240827101515-f3956627c450 h1:39tnpfiV5OVfYb9sOqYmoivBzTHyNLWSYIxd9Qng1eg=
 github.com/enbility/zeroconf/v2 v2.0.0-20240827101515-f3956627c450/go.mod h1:1sUbJ+VE7yLNyRzGoCMjoDWtdZ+bW4aYBKx2+Rw+9hs=
 github.com/godbus/dbus/v5 v5.1.0 h1:4KLkAxT3aOY8Li4FRJe/KvhoNFFxo0m6fNuFUO8QJUk=

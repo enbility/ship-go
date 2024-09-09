@@ -130,23 +130,22 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 	switch m.providerSelection {
 	case MdnsProviderSelectionAll:
 		// First try avahi, if not available use zerconf
-		m.mdnsProvider = NewAvahiProvider(ifaceIndexes)
-		if !m.mdnsProvider.CheckAvailability() {
-			m.mdnsProvider.Shutdown()
+		provider := NewAvahiProvider(ifaceIndexes)
+		if provider.Start(false) {
+			m.mdnsProvider = provider
+		} else {
+			provider.Shutdown()
 
 			// Avahi is not availble, use Zeroconf
 			m.mdnsProvider = NewZeroconfProvider(ifaces)
-			if !m.mdnsProvider.CheckAvailability() {
+			if !m.mdnsProvider.Start(false) {
 				return errors.New("No mDNS provider available")
 			}
 		}
 	case MdnsProviderSelectionAvahiOnly:
 		// Only use Avahi
 		m.mdnsProvider = NewAvahiProvider(ifaceIndexes)
-		if !m.mdnsProvider.CheckAvailability() {
-			m.mdnsProvider.Shutdown()
-			return errors.New("Avahi mDNS provider not available")
-		}
+		_ = m.mdnsProvider.Start(true)
 	case MdnsProviderSelectionGoZeroConfOnly:
 		// Only use Zeroconf
 		m.mdnsProvider = NewZeroconfProvider(ifaces)
@@ -334,7 +333,6 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 
 	// ignore own service
 	if ski == m.ski {
-		logging.Log().Debug("mdns: ignore own service", ski)
 		return
 	}
 

@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/enbility/go-avahi"
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/logging"
-	"github.com/godbus/dbus/v5"
 )
 
 type AvahiProvider struct {
@@ -17,7 +17,14 @@ type AvahiProvider struct {
 	avServer     *avahi.Server
 	avEntryGroup *avahi.EntryGroup
 
-	shutdownOnce sync.Once
+	autoReconnect  bool
+	manualShutdown bool
+
+	announceServiceName string
+	announcePort        int
+	announceTxt         []string
+
+	resolveCB api.MdnsResolveCB
 
 	// Used to store the service elements for each service, so that we can recall them when a service is removed
 	serviceElements map[string]map[string]string
@@ -31,64 +38,144 @@ type AvahiProvider struct {
 func NewAvahiProvider(ifaceIndexes []int32) *AvahiProvider {
 	return &AvahiProvider{
 		ifaceIndexes:    ifaceIndexes,
-		shutdownChan:    make(chan struct{}),
 		serviceElements: make(map[string]map[string]string),
 	}
 }
 
 var _ api.MdnsProviderInterface = (*AvahiProvider)(nil)
 
-func (a *AvahiProvider) CheckAvailability() bool {
+func (a *AvahiProvider) Start(autoReconnect bool) bool {
 	a.mux.Lock()
 	defer a.mux.Unlock()
 
-	dbusConn, err := dbus.SystemBus()
-	if err != nil {
-		return false
-	}
+	a.shutdownChan = make(chan struct{})
+	a.autoReconnect = autoReconnect
+	a.manualShutdown = false
 
-	a.avServer, err = avahi.ServerNew(dbusConn)
+	var err error
+	a.avServer, err = avahi.ServerNew(a.avahiCallback)
 	if err != nil {
 		return false
 	}
+	a.avServer.Start()
 
 	if _, err := a.avServer.GetAPIVersion(); err != nil {
+		a.avServer.Shutdown()
 		return false
 	}
 
 	avBrowser, err := a.avServer.ServiceBrowserNew(avahi.InterfaceUnspec, avahi.ProtoUnspec, shipZeroConfServiceType, shipZeroConfDomain, 0)
 	if err != nil {
+		a.avServer.Shutdown()
 		return false
 	}
 
 	if avBrowser != nil {
 		a.avServer.ServiceBrowserFree(avBrowser)
+
+		// autoReconnect is only called with false if the systems does not know if
+		// avahi should be used in the first place.
+		// but if it was found and therefor being used, it should automatically reconnect once disconnected
+		if !autoReconnect {
+			a.autoReconnect = true
+		}
+
 		return true
 	}
 
+	a.avServer.Shutdown()
 	return false
+}
+
+func (a *AvahiProvider) avahiCallback(event avahi.Event) {
+	logging.Log().Debug("mdns: avahi - disconnected")
+
+	a.mux.Lock()
+	// if there is a manual shutdown, we do not want to reconnect
+	if a.manualShutdown || !a.autoReconnect || event != avahi.Disconnected {
+		a.mux.Unlock()
+		return
+	}
+
+	// the server was shutdown, set it to nil so we don't try to call free functions
+	// on shutting down a currently running resolve
+	a.avServer = nil
+	cb := a.resolveCB
+	serviceName := a.announceServiceName
+	port := a.announcePort
+	txt := a.announceTxt
+	a.mux.Unlock()
+
+	if cb != nil {
+		// stop the currently running resolve
+		a.shutdownChan <- struct{}{}
+	}
+
+	// try to reconnect until successull
+	go func() {
+		for {
+			<-time.After(time.Second)
+
+			if !a.Start(true) {
+				continue
+			}
+
+			logging.Log().Debug("mdns: avahi - reconnected")
+
+			if serviceName != "" {
+				if err := a.Announce(serviceName, port, txt); err != nil {
+					logging.Log().Debug("mdns: avahi - error re-announcing service:", err)
+				}
+			}
+
+			if cb != nil {
+				// restart the resolve
+				a.ResolveEntries(cb)
+			}
+
+			return
+		}
+	}()
 }
 
 func (a *AvahiProvider) Shutdown() {
 	a.mux.Lock()
+	a.manualShutdown = true
+
+	if a.avServer == nil {
+		a.mux.Unlock()
+		return
+	}
+
+	// when shutting down on purpose, do not try to reconnect
+	a.autoReconnect = false
+	cb := a.resolveCB
+	a.mux.Unlock()
+
+	if cb != nil {
+		a.shutdownChan <- struct{}{}
+	}
+	close(a.shutdownChan)
+
+	// Unannounce the service
+	a.Unannounce()
+
+	a.mux.Lock()
 	defer a.mux.Unlock()
 
-	a.shutdownOnce.Do(func() {
-		if a.avServer == nil {
-			return
-		}
-
-		close(a.shutdownChan)
-
-		a.avServer.Close()
-		a.avServer = nil
-		a.avEntryGroup = nil
-	})
+	a.avServer.Shutdown()
+	a.avServer = nil
+	a.avEntryGroup = nil
 }
 
 func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) error {
 	a.mux.Lock()
 	defer a.mux.Unlock()
+
+	// store the data for reconnection
+	a.announceServiceName = serviceName
+	a.announcePort = port
+	a.announceTxt = txt
 
 	logging.Log().Debug("mdns: using avahi")
 
@@ -124,6 +211,11 @@ func (a *AvahiProvider) Unannounce() {
 	a.mux.Lock()
 	defer a.mux.Unlock()
 
+	// clean up the reconnection data
+	a.announceServiceName = ""
+	a.announcePort = 0
+	a.announceTxt = nil
+
 	if a.avEntryGroup == nil {
 		return
 	}
@@ -156,6 +248,9 @@ func (a *AvahiProvider) ResolveEntries(callback api.MdnsResolveCB) {
 		a.mux.Unlock()
 		return
 	}
+
+	// cache the callback for reconnection
+	a.resolveCB = callback
 
 	a.mux.Unlock()
 
