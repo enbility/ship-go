@@ -126,10 +126,17 @@ func (a *AvahiSuite) Test_Avahi_Reconnect() {
 	if !available {
 		a.T().Skip("Avahi not available")
 	}
+	assert.True(a.T(), available)
 
 	a.sut.Start(true)
 
-	assert.True(a.T(), available)
+	err := a.sut.Announce("dummytest", 4289, []string{"more=more"})
+	assert.Nil(a.T(), err)
+
+	cb := func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool) {
+		assert.NotEqual(a.T(), "", name)
+	}
+	go a.sut.ResolveEntries(cb)
 
 	a.sut.avServer.Shutdown()
 

@@ -112,7 +112,7 @@ func (a *AvahiProvider) avahiCallback(event avahi.Event) {
 	}
 
 	// try to reconnect until successull
-	go func() {
+	go func(cb api.MdnsResolveCB) {
 		for {
 			<-time.After(time.Second)
 
@@ -130,12 +130,12 @@ func (a *AvahiProvider) avahiCallback(event avahi.Event) {
 
 			if cb != nil {
 				// restart the resolve
-				a.ResolveEntries(cb)
+				go a.ResolveEntries(cb)
 			}
 
 			return
 		}
-	}()
+	}(cb)
 }
 
 func (a *AvahiProvider) Shutdown() {
@@ -153,6 +153,7 @@ func (a *AvahiProvider) Shutdown() {
 	a.mux.Unlock()
 
 	if cb != nil {
+		// stop the currently running resolve
 		a.shutdownChan <- struct{}{}
 	}
 	close(a.shutdownChan)
