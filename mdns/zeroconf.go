@@ -18,8 +18,6 @@ type ZeroconfProvider struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	shutdownOnce sync.Once
-
 	mux sync.Mutex
 }
 
@@ -31,21 +29,19 @@ func NewZeroconfProvider(ifaces []net.Interface) *ZeroconfProvider {
 
 var _ api.MdnsProviderInterface = (*ZeroconfProvider)(nil)
 
-func (z *ZeroconfProvider) CheckAvailability() bool {
+func (z *ZeroconfProvider) Start(autoReconnect bool) bool {
 	return true
 }
 
 func (z *ZeroconfProvider) Shutdown() {
-	z.shutdownOnce.Do(func() {
-		z.Unannounce()
+	z.Unannounce()
 
-		z.mux.Lock()
-		defer z.mux.Unlock()
+	z.mux.Lock()
+	defer z.mux.Unlock()
 
-		if z.cancel != nil {
-			z.cancel()
-		}
-	})
+	if z.cancel != nil {
+		z.cancel()
+	}
 }
 
 func (z *ZeroconfProvider) Announce(serviceName string, port int, txt []string) error {

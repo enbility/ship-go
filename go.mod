@@ -3,9 +3,8 @@ module github.com/enbility/ship-go
 go 1.21.1
 
 require (
-	github.com/enbility/go-avahi v0.0.0-20240829083637-9ae2ef5f5ed2
+	github.com/enbility/go-avahi v0.0.0-20240909124322-b95cc883ca51
 	github.com/enbility/zeroconf/v2 v2.0.0-20240827101515-f3956627c450
-	github.com/godbus/dbus/v5 v5.1.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/stretchr/testify v1.9.0
 	gitlab.com/c0b/go-ordered-json v0.0.0-20201030195603-febf46534d5a
@@ -14,6 +13,7 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/miekg/dns v1.1.62 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
