@@ -18,8 +18,6 @@ type ZeroconfProvider struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	shutdownOnce sync.Once
-
 	mux sync.Mutex
 }
 
@@ -31,21 +29,21 @@ func NewZeroconfProvider(ifaces []net.Interface) *ZeroconfProvider {
 
 var _ api.MdnsProviderInterface = (*ZeroconfProvider)(nil)
 
-func (z *ZeroconfProvider) CheckAvailability() bool {
+func (z *ZeroconfProvider) Start(autoReconnect bool, cb api.MdnsResolveCB) bool {
+	go z.chanListener(cb)
+
 	return true
 }
 
 func (z *ZeroconfProvider) Shutdown() {
-	z.shutdownOnce.Do(func() {
-		z.Unannounce()
+	z.Unannounce()
 
-		z.mux.Lock()
-		defer z.mux.Unlock()
+	z.mux.Lock()
+	defer z.mux.Unlock()
 
-		if z.cancel != nil {
-			z.cancel()
-		}
-	})
+	if z.cancel != nil {
+		z.cancel()
+	}
 }
 
 func (z *ZeroconfProvider) Announce(serviceName string, port int, txt []string) error {
@@ -78,7 +76,7 @@ func (z *ZeroconfProvider) Unannounce() {
 	z.zc = nil
 }
 
-func (z *ZeroconfProvider) ResolveEntries(callback api.MdnsResolveCB) {
+func (z *ZeroconfProvider) chanListener(cb api.MdnsResolveCB) {
 	zcEntries := make(chan *zeroconf.ServiceEntry)
 	zcRemoved := make(chan *zeroconf.ServiceEntry)
 
@@ -104,7 +102,7 @@ func (z *ZeroconfProvider) ResolveEntries(callback api.MdnsResolveCB) {
 			elements := parseTxt(service.Text)
 
 			addresses := service.AddrIPv4
-			callback(elements, service.Instance, service.HostName, addresses, service.Port, true)
+			cb(elements, service.Instance, service.HostName, addresses, service.Port, true)
 
 		case service := <-zcEntries:
 			// Zeroconf has issues with merging mDNS data and sometimes reports incomplete records
@@ -116,7 +114,7 @@ func (z *ZeroconfProvider) ResolveEntries(callback api.MdnsResolveCB) {
 
 			addresses := service.AddrIPv4
 			addresses = append(addresses, service.AddrIPv6...)
-			callback(elements, service.Instance, service.HostName, addresses, service.Port, false)
+			cb(elements, service.Instance, service.HostName, addresses, service.Port, false)
 		}
 	}
 }
