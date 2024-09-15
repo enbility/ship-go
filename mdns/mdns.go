@@ -149,6 +149,7 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 	case MdnsProviderSelectionGoZeroConfOnly:
 		// Only use Zeroconf
 		m.mdnsProvider = NewZeroconfProvider(ifaces)
+		_ = m.mdnsProvider.Start(true, m.processMdnsEntry)
 	}
 
 	// on startup always start mDNS announcement
