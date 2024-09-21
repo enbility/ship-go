@@ -60,11 +60,11 @@ func (c *ShipConnection) handshakeInit_cmiStateEvaluate(message []byte) bool {
 	msgType, data := c.parseMessage(message, false)
 
 	if msgType != model.MsgTypeInit {
-		c.endHandshakeWithError(fmt.Errorf("Invalid SHIP MessageType, expected 0 and got %s" + string(msgType)))
+		c.endHandshakeWithError(fmt.Errorf("Invalid SHIP MessageType, expected 0 and got %s", string(msgType)))
 		return false
 	}
 	if len(data) > 0 && data[0] != byte(0) {
-		c.endHandshakeWithError(fmt.Errorf("Invalid SHIP MessageValue, expected 0 and got %s" + string(data)))
+		c.endHandshakeWithError(fmt.Errorf("Invalid SHIP MessageValue, expected 0 and got %s", string(data)))
 		return false
 	}
 

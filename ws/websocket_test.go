@@ -26,8 +26,9 @@ type WebsocketSuite struct {
 
 	sut *WebsocketConnection
 
-	testServer *httptest.Server
-	testWsConn *websocket.Conn
+	testServer   *httptest.Server
+	testResponse *http.Response
+	testWsConn   *websocket.Conn
 
 	wsDataReader *mocks.WebsocketDataReaderInterface
 }
@@ -38,13 +39,17 @@ func (s *WebsocketSuite) BeforeTest(suiteName, testName string) {
 	s.wsDataReader.EXPECT().HandleIncomingWebsocketMessage(mock.Anything).Return().Maybe()
 
 	ts := &testServer{}
-	s.testServer, s.testWsConn = newWSServer(s.T(), ts)
+
+	// body close is done in AfterTest
+	//nolint:bodyclose
+	s.testServer, s.testResponse, s.testWsConn = newWSServer(s.T(), ts)
 
 	s.sut = NewWebsocketConnection(s.testWsConn, "remoteSki")
 	s.sut.InitDataProcessing(s.wsDataReader)
 }
 
 func (s *WebsocketSuite) AfterTest(suiteName, testName string) {
+	s.testResponse.Body.Close()
 	_ = s.testWsConn.Close()
 	s.testServer.Close()
 }
@@ -156,19 +161,19 @@ func (s *WebsocketSuite) TestCloseWithError() {
 
 var upgrader = websocket.Upgrader{}
 
-func newWSServer(t *testing.T, h http.Handler) (*httptest.Server, *websocket.Conn) {
+func newWSServer(t *testing.T, h http.Handler) (*httptest.Server, *http.Response, *websocket.Conn) {
 	t.Helper()
 
 	s := httptest.NewServer(h)
 	wsURL := strings.Replace(s.URL, "http://", "ws://", -1)
 	wsURL = strings.Replace(wsURL, "https://", "wss://", -1)
 
-	ws, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	ws, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	return s, ws
+	return s, resp, ws
 }
 
 type testServer struct {

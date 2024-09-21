@@ -4,90 +4,168 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
+	"github.com/enbility/go-avahi"
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/logging"
-	"github.com/godbus/dbus/v5"
-	"github.com/holoplot/go-avahi"
 )
+
+type mdnsServiceData struct {
+	// the service name
+	Name string
+	// the service port
+	Port int
+	// the service txt
+	Txt []string
+}
 
 type AvahiProvider struct {
 	ifaceIndexes []int32
 
-	avServer     *avahi.Server
-	avEntryGroup *avahi.EntryGroup
+	avServer     avahi.ServerInterface
+	avEntryGroup avahi.EntryGroupInterface
+	avBrowser    avahi.ServiceBrowserInterface
 
-	shutdownOnce sync.Once
+	autoReconnect   bool
+	manualShutdown  bool
+	setupSuccessful bool
+	listenerRunning bool
+
+	mdnsServiceData *mdnsServiceData
+
+	resolveCB api.MdnsResolveCB
 
 	// Used to store the service elements for each service, so that we can recall them when a service is removed
 	serviceElements map[string]map[string]string
 
-	shutdownChan chan struct{}
+	shutdownChan                      chan struct{}
+	addServiceChan, removeServiceChan chan avahi.Service
 
-	mux sync.Mutex
+	mux   sync.Mutex
+	muxEl sync.RWMutex // used for serviceElements
 }
 
 func NewAvahiProvider(ifaceIndexes []int32) *AvahiProvider {
 	return &AvahiProvider{
+		avServer:        avahi.ServerNew(),
+		setupSuccessful: false,
 		ifaceIndexes:    ifaceIndexes,
-		shutdownChan:    make(chan struct{}),
 		serviceElements: make(map[string]map[string]string),
 	}
 }
 
 var _ api.MdnsProviderInterface = (*AvahiProvider)(nil)
 
-func (a *AvahiProvider) CheckAvailability() bool {
+func (a *AvahiProvider) Start(autoReconnect bool, cb api.MdnsResolveCB) bool {
 	a.mux.Lock()
 	defer a.mux.Unlock()
 
-	dbusConn, err := dbus.SystemBus()
+	a.autoReconnect = autoReconnect
+	a.resolveCB = cb
+	a.manualShutdown = false
+
+	err := a.avServer.Setup(a.avahiCallback)
 	if err != nil {
 		return false
+	}
+	a.setupSuccessful = true
+	if a.shutdownChan == nil {
+		a.shutdownChan = make(chan struct{})
+	}
+	if a.addServiceChan == nil {
+		a.addServiceChan = make(chan avahi.Service)
+	}
+	if a.removeServiceChan == nil {
+		a.removeServiceChan = make(chan avahi.Service)
 	}
 
-	a.avServer, err = avahi.ServerNew(dbusConn)
-	if err != nil {
-		return false
-	}
+	a.avServer.Start()
 
 	if _, err := a.avServer.GetAPIVersion(); err != nil {
+		a.avServer.Shutdown()
 		return false
 	}
 
-	avBrowser, err := a.avServer.ServiceBrowserNew(avahi.InterfaceUnspec, avahi.ProtoUnspec, shipZeroConfServiceType, shipZeroConfDomain, 0)
-	if err != nil {
+	// instead of limiting search on specific allowed interfaces, we allow all and filter the results
+	avBrowser, err := a.avServer.ServiceBrowserNew(a.addServiceChan, a.removeServiceChan, avahi.InterfaceUnspec, avahi.ProtoUnspec, shipZeroConfServiceType, shipZeroConfDomain, 0)
+	if err != nil || avBrowser == nil {
+		a.avServer.Shutdown()
 		return false
 	}
 
-	if avBrowser != nil {
-		a.avServer.ServiceBrowserFree(avBrowser)
-		return true
+	a.avBrowser = avBrowser
+
+	// autoReconnect is only called with false if the systems does not know if
+	// avahi should be used in the first place.
+	// but if it was found and therefor being used, it should automatically reconnect once disconnected
+	if !autoReconnect {
+		a.autoReconnect = true
 	}
 
-	return false
+	if !a.listenerRunning {
+		a.listenerRunning = true
+		go a.chanListener(cb)
+	}
+
+	return true
 }
 
 func (a *AvahiProvider) Shutdown() {
 	a.mux.Lock()
+	a.manualShutdown = true
+
+	if !a.setupSuccessful {
+		a.mux.Unlock()
+		return
+	}
+
+	// when shutting down on purpose, do not try to reconnect
+	a.autoReconnect = false
+	if a.avBrowser != nil {
+		a.avServer.ServiceBrowserFree(a.avBrowser)
+		a.avBrowser = nil
+
+		if a.listenerRunning {
+			// stop the currently running resolve
+			a.shutdownChan <- struct{}{}
+		}
+	}
+	a.listenerRunning = false
+	if a.shutdownChan != nil {
+		close(a.shutdownChan)
+		a.shutdownChan = nil
+	}
+	if a.addServiceChan != nil {
+		close(a.addServiceChan)
+		a.addServiceChan = nil
+	}
+	if a.removeServiceChan != nil {
+		close(a.removeServiceChan)
+		a.removeServiceChan = nil
+	}
+	a.mux.Unlock()
+
+	// Unannounce the service
+	a.Unannounce()
+
+	a.mux.Lock()
 	defer a.mux.Unlock()
 
-	a.shutdownOnce.Do(func() {
-		if a.avServer == nil {
-			return
-		}
-
-		close(a.shutdownChan)
-
-		a.avServer.Close()
-		a.avServer = nil
-		a.avEntryGroup = nil
-	})
+	a.avServer.Shutdown()
+	a.avEntryGroup = nil
 }
 
 func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) error {
 	a.mux.Lock()
 	defer a.mux.Unlock()
+
+	// store the data for reconnection
+	a.mdnsServiceData = &mdnsServiceData{
+		Name: serviceName,
+		Port: port,
+		Txt:  txt,
+	}
 
 	logging.Log().Debug("mdns: using avahi")
 
@@ -102,7 +180,8 @@ func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) err
 	}
 
 	for _, iface := range a.ifaceIndexes {
-		err = entryGroup.AddService(iface, avahi.ProtoUnspec, 0, serviceName, shipZeroConfServiceType, shipZeroConfDomain, "", uint16(port), btxt)
+		// conversion is safe, as port values are always positive
+		err = entryGroup.AddService(iface, avahi.ProtoUnspec, 0, serviceName, shipZeroConfServiceType, shipZeroConfDomain, "", uint16(port), btxt) // #nosec G115
 		if err != nil {
 			return err
 		}
@@ -122,6 +201,9 @@ func (a *AvahiProvider) Unannounce() {
 	a.mux.Lock()
 	defer a.mux.Unlock()
 
+	// clean up the reconnection data
+	a.mdnsServiceData = nil
+
 	if a.avEntryGroup == nil {
 		return
 	}
@@ -130,53 +212,69 @@ func (a *AvahiProvider) Unannounce() {
 	a.avEntryGroup = nil
 }
 
-func (a *AvahiProvider) ResolveEntries(callback api.MdnsResolveCB) {
+func (a *AvahiProvider) avahiCallback(event avahi.Event) {
 	a.mux.Lock()
-
-	var err error
-
-	var avBrowser *avahi.ServiceBrowser
-
-	if a.avServer == nil {
+	// if there is a manual shutdown, we do not want to reconnect
+	if a.manualShutdown || !a.autoReconnect || event != avahi.Disconnected {
 		a.mux.Unlock()
 		return
 	}
 
-	// instead of limiting search on specific allowed interfaces, we allow all and filter the results
-	if avBrowser, err = a.avServer.ServiceBrowserNew(avahi.InterfaceUnspec, avahi.ProtoUnspec, shipZeroConfServiceType, shipZeroConfDomain, 0); err != nil {
-		logging.Log().Debug("mdns: error setting up avahi browser:", err)
-		a.mux.Unlock()
-		return
-	}
+	logging.Log().Debug("mdns: avahi - disconnected")
 
-	if avBrowser == nil {
-		logging.Log().Debug("mdns: avahi browser is not available")
-		a.mux.Unlock()
-		return
+	// the server was shutdown, set it to nil so we don't try to call free functions
+	// on shutting down a currently running resolve
+	cb := a.resolveCB
+	var serviceData *mdnsServiceData
+	if a.mdnsServiceData != nil {
+		serviceData = a.mdnsServiceData
 	}
-
 	a.mux.Unlock()
 
-	defer func() {
-		a.mux.Lock()
+	// try to reconnect until successull
+	go a.attemptReconnect(cb, serviceData)
+}
 
-		if a.avServer != nil {
-			a.avServer.ServiceBrowserFree(avBrowser)
+// attempt to reconnect to the avahi daemon endlessly
+func (a *AvahiProvider) attemptReconnect(cb api.MdnsResolveCB, serviceData *mdnsServiceData) {
+	for {
+		a.mux.Lock()
+		isManualShutdown := a.manualShutdown
+		a.mux.Unlock()
+		if isManualShutdown {
+			return
 		}
 
-		a.mux.Unlock()
-	}()
+		<-time.After(time.Second)
 
+		if !a.Start(true, cb) {
+			continue
+		}
+
+		logging.Log().Debug("mdns: avahi - reconnected")
+
+		if serviceData != nil {
+			if err := a.Announce(serviceData.Name, serviceData.Port, serviceData.Txt); err != nil {
+				logging.Log().Debug("mdns: avahi - error re-announcing service:", err)
+			}
+		}
+
+		return
+	}
+}
+
+// listen to service changes and shutdown
+func (a *AvahiProvider) chanListener(cb api.MdnsResolveCB) {
 	for {
 		select {
 		case <-a.shutdownChan:
 			return
-		case service := <-avBrowser.AddChannel:
-			if err := a.processService(service, false, callback); err != nil {
+		case service := <-a.addServiceChan:
+			if err := a.processService(service, false, cb); err != nil {
 				logging.Log().Debug("mdns: avahi -", err)
 			}
-		case service := <-avBrowser.RemoveChannel:
-			if err := a.processService(service, true, callback); err != nil {
+		case service := <-a.removeServiceChan:
+			if err := a.processService(service, true, cb); err != nil {
 				logging.Log().Debug("mdns: avahi -", err)
 			}
 		}
@@ -217,8 +315,12 @@ func (a *AvahiProvider) processService(service avahi.Service, remove bool, cb ap
 }
 
 func (a *AvahiProvider) processRemovedService(service avahi.Service, cb api.MdnsResolveCB) error {
+	logging.Log().Tracef("mdns: avahi - process remove service: %v", service)
+
 	// get the elements for the service
+	a.muxEl.RLock()
 	elements := a.serviceElements[getServiceUniqueKey(service)]
+	a.muxEl.RUnlock()
 
 	cb(elements, service.Name, service.Host, nil, -1, true)
 
@@ -233,19 +335,18 @@ func (a *AvahiProvider) processAddedService(service avahi.Service, cb api.MdnsRe
 	}
 	elements := parseTxt(txt)
 
+	logging.Log().Trace("mdns: avahi - process add service:", service.Name, service.Type, service.Domain, service.Host, service.Address, service.Port, elements)
+
 	address := net.ParseIP(service.Address)
 	// if the address can not be used, ignore the entry
 	if address == nil || address.IsUnspecified() {
 		return fmt.Errorf("service provides unusable address: %s", service.Name)
 	}
 
-	// Ignore IPv6 addresses for now
-	if address.To4() == nil {
-		return fmt.Errorf("no IPv4 addresses available %s", service.Name)
-	}
-
 	// add the elements to the map
+	a.muxEl.Lock()
 	a.serviceElements[getServiceUniqueKey(service)] = elements
+	a.muxEl.Unlock()
 
 	cb(elements, service.Name, service.Host, []net.IP{address}, int(service.Port), false)
 

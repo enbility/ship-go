@@ -127,7 +127,7 @@ func (c *ShipConnection) handshakeProtocol_smeProtHStateClientListenChoice(messa
 		abort = true
 	}
 
-	if msgHandshake.Formats.Format == nil || len(msgHandshake.Formats.Format) == 0 {
+	if len(msgHandshake.Formats.Format) == 0 {
 		logging.Log().Debug("format is missing")
 		abort = true
 	}
