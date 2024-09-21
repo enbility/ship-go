@@ -51,9 +51,6 @@ func (z *ZeroconfSuite) Test_Shutdown() {
 }
 
 func (z *ZeroconfSuite) Test_ZeroConf() {
-	boolV := z.sut.CheckAvailability()
-	assert.Equal(z.T(), true, boolV)
-
 	var addedEntries, removedEntries []mDNSEntry
 
 	cb := func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool) {
@@ -77,7 +74,8 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 		z.mux.Unlock()
 	}
 
-	go z.sut.ResolveEntries(cb)
+	boolV := z.sut.Start(false, cb)
+	assert.Equal(z.T(), true, boolV)
 
 	err := z.sut.Announce("dummytest", 4289, []string{"more=more"})
 	assert.Nil(z.T(), err)

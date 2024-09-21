@@ -9,10 +9,10 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/enbility/go-avahi"
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/logging"
 	"github.com/enbility/ship-go/util"
-	"github.com/holoplot/go-avahi"
 )
 
 const shipWebsocketPath = "/ship/"
@@ -106,7 +106,8 @@ func (m *MdnsManager) interfaces() ([]net.Interface, []int32, error) {
 				return nil, nil, err
 			}
 			ifaces[i] = *iface
-			ifaceIndexes[i] = int32(iface.Index)
+			// conversion is safe, as the index is always positive and not higher than int32
+			ifaceIndexes[i] = int32(iface.Index) // #nosec G115
 		}
 	}
 
@@ -129,26 +130,26 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 	switch m.providerSelection {
 	case MdnsProviderSelectionAll:
 		// First try avahi, if not available use zerconf
-		m.mdnsProvider = NewAvahiProvider(ifaceIndexes)
-		if !m.mdnsProvider.CheckAvailability() {
-			m.mdnsProvider.Shutdown()
+		provider := NewAvahiProvider(ifaceIndexes)
+		if provider.Start(false, m.processMdnsEntry) {
+			m.mdnsProvider = provider
+		} else {
+			provider.Shutdown()
 
 			// Avahi is not availble, use Zeroconf
 			m.mdnsProvider = NewZeroconfProvider(ifaces)
-			if !m.mdnsProvider.CheckAvailability() {
+			if !m.mdnsProvider.Start(false, m.processMdnsEntry) {
 				return errors.New("No mDNS provider available")
 			}
 		}
 	case MdnsProviderSelectionAvahiOnly:
 		// Only use Avahi
 		m.mdnsProvider = NewAvahiProvider(ifaceIndexes)
-		if !m.mdnsProvider.CheckAvailability() {
-			m.mdnsProvider.Shutdown()
-			return errors.New("Avahi mDNS provider not available")
-		}
+		_ = m.mdnsProvider.Start(true, m.processMdnsEntry)
 	case MdnsProviderSelectionGoZeroConfOnly:
 		// Only use Zeroconf
 		m.mdnsProvider = NewZeroconfProvider(ifaces)
+		_ = m.mdnsProvider.Start(true, m.processMdnsEntry)
 	}
 
 	// on startup always start mDNS announcement
@@ -157,9 +158,6 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 	}
 
 	m.report = cb
-
-	logging.Log().Debug("mdns: start search")
-	go m.mdnsProvider.ResolveEntries(m.processMdnsEntry)
 
 	// catch signals
 	go func() {
@@ -315,6 +313,7 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 	mapItems := []string{"txtvers", "id", "path", "ski", "register"}
 	for _, item := range mapItems {
 		if _, ok := elements[item]; !ok {
+			logging.Log().Debug("mdns: txt - missing mandatory element", item)
 			return
 		}
 	}
@@ -322,6 +321,7 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 	txtvers := elements["txtvers"]
 	// value of mandatory txtvers has to be 1 or the response be ignored: SHIP 7.3.2
 	if txtvers != "1" {
+		logging.Log().Debug("mdns: txt - unknown txtvers", txtvers)
 		return
 	}
 
@@ -337,8 +337,19 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 	register := elements["register"]
 	// register has to be a boolean
 	if register != "true" && register != "false" {
+		logging.Log().Debug("mdns: txt - register value is not a text boolean", register)
 		return
 	}
+
+	// remove IPv6 local link addresses
+	var newAddresses []net.IP
+	for _, address := range addresses {
+		if address.To4() == nil && address.IsLinkLocalUnicast() {
+			continue
+		}
+		newAddresses = append(newAddresses, address)
+	}
+	addresses = newAddresses
 
 	var deviceType, model, brand string
 
@@ -361,6 +372,8 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		// remove
 		// there will be a remove for each address with avahi, but we'll delete it right away
 		m.removeMdnsEntry(ski)
+
+		logging.Log().Debug("mdns: remove - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
 	} else if exists {
 		// avahi sends an item for each network address, merge them
 
@@ -384,6 +397,8 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 
 		if updated {
 			m.setMdnsEntry(ski, entry)
+
+			logging.Log().Debug("mdns: update - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
 		}
 	} else if !exists && !remove {
 		updated = true
@@ -403,7 +418,7 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		}
 		m.setMdnsEntry(ski, newEntry)
 
-		logging.Log().Debug("ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
+		logging.Log().Debug("mdns: new - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
 	}
 
 	if m.report == nil || !updated {

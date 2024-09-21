@@ -238,7 +238,6 @@ func (w *WebsocketConnection) close() {
 		if w.conn != nil {
 			_ = w.conn.Close()
 		}
-
 	})
 }
 
@@ -294,7 +293,6 @@ func (w *WebsocketConnection) writeMessageWithoutErrorHandling(messageType int, 
 
 // shutdown the connection and all internals
 func (w *WebsocketConnection) CloseDataConnection(closeCode int, reason string) {
-
 	// send a close message to the remote side if we have a reason
 	if reason != "" {
 		_ = w.writeMessageWithoutErrorHandling(websocket.CloseMessage, websocket.FormatCloseMessage(closeCode, reason))

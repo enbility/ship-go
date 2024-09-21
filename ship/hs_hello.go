@@ -139,7 +139,8 @@ func (c *ShipConnection) handshakeHello_PendingListen(timeout bool, message []by
 
 		c.stopHandshakeTimer()
 
-		newDuration := time.Duration(*hello.Waiting) * time.Millisecond
+		// conversion is safe
+		newDuration := time.Duration(*hello.Waiting) * time.Millisecond // #nosec G115
 		duration := tHelloProlongThrInc
 		if newDuration >= duration {
 			// the duration has to be reduced
@@ -162,7 +163,8 @@ func (c *ShipConnection) handshakeHello_PendingListen(timeout bool, message []by
 		if hello.Waiting != nil && hello.ProlongationRequest == nil {
 			c.stopHandshakeTimer()
 
-			newDuration := time.Duration(*hello.Waiting) * time.Millisecond
+			// conversion is safe
+			newDuration := time.Duration(*hello.Waiting) * time.Millisecond // #nosec G115
 			c.lastReceivedWaitingValue = newDuration
 			duration := tHelloProlongThrInc
 			if newDuration >= duration {
