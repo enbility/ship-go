@@ -53,6 +53,20 @@ func (mr *MockMdnsInterfaceMockRecorder) AnnounceMdnsEntry() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AnnounceMdnsEntry", reflect.TypeOf((*MockMdnsInterface)(nil).AnnounceMdnsEntry))
 }
 
+// QRCodeText mocks base method.
+func (m *MockMdnsInterface) QRCodeText() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QRCodeText")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// QRCodeText indicates an expected call of QRCodeText.
+func (mr *MockMdnsInterfaceMockRecorder) QRCodeText() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QRCodeText", reflect.TypeOf((*MockMdnsInterface)(nil).QRCodeText))
+}
+
 // RequestMdnsEntries mocks base method.
 func (m *MockMdnsInterface) RequestMdnsEntries() {
 	m.ctrl.T.Helper()
