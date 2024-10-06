@@ -32,6 +32,11 @@ type MdnsInterface interface {
 	AnnounceMdnsEntry() error
 	UnannounceMdnsEntry()
 	SetAutoAccept(bool)
+
+	// Returns the QR code text for the service
+	// as defined in SHIP Requirements for Installation Process V1.0.0
+	QRCodeText() string
+
 	RequestMdnsEntries()
 }
 

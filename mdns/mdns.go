@@ -246,13 +246,7 @@ func (m *MdnsManager) AnnounceMdnsEntry() error {
 		txt = append(txt, "serial="+m.deviceSerial)
 	}
 
-	var categories string
-	for _, category := range m.deviceCategories {
-		if len(categories) > 0 {
-			categories += ","
-		}
-		categories += fmt.Sprintf("%d", category)
-	}
+	categories := m.deviceCategoriesString(m.deviceCategories)
 	if len(categories) > 0 {
 		txt = append(txt, "cat="+categories)
 	}
@@ -312,6 +306,63 @@ func (m *MdnsManager) SetAutoAccept(accept bool) {
 	if err := m.AnnounceMdnsEntry(); err != nil {
 		logging.Log().Debug("mdns: changing mdns entry failed", err)
 	}
+}
+
+// Returns a safe to use key value pair for the QR code text in the proper format
+// according to SHIP Requirements for Installation Process V1.0.0
+func (m *MdnsManager) safeQRCodeKeyValue(key, value string) string {
+	if len(value) > 0 {
+		// make sure the value contains no ; chars
+		value = strings.ReplaceAll(value, ";", "")
+
+		// make sure the keys are all uppercase
+		key = strings.ToUpper(key)
+		return fmt.Sprintf("%s:%s;", key, value)
+	}
+
+	return ""
+}
+
+// Returns the device categories as a string, with categories separated by commas
+func (m *MdnsManager) deviceCategoriesString(categories []api.DeviceCategoryType) string {
+	var cat string
+	for _, category := range categories {
+		if len(cat) > 0 {
+			cat += ","
+		}
+		cat += fmt.Sprintf("%d", category)
+	}
+	return cat
+}
+
+// Returns the QR code text for the service
+// as defined in SHIP Requirements for Installation Process V1.0.0
+func (m *MdnsManager) QRCodeText() string {
+	var optionals string
+
+	if len(m.deviceBrand) > 0 {
+		optionals += m.safeQRCodeKeyValue("BRAND", m.deviceBrand)
+	}
+
+	if len(m.deviceType) > 0 {
+		optionals += m.safeQRCodeKeyValue("TYPE", m.deviceType)
+	}
+
+	if len(m.deviceModel) > 0 {
+		optionals += m.safeQRCodeKeyValue("MODEL", m.deviceModel)
+	}
+
+	if len(m.deviceSerial) > 0 {
+		optionals += m.safeQRCodeKeyValue("SERIAL", m.deviceSerial)
+	}
+
+	if m.deviceCategories != nil {
+		optionals += m.safeQRCodeKeyValue("CAT", m.deviceCategoriesString(m.deviceCategories))
+	}
+
+	qrcode := fmt.Sprintf("SHIP;SKI:%s;ID:%s;%sENDSHIP;", m.ski, m.identifier, optionals)
+
+	return qrcode
 }
 
 func (m *MdnsManager) mdnsEntries() map[string]*api.MdnsEntry {
