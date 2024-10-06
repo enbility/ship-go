@@ -5,17 +5,19 @@ import "net"
 /* Mdns */
 
 type MdnsEntry struct {
-	Name       string
-	Ski        string
-	Identifier string   // mandatory
-	Path       string   // mandatory
-	Register   bool     // mandatory
-	Brand      string   // optional
-	Type       string   // optional
-	Model      string   // optional
-	Host       string   // mandatory
-	Port       int      // mandatory
-	Addresses  []net.IP // mandatory
+	Name       string           // the mDNS service name
+	Ski        string           // mandatory the certificates SKI
+	Identifier string           // mandatory, the identifier used for SHIP ID
+	Path       string           // mandatory, the websocket path
+	Register   bool             // mandatory, wether auto accept is enabled
+	Brand      string           // optional, the brand of the device
+	Type       string           // optional, the type of the device
+	Model      string           // optional, the model of the device
+	Serial     string           // recommended, the serial number of the device
+	Categories []DeviceCategory // mandatory, the device categories of the device. Can be empty when the device does not conform to SHIP Requirements for Installation Process
+	Host       string           // mandatory, the host name
+	Port       int              // mandatory, the port for the websocket service
+	Addresses  []net.IP         // mandatory, the IP addresses used by the service
 }
 
 // implemented by Hub, used by mdns

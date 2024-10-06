@@ -37,7 +37,11 @@ func (s *MdnsSuite) BeforeTest(suiteName, testName string) {
 	s.mdnsProvider.On("ResolveEntries", mock.Anything, mock.Anything).Maybe().Return()
 	s.mdnsProvider.On("Shutdown").Maybe().Return()
 
-	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem", "shipid", "serviceName", 4729, nil, MdnsProviderSelectionAll)
+	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
+		"12345",
+		[]api.DeviceCategory{api.DeviceCategoryEnergyManagementSystem},
+		"shipid", "serviceName",
+		4729, nil, MdnsProviderSelectionAll)
 	s.sut.mdnsProvider = s.mdnsProvider
 }
 
@@ -45,10 +49,31 @@ func (s *MdnsSuite) AfterTest(suiteName, testName string) {
 	s.sut.Shutdown()
 }
 
+func (s *MdnsSuite) Test_LongStrings() {
+	s.sut.Shutdown()
+
+	s.sut = NewMDNS("test",
+		"brandbrandbrandbrandbrandbrandbrand",
+		"modelmodelmodelmodelmodelmodelmodel",
+		"EnergyManagementSystemMoreLongerString",
+		"1234567890123456789012345678901234567890",
+		[]api.DeviceCategory{api.DeviceCategoryEnergyManagementSystem},
+		"shipid", "serviceName",
+		4729, nil, MdnsProviderSelectionAvahiOnly)
+	s.sut.mdnsProvider = s.mdnsProvider
+
+	_ = s.sut.Start(s.mdnsSearch)
+	// Can't do an assertion check, as the result depends on the
+	// system this test is being ran on
+}
 func (s *MdnsSuite) Test_AvahiOnly() {
 	s.sut.Shutdown()
 
-	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem", "shipid", "serviceName", 4729, nil, MdnsProviderSelectionAvahiOnly)
+	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
+		"12345",
+		[]api.DeviceCategory{api.DeviceCategoryEnergyManagementSystem},
+		"shipid", "serviceName",
+		4729, nil, MdnsProviderSelectionAvahiOnly)
 	s.sut.mdnsProvider = s.mdnsProvider
 
 	_ = s.sut.Start(s.mdnsSearch)
@@ -59,7 +84,11 @@ func (s *MdnsSuite) Test_AvahiOnly() {
 func (s *MdnsSuite) Test_GoZeroConfOnly() {
 	s.sut.Shutdown()
 
-	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem", "shipid", "serviceName", 4729, nil, MdnsProviderSelectionGoZeroConfOnly)
+	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
+		"12345",
+		[]api.DeviceCategory{api.DeviceCategoryEnergyManagementSystem},
+		"shipid", "serviceName",
+		4729, nil, MdnsProviderSelectionGoZeroConfOnly)
 	s.sut.mdnsProvider = s.mdnsProvider
 
 	err := s.sut.Start(s.mdnsSearch)
@@ -192,6 +221,7 @@ func (s *MdnsSuite) Test_ProcessMdnsEntry() {
 	elements["path"] = "/ship"
 	elements["ski"] = "testski"
 	elements["register"] = "falsee"
+	elements["cat"] = "text"
 
 	s.sut.processMdnsEntry(elements, name, host, ips, port, false)
 	assert.Equal(s.T(), 0, len(s.sut.mdnsEntries()))
@@ -215,6 +245,8 @@ func (s *MdnsSuite) Test_ProcessMdnsEntry() {
 	elements["brand"] = "brand"
 	elements["type"] = "type"
 	elements["model"] = "model"
+	elements["serial"] = "serial"
+	elements["cat"] = "2,3"
 	s.sut.processMdnsEntry(elements, name, host, ips, port, false)
 	assert.Equal(s.T(), 1, len(s.sut.mdnsEntries()))
 
