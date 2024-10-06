@@ -65,6 +65,8 @@ func (h *Hub) ReportMdnsEntries(entries map[string]*api.MdnsEntry, newEntries bo
 			Brand:      entry.Brand,
 			Type:       entry.Type,
 			Model:      entry.Model,
+			Serial:     entry.Serial,
+			Categories: entry.Categories,
 		}
 
 		remoteServices = append(remoteServices, remoteService)
