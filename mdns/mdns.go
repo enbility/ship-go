@@ -6,6 +6,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -26,6 +28,7 @@ const (
 )
 
 type MdnsManager struct {
+	// The certificates SKI
 	ski string
 
 	// The deviceBrand of the device
@@ -34,8 +37,14 @@ type MdnsManager struct {
 	// The device model
 	deviceModel string
 
+	// The device serial number
+	deviceSerial string
+
 	// device type
 	deviceType string
+
+	// the device categories
+	deviceCategories []api.DeviceCategory
 
 	// the identifier to be used for mDNS and SHIP ID
 	identifier string
@@ -71,16 +80,41 @@ type MdnsManager struct {
 	muxAnnounced sync.Mutex
 }
 
+func shortenString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen]
+}
+
+// Create a new mDNS manager
+//
+// Parameters:
+//   - ski: the SKI of certificate
+//   - deviceBrand: the brand of the device (max 32 byte of UTF8)
+//   - deviceModel: the model of the device (max 32 byte of UTF8)
+//   - deviceType: the type of the device (max 32 byte of UTF8)
+//   - deviceSerial: the serial number of the device (max 32 byte of UTF8)
+//   - deviceCategories: the categories of the device
+//   - shipIdentifier: the identifier to be used for SHIP ID
+//   - serviceName: the name to be used as the mDNS service name
+//   - port: the port address of the websocket server
+//   - ifaces: the network interfaces to use for the service or empty if a all to be used
+//   - providerSelection: the mDNS provider selection
 func NewMDNS(
-	ski, deviceBrand, deviceModel, deviceType, shipIdentifier, serviceName string,
+	ski, deviceBrand, deviceModel, deviceType, deviceSerial string,
+	deviceCategories []api.DeviceCategory,
+	shipIdentifier, serviceName string,
 	port int,
 	ifaces []string,
 	providerSelection MdnsProviderSelection) *MdnsManager {
 	m := &MdnsManager{
 		ski:               ski,
-		deviceBrand:       deviceBrand,
-		deviceModel:       deviceModel,
-		deviceType:        deviceType,
+		deviceBrand:       shortenString(deviceBrand, 32),
+		deviceModel:       shortenString(deviceModel, 32),
+		deviceType:        shortenString(deviceType, 32),
+		deviceSerial:      shortenString(deviceSerial, 32),
+		deviceCategories:  deviceCategories,
 		identifier:        shipIdentifier,
 		serviceName:       serviceName,
 		port:              port,
@@ -205,6 +239,22 @@ func (m *MdnsManager) AnnounceMdnsEntry() error {
 		"model=" + m.deviceModel,
 		"type=" + m.deviceType,
 		"register=" + fmt.Sprintf("%v", m.autoaccept),
+	}
+
+	// SHIP Requirements for Installation Process V1.0.0
+	if len(m.deviceSerial) > 0 {
+		txt = append(txt, "serial="+m.deviceSerial)
+	}
+
+	var categories string
+	for _, category := range m.deviceCategories {
+		if len(categories) > 0 {
+			categories += ","
+		}
+		categories += fmt.Sprintf("%d", category)
+	}
+	if len(categories) > 0 {
+		txt = append(txt, "cat="+categories)
 	}
 
 	logging.Log().Debug("mdns: announce")
@@ -351,16 +401,34 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 	}
 	addresses = newAddresses
 
-	var deviceType, model, brand string
+	var deviceType, model, brand, serial string
 
-	if _, ok := elements["brand"]; ok {
-		brand = elements["brand"]
+	if value, ok := elements["brand"]; ok {
+		brand = value
 	}
-	if _, ok := elements["type"]; ok {
-		deviceType = elements["type"]
+	if value, ok := elements["type"]; ok {
+		deviceType = value
 	}
-	if _, ok := elements["model"]; ok {
-		model = elements["model"]
+	if value, ok := elements["model"]; ok {
+		model = value
+	}
+	if value, ok := elements["serial"]; ok {
+		serial = value
+	}
+
+	var categories []api.DeviceCategory
+	var categoriesStr string
+	if value, ok := elements["cat"]; ok {
+		categoriesStr = value
+		// Device categories according to SHIP Requirements for Installation Process V1.0.0
+		for _, item := range strings.Split(value, ",") {
+			category, err := strconv.ParseUint(item, 10, 32)
+			if err != nil {
+				logging.Log().Debug("mdns: txt - invalid category", item)
+				continue
+			}
+			categories = append(categories, api.DeviceCategory(category))
+		}
 	}
 
 	updated := false
@@ -373,7 +441,7 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		// there will be a remove for each address with avahi, but we'll delete it right away
 		m.removeMdnsEntry(ski)
 
-		logging.Log().Debug("mdns: remove - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
+		logging.Log().Debug("mdns: remove - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "serial:", serial, "categories:", categoriesStr, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
 	} else if exists {
 		// avahi sends an item for each network address, merge them
 
@@ -398,7 +466,7 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		if updated {
 			m.setMdnsEntry(ski, entry)
 
-			logging.Log().Debug("mdns: update - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
+			logging.Log().Debug("mdns: update - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "serial:", serial, "categories:", categoriesStr, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
 		}
 	} else if !exists && !remove {
 		updated = true
@@ -412,13 +480,15 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 			Brand:      brand,
 			Type:       deviceType,
 			Model:      model,
+			Serial:     serial,
+			Categories: categories,
 			Host:       host,
 			Port:       port,
 			Addresses:  addresses,
 		}
 		m.setMdnsEntry(ski, newEntry)
 
-		logging.Log().Debug("mdns: new - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
+		logging.Log().Debug("mdns: new - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "serial:", serial, "categories:", categoriesStr, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
 	}
 
 	if m.report == nil || !updated {
