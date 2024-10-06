@@ -248,7 +248,7 @@ func (c *ShipConnection) handshakeHelloSend(phase model.ConnectionHelloPhaseType
 	}
 
 	if waitingDuration > 0 {
-		helloMsg.ConnectionHello.Waiting = util.Ptr(uint(waitingDuration.Milliseconds()))
+		helloMsg.ConnectionHello.Waiting = util.Ptr(uint(waitingDuration.Milliseconds())) //#nosec G115
 	}
 	if prolongation {
 		helloMsg.ConnectionHello.ProlongationRequest = &prolongation
