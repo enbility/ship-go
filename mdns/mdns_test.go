@@ -66,6 +66,34 @@ func (s *MdnsSuite) Test_LongStrings() {
 	// Can't do an assertion check, as the result depends on the
 	// system this test is being ran on
 }
+
+func (s *MdnsSuite) Test_safeQRCodeKeyValue() {
+	result := s.sut.safeQRCodeKeyValue("key", "value")
+	assert.Equal(s.T(), "KEY:value;", result)
+
+	result = s.sut.safeQRCodeKeyValue("KEY", "val;ue")
+	assert.Equal(s.T(), "KEY:value;", result)
+
+	result = s.sut.safeQRCodeKeyValue("key", "")
+	assert.Equal(s.T(), "", result)
+}
+
+func (s *MdnsSuite) Test_deviceCategoriesString() {
+	result := s.sut.deviceCategoriesString([]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem})
+	assert.Equal(s.T(), "2", result)
+
+	result = s.sut.deviceCategoriesString([]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem, api.DeviceCategoryTypeEnergyManagementSystem})
+	assert.Equal(s.T(), "2,2", result)
+
+	result = s.sut.deviceCategoriesString([]api.DeviceCategoryType{})
+	assert.Equal(s.T(), "", result)
+}
+
+func (s *MdnsSuite) Test_QRCodeText() {
+	result := s.sut.QRCodeText()
+	assert.NotEqual(s.T(), "", result)
+}
+
 func (s *MdnsSuite) Test_AvahiOnly() {
 	s.sut.Shutdown()
 
