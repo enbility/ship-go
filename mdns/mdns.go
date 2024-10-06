@@ -44,7 +44,7 @@ type MdnsManager struct {
 	deviceType string
 
 	// the device categories
-	deviceCategories []api.DeviceCategory
+	deviceCategories []api.DeviceCategoryType
 
 	// the identifier to be used for mDNS and SHIP ID
 	identifier string
@@ -103,7 +103,7 @@ func shortenString(s string, maxLen int) string {
 //   - providerSelection: the mDNS provider selection
 func NewMDNS(
 	ski, deviceBrand, deviceModel, deviceType, deviceSerial string,
-	deviceCategories []api.DeviceCategory,
+	deviceCategories []api.DeviceCategoryType,
 	shipIdentifier, serviceName string,
 	port int,
 	ifaces []string,
@@ -416,7 +416,7 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		serial = value
 	}
 
-	var categories []api.DeviceCategory
+	var categories []api.DeviceCategoryType
 	var categoriesStr string
 	if value, ok := elements["cat"]; ok {
 		categoriesStr = value
@@ -427,7 +427,7 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 				logging.Log().Debug("mdns: txt - invalid category", item)
 				continue
 			}
-			categories = append(categories, api.DeviceCategory(category))
+			categories = append(categories, api.DeviceCategoryType(category))
 		}
 	}
 
