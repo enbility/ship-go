@@ -39,7 +39,7 @@ func (s *MdnsSuite) BeforeTest(suiteName, testName string) {
 
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
-		[]api.DeviceCategory{api.DeviceCategoryEnergyManagementSystem},
+		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAll)
 	s.sut.mdnsProvider = s.mdnsProvider
@@ -57,7 +57,7 @@ func (s *MdnsSuite) Test_LongStrings() {
 		"modelmodelmodelmodelmodelmodelmodel",
 		"EnergyManagementSystemMoreLongerString",
 		"1234567890123456789012345678901234567890",
-		[]api.DeviceCategory{api.DeviceCategoryEnergyManagementSystem},
+		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAvahiOnly)
 	s.sut.mdnsProvider = s.mdnsProvider
@@ -71,7 +71,7 @@ func (s *MdnsSuite) Test_AvahiOnly() {
 
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
-		[]api.DeviceCategory{api.DeviceCategoryEnergyManagementSystem},
+		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAvahiOnly)
 	s.sut.mdnsProvider = s.mdnsProvider
@@ -86,7 +86,7 @@ func (s *MdnsSuite) Test_GoZeroConfOnly() {
 
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
-		[]api.DeviceCategory{api.DeviceCategoryEnergyManagementSystem},
+		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionGoZeroConfOnly)
 	s.sut.mdnsProvider = s.mdnsProvider
