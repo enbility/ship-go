@@ -92,7 +92,7 @@ func (w *WebsocketConnection) writeShipPump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		close(w.shipWriteChannel)
+		w.closeShipWriteChannel()
 	}()
 
 	for {
@@ -311,4 +311,10 @@ func (w *WebsocketConnection) IsDataConnectionClosed() (bool, error) {
 	}
 
 	return isClosed, err
+}
+
+func (w *WebsocketConnection) closeShipWriteChannel() {
+	w.muxShipWrite.Lock()
+	defer w.muxShipWrite.Unlock()
+	close(w.shipWriteChannel)
 }
