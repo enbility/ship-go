@@ -161,6 +161,9 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 		return err
 	}
 
+	// assign the cb before mDNS is initialised, so that we don't miss any found services
+	m.report = cb
+
 	switch m.providerSelection {
 	case MdnsProviderSelectionAll:
 		// First try avahi, if not available use zerconf
@@ -190,8 +193,6 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 	if err := m.AnnounceMdnsEntry(); err != nil {
 		return err
 	}
-
-	m.report = cb
 
 	// catch signals
 	go func() {
