@@ -80,8 +80,8 @@ func (w *WebsocketConnection) isConnClosed() bool {
 }
 
 func (w *WebsocketConnection) run() {
-	w.shipWriteChannel = make(chan []byte, 1) // Send outgoing ship messages
-	w.closeChannel = make(chan struct{}, 1)   // Listen to close events
+	w.shipWriteChannel = make(chan []byte, 1024) // Send outgoing ship messages
+	w.closeChannel = make(chan struct{}, 1)      // Listen to close events
 
 	go w.readShipPump()
 	go w.writeShipPump()
@@ -258,7 +258,13 @@ func (w *WebsocketConnection) WriteMessageToWebsocketConnection(message []byte) 
 		return errors.New(connIsClosedError)
 	}
 
-	w.shipWriteChannel <- message
+	select {
+	case w.shipWriteChannel <- message:
+	default:
+		// too many messages are pending, this doesn't look good
+		return errors.New("could not send message, buffer is full")
+	}
+
 	return nil
 }
 
