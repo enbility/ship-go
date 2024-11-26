@@ -128,6 +128,23 @@ func (s *WebsocketSuite) TestConnectionClose() {
 	assert.NotNil(s.T(), err)
 }
 
+func (s *WebsocketSuite) TestWriteBufferFull() {
+	amountNil := 0
+	amountNotNil := 0
+	for i := 0; i < 10000; i++ {
+		msg := []byte{1}
+		msg = append(msg, []byte("message")...)
+		err := s.sut.WriteMessageToWebsocketConnection(msg)
+		if err == nil {
+			amountNil++
+		} else {
+			amountNotNil++
+		}
+	}
+	assert.Greater(s.T(), amountNotNil, 0)
+	assert.Greater(s.T(), amountNil, 0)
+}
+
 func (s *WebsocketSuite) TestPingPeriod() {
 	isClosed, err := s.sut.IsDataConnectionClosed()
 	assert.Equal(s.T(), false, isClosed)
