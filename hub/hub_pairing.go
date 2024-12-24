@@ -87,16 +87,24 @@ func (h *Hub) checkHasStarted() bool {
 	return h.hasStarted
 }
 
-// Sets the SKI as being paired or not
-// Should be used for services which completed the pairing process and
-// which were stored as having the process completed
-func (h *Hub) RegisterRemoteSKI(ski string) {
+// Pair a remote service based on the SKI
+//
+// Parameters:
+// - ski: the SKI of the remote service (required)
+// - shipID: the SHIP ID of the remote service (optional)
+//
+// Note: The SHIP ID is optional, but should be provided if available.
+// if provided, it will be used to validate the remote service is
+// providing this SHIP ID during the handshake process and will reject
+// the connection if it does not match.
+func (h *Hub) RegisterRemoteSKI(ski, shipID string) {
 	ski = util.NormalizeSKI(ski)
 
 	// if the hub has not started, simply add it
 	if !h.checkHasStarted() {
 		service := h.ServiceForSKI(ski)
 		service.SetTrusted(true)
+		service.SetShipID(shipID)
 
 		h.checkAutoReannounce()
 		return
@@ -107,6 +115,7 @@ func (h *Hub) RegisterRemoteSKI(ski string) {
 
 	service := h.ServiceForSKI(ski)
 	service.SetTrusted(true)
+	service.SetShipID(shipID)
 
 	// remotely initiated?
 	if conn != nil {
