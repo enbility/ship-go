@@ -24,8 +24,17 @@ type HubInterface interface {
 	// Default: false
 	SetAutoAccept(bool)
 
-	// Pair with the SKI
-	RegisterRemoteSKI(ski string)
+	// Pair a remote service based on the SKI
+	//
+	// Parameters:
+	// - ski: the SKI of the remote service (required)
+	// - shipID: the SHIP ID of the remote service (optional)
+	//
+	// Note: The SHIP ID is optional, but should be provided if available.
+	// if provided, it will be used to validate the remote service is
+	// providing this SHIP ID during the handshake process and will reject
+	// the connection if it does not match.
+	RegisterRemoteSKI(ski, shipID string)
 
 	// Unpair the SKI
 	UnregisterRemoteSKI(ski string)
@@ -55,7 +64,7 @@ type HubReaderInterface interface {
 
 	// Provides the SHIP ID the remote service reported during the handshake process
 	// This needs to be persisted and passed on for future remote service connections
-	// when using `PairRemoteService`
+	// when using `RegisterRemoteSKI`
 	ServiceShipIDUpdate(ski string, shipdID string)
 
 	// Provides the current pairing state for the remote service

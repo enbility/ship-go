@@ -188,7 +188,7 @@ func (s *HubSuite) Test_IsRemoteSKIPaired() {
 	assert.Equal(s.T(), false, paired)
 
 	s.sut.registerConnection(s.shipConnection)
-	s.sut.RegisterRemoteSKI(s.remoteSki)
+	s.sut.RegisterRemoteSKI(s.remoteSki, "")
 
 	paired = s.sut.IsRemoteServiceForSKIPaired(s.remoteSki)
 	assert.Equal(s.T(), true, paired)
@@ -219,11 +219,11 @@ func (s *HubSuite) Test_IsRemoteSKIPaired() {
 func (s *HubSuite) Test_RegisterRemoteSKI_AfterStart() {
 	s.sut.hasStarted = true
 
-	s.sut.RegisterRemoteSKI(s.remoteSki)
+	s.sut.RegisterRemoteSKI(s.remoteSki, "")
 	assert.Equal(s.T(), 0, len(s.sut.connections))
 
 	s.sut.registerConnection(s.shipConnection)
-	s.sut.RegisterRemoteSKI(s.remoteSki)
+	s.sut.RegisterRemoteSKI(s.remoteSki, "")
 	assert.Equal(s.T(), 1, len(s.sut.connections))
 }
 
@@ -244,7 +244,7 @@ func (s *HubSuite) Test_Mdns() {
 	assert.Equal(s.T(), 0, len(s.sut.connections))
 	assert.Equal(s.T(), 0, pairedServices)
 
-	s.sut.RegisterRemoteSKI(s.remoteSki)
+	s.sut.RegisterRemoteSKI(s.remoteSki, "")
 	pairedServices = s.sut.numberPairedServices()
 	assert.Equal(s.T(), 0, len(s.sut.connections))
 	assert.Equal(s.T(), 1, pairedServices)
@@ -549,7 +549,7 @@ func (s *HubSuite) Test_InitiateConnection() {
 	result = s.sut.initateConnection(service, entry)
 	assert.Equal(s.T(), false, result)
 
-	s.sut.RegisterRemoteSKI(s.remoteSki)
+	s.sut.RegisterRemoteSKI(s.remoteSki, "")
 	service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
 
 	result = s.sut.initateConnection(service, entry)
