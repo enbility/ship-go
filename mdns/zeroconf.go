@@ -86,7 +86,7 @@ func (z *ZeroconfProvider) chanListener(cb api.MdnsResolveCB) {
 	z.mux.Unlock()
 
 	go func() {
-		_ = zeroconf.Browse(z.ctx, shipZeroConfServiceType, shipZeroConfDomain, zcEntries, zcRemoved)
+		_ = zeroconf.Browse(z.ctx, shipZeroConfServiceType, shipZeroConfDomain, zcEntries, zcRemoved, zeroconf.SelectIfaces(z.ifaces))
 	}()
 
 	for {
