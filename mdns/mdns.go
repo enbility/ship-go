@@ -380,7 +380,7 @@ func (m *MdnsManager) copyMdnsEntries() map[string]*api.MdnsEntry {
 	mdnsEntries := make(map[string]*api.MdnsEntry)
 	for k, v := range m.entries {
 		newEntry := &api.MdnsEntry{}
-		util.DeepCopy[*api.MdnsEntry](v, newEntry)
+		util.DeepCopy(v, newEntry)
 		mdnsEntries[k] = newEntry
 	}
 
