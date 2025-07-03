@@ -196,3 +196,69 @@ func (s *AccessSuite) Test_Methods_NoShipID() {
 	assert.Equal(s.T(), false, s.sut.handshakeTimerRunning)
 	assert.Equal(s.T(), model.SmeStateComplete, s.sut.getState())
 }
+
+func (s *AccessSuite) Test_Methods_ArrayFormat_WithSpaces() {
+	reader := mocks.NewShipConnectionDataReaderInterface(s.T())
+	s.mockShipInfo.EXPECT().SetupRemoteDevice(mock.Anything, mock.Anything).Return(reader)
+	s.sut.setState(model.SmeAccessMethodsRequest, nil)
+	s.sut.remoteShipID = "i:46353_u:1234567890"
+
+	// EEBUS JSON with spaces after colons
+	// After JsonFromEEBUSJson conversion: {"accessMethods": {"id": "i:46353_u:1234567890"}}
+	// This SHOULD succeed but currently fails because string check looks for "accessMethods":{" (no space)
+	eebusMsg := []byte{model.MsgTypeControl}
+	eebusMsg = append(eebusMsg, []byte(`{"accessMethods": [{"id": "i:46353_u:1234567890"}]}`)...)
+
+	s.sut.handleState(false, eebusMsg)
+
+	assert.Equal(s.T(), false, s.sut.handshakeTimerRunning)
+	assert.Equal(s.T(), model.SmeStateComplete, s.sut.getState())
+}
+
+func (s *AccessSuite) Test_Methods_ArrayFormat_NoSpaces() {
+	reader := mocks.NewShipConnectionDataReaderInterface(s.T())
+	s.mockShipInfo.EXPECT().SetupRemoteDevice(mock.Anything, mock.Anything).Return(reader)
+	s.sut.setState(model.SmeAccessMethodsRequest, nil)
+	s.sut.remoteShipID = "i:46353_u:1234567890"
+
+	// EEBUS JSON without spaces after colons
+	// After JsonFromEEBUSJson conversion: {"accessMethods":{"id":"i:46353_u:1234567890"}}
+	// This succeeds because string check matches "accessMethods":{"
+	eebusMsg := []byte{model.MsgTypeControl}
+	eebusMsg = append(eebusMsg, []byte(`{"accessMethods":[{"id":"i:46353_u:1234567890"}]}`)...)
+
+	s.sut.handleState(false, eebusMsg)
+
+	assert.Equal(s.T(), false, s.sut.handshakeTimerRunning)
+	assert.Equal(s.T(), model.SmeStateComplete, s.sut.getState())
+}
+
+func (s *AccessSuite) Test_AccessMethodsRequest_WithSpaces() {
+	s.sut.setState(model.SmeAccessMethodsRequest, nil)
+
+	// Test accessMethodsRequest with spaces - should fail
+	eebusMsg := []byte{model.MsgTypeControl}
+	eebusMsg = append(eebusMsg, []byte(`{"accessMethodsRequest": {}}`)...)
+
+	s.sut.handleState(false, eebusMsg)
+
+	// Should fail due to spacing mismatch
+	assert.Equal(s.T(), false, s.sut.handshakeTimerRunning)
+	assert.Equal(s.T(), model.SmeAccessMethodsRequest, s.sut.getState())
+	assert.NotNil(s.T(), s.lastMessage())
+}
+
+func (s *AccessSuite) Test_AccessMethodsRequest_NoSpaces() {
+	s.sut.setState(model.SmeAccessMethodsRequest, nil)
+
+	// Test accessMethodsRequest without spaces - should succeed
+	eebusMsg := []byte{model.MsgTypeControl}
+	eebusMsg = append(eebusMsg, []byte(`{"accessMethodsRequest":{}}`)...)
+
+	s.sut.handleState(false, eebusMsg)
+
+	// Should send response and stay in same state
+	assert.Equal(s.T(), false, s.sut.handshakeTimerRunning)
+	assert.Equal(s.T(), model.SmeAccessMethodsRequest, s.sut.getState())
+	assert.NotNil(s.T(), s.lastMessage())
+}

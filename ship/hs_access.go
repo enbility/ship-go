@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/enbility/ship-go/model"
 )
@@ -26,55 +25,98 @@ func (c *ShipConnection) handshakeAccessMethods_Init() {
 	c.setState(model.SmeAccessMethodsRequest, nil)
 }
 
+// detectAccessMethodsMessageType determines the type of access methods message
+// by parsing the JSON and checking which fields are present
+func detectAccessMethodsMessageType(data []byte) (string, error) {
+	var detector map[string]json.RawMessage
+	if err := json.Unmarshal(data, &detector); err != nil {
+		return "", fmt.Errorf("invalid JSON: %w", err)
+	}
+
+	// Check for accessMethodsRequest first
+	if _, hasRequest := detector["accessMethodsRequest"]; hasRequest {
+		return "request", nil
+	}
+
+	// Check for accessMethods
+	if _, hasMethods := detector["accessMethods"]; hasMethods {
+		return "methods", nil
+	}
+
+	return "", errors.New("unknown message type: expected accessMethodsRequest or accessMethods")
+}
+
+// handleAccessMethodsRequest processes an incoming access methods request
+// by sending back our local access methods
+func (c *ShipConnection) handleAccessMethodsRequest() error {
+	accessMethods := model.AccessMethods{
+		AccessMethods: model.AccessMethodsType{
+			Id: &c.localShipID,
+		},
+	}
+
+	return c.sendShipModel(model.MsgTypeControl, accessMethods)
+}
+
+// handleAccessMethodsResponse processes an incoming access methods response
+// by validating and storing the remote SHIP ID
+func (c *ShipConnection) handleAccessMethodsResponse(accessMethods *model.AccessMethods) error {
+	if accessMethods.AccessMethods.Id == nil {
+		return errors.New("Access methods response does not contain SHIP ID")
+	}
+
+	remoteID := *accessMethods.AccessMethods.Id
+
+	// If we already know the remote ID, verify it matches
+	if len(c.remoteShipID) > 0 && c.remoteShipID != remoteID {
+		return errors.New("SHIP id mismatch")
+	}
+
+	// Save and report the SHIP ID if this is the first time we see it
+	if len(c.remoteShipID) == 0 {
+		c.remoteShipID = remoteID
+		c.infoProvider.ReportServiceShipID(c.remoteSKI, c.remoteShipID)
+	}
+
+	return nil
+}
+
 func (c *ShipConnection) handshakeAccessMethods_Request(message []byte) {
 	_, data := c.parseMessage(message, true)
 
-	dataString := string(data)
-
-	if strings.Contains(dataString, "\"accessMethodsRequest\":{") {
-		methodsId := c.localShipID
-
-		accessMethods := model.AccessMethods{
-			AccessMethods: model.AccessMethodsType{
-				Id: &methodsId,
-			},
-		}
-		if err := c.sendShipModel(model.MsgTypeControl, accessMethods); err != nil {
-			c.endHandshakeWithError(err)
-		}
-		return
-	} else if strings.Contains(dataString, "\"accessMethods\":{") {
-		// compare SHIP ID to stored value on pairing. SKI + SHIP ID should be verified on connection
-		// otherwise close connection with error "close 4450: SHIP id mismatch"
-
-		var accessMethods model.AccessMethods
-		if err := json.Unmarshal([]byte(data), &accessMethods); err != nil {
-			c.endHandshakeWithError(err)
-			return
-		}
-
-		if accessMethods.AccessMethods.Id == nil {
-			c.endHandshakeWithError(errors.New("Access methods response does not contain SHIP ID"))
-			return
-		}
-
-		// if the ID string is empty, then we don't know it yet and can't be verified
-		if len(c.remoteShipID) > 0 && c.remoteShipID != *accessMethods.AccessMethods.Id {
-			c.endHandshakeWithError(errors.New("SHIP id mismatch"))
-			return
-		}
-
-		// save and report the SHIP ID
-		if len(c.remoteShipID) == 0 {
-			c.remoteShipID = *accessMethods.AccessMethods.Id
-
-			c.infoProvider.ReportServiceShipID(c.remoteSKI, c.remoteShipID)
-		}
-	} else {
-		c.endHandshakeWithError(fmt.Errorf("access methods: invalid response: %s", dataString))
+	// Determine message type using JSON parsing instead of string matching
+	msgType, err := detectAccessMethodsMessageType(data)
+	if err != nil {
+		c.endHandshakeWithError(err)
 		return
 	}
 
-	c.setState(model.SmeStateApproved, nil)
-	c.approveHandshake()
+	switch msgType {
+	case "request":
+		if err := c.handleAccessMethodsRequest(); err != nil {
+			c.endHandshakeWithError(err)
+			return
+		}
+		// Stay in current state waiting for response
+		return
+
+	case "methods":
+		var accessMethods model.AccessMethods
+		if err := json.Unmarshal(data, &accessMethods); err != nil {
+			c.endHandshakeWithError(err)
+			return
+		}
+
+		if err := c.handleAccessMethodsResponse(&accessMethods); err != nil {
+			c.endHandshakeWithError(err)
+			return
+		}
+
+		// Transition to approved state
+		c.setState(model.SmeStateApproved, nil)
+		c.approveHandshake()
+
+	default:
+		c.endHandshakeWithError(fmt.Errorf("access methods: unexpected message type: %s", msgType))
+	}
 }
