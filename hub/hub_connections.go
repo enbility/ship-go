@@ -62,7 +62,9 @@ func (h *Hub) startWebsocketServer() error {
 	go func() {
 		if err := h.httpServer.ListenAndServeTLS("", ""); err != nil {
 			logging.Log().Error("websocket server error:", err)
-			// TODO: decide how to handle this case
+			// if the server doesn't start, we just log the error
+			// instead we should think about how to handle this error and
+			// get to a defined working state
 		}
 	}()
 
@@ -436,11 +438,11 @@ func (h *Hub) getConnectionInitiationDelayTime(ski string) (int, time.Duration) 
 	timeRange := connectionInitiationDelayTimeRanges[counter]
 
 	// get range in Milliseconds
-	min := timeRange.min * 1000
-	max := timeRange.max * 1000
+	minRange := timeRange.min * 1000
+	maxRange := timeRange.max * 1000
 
 	// #nosec G404
-	duration := rand.Intn(max-min) + min
+	duration := rand.Intn(maxRange-minRange) + minRange
 
 	return counter, time.Duration(duration) * time.Millisecond
 }
