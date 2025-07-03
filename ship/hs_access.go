@@ -54,7 +54,7 @@ func (c *ShipConnection) handleAccessMethodsRequest() error {
 			Id: &c.localShipID,
 		},
 	}
-	
+
 	return c.sendShipModel(model.MsgTypeControl, accessMethods)
 }
 
@@ -64,20 +64,20 @@ func (c *ShipConnection) handleAccessMethodsResponse(accessMethods *model.Access
 	if accessMethods.AccessMethods.Id == nil {
 		return errors.New("Access methods response does not contain SHIP ID")
 	}
-	
+
 	remoteID := *accessMethods.AccessMethods.Id
-	
+
 	// If we already know the remote ID, verify it matches
 	if len(c.remoteShipID) > 0 && c.remoteShipID != remoteID {
 		return errors.New("SHIP id mismatch")
 	}
-	
+
 	// Save and report the SHIP ID if this is the first time we see it
 	if len(c.remoteShipID) == 0 {
 		c.remoteShipID = remoteID
 		c.infoProvider.ReportServiceShipID(c.remoteSKI, c.remoteShipID)
 	}
-	
+
 	return nil
 }
 

@@ -39,8 +39,8 @@ func TestDetectAccessMethodsMessageType(t *testing.T) {
 			expectedError: false,
 		},
 		{
-			name:          "AccessMethodsRequest with newlines",
-			input:         []byte(`{
+			name: "AccessMethodsRequest with newlines",
+			input: []byte(`{
 				"accessMethodsRequest": {
 				}
 			}`),
@@ -62,8 +62,8 @@ func TestDetectAccessMethodsMessageType(t *testing.T) {
 			expectedError: false,
 		},
 		{
-			name:          "AccessMethods with mixed whitespace",
-			input:         []byte(`{	"accessMethods"  :
+			name: "AccessMethods with mixed whitespace",
+			input: []byte(`{	"accessMethods"  :
 				{  "id"	: "test" }  }`),
 			expectedType:  "methods",
 			expectedError: false,
@@ -111,7 +111,7 @@ func TestDetectAccessMethodsMessageType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			msgType, err := detectAccessMethodsMessageType(tt.input)
-			
+
 			if tt.expectedError {
 				assert.Error(t, err, "Expected error but got none")
 			} else {
