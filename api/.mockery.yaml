@@ -1,9 +1,10 @@
-with-expecter: True
+# .mockery.yaml
 inpackage: false
-dir: ../mocks/{{ replaceAll .InterfaceDirRelative "internal" "internal_" }} 
-mockname: "{{.InterfaceName}}"
-outpkg: "mocks"
+dir: ../mocks/ 
+structname: "{{.InterfaceName}}"
+pkgname: "mocks"
 filename: "{{.InterfaceName}}.go"
-all: True
+all: true
+template: testify
 packages:
   github.com/enbility/ship-go/api:
