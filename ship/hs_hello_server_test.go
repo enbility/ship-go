@@ -87,6 +87,12 @@ func (s *HelloSuite) BeforeTest(suiteName, testName string) {
 func (s *HelloSuite) AfterTest(suiteName, testName string) {
 	s.sut.stopHandshakeTimer()
 	assert.Equal(s.T(), false, s.sut.getHandshakeTimerRunning())
+	
+	// If the state is AbortDone, wait for the goroutine to complete
+	// to avoid race conditions with mock verification
+	if s.sut.getState() == model.SmeHelloStateAbortDone {
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func (s *HelloSuite) Test_InitialState() {
