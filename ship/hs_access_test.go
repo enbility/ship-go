@@ -206,7 +206,6 @@ func (s *AccessSuite) Test_Methods_ArrayFormat_WithSpaces() {
 	// EEBUS JSON with spaces after colons
 	// After JsonFromEEBUSJson conversion: {"accessMethods": {"id": "i:46353_u:1234567890"}}
 	// This SHOULD succeed but currently fails because string check looks for "accessMethods":{" (no space)
-	// TODO: Fix implementation to handle JSON with spaces
 	eebusMsg := []byte{model.MsgTypeControl}
 	eebusMsg = append(eebusMsg, []byte(`{"accessMethods": [{"id": "i:46353_u:1234567890"}]}`)...)
 
@@ -244,7 +243,6 @@ func (s *AccessSuite) Test_AccessMethodsRequest_WithSpaces() {
 	s.sut.handleState(false, eebusMsg)
 
 	// Should fail due to spacing mismatch
-	// TODO: Fix implementation to handle JSON with spaces
 	assert.Equal(s.T(), false, s.sut.handshakeTimerRunning)
 	assert.Equal(s.T(), model.SmeAccessMethodsRequest, s.sut.getState())
 	assert.NotNil(s.T(), s.lastMessage())
