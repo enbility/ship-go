@@ -25,6 +25,13 @@ Includes:
 - SHIP handshake
 - Logging which is also used by [spine-go](https://github.com/enbility/spine-go) and [eebus-go](https://github.com/enbility/eebus-go)
 
+## Documentation
+
+- **[analysis-docs/](analysis-docs/)** - Comprehensive analysis of SHIP protocol and implementation
+  - [README_START_HERE.md](analysis-docs/README_START_HERE.md) - Navigation guide to all analysis documents
+  - [EXECUTIVE_SUMMARY.md](analysis-docs/EXECUTIVE_SUMMARY.md) - Business-level overview with key findings (implementation score: 7.5/10)
+  - Detailed technical analysis including security model, specification deviations, and improvement roadmap
+
 ## Implementation notes
 
 - Double connection handling is not implemented according to SHIP 12.2.2. Instead the connection initiated by the higher SKI will be kept. Much simpler and always works
