@@ -168,12 +168,13 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 		Subprotocols: []string{api.ShipWebsocketSubProtocol},
 	}
 
-	address := fmt.Sprintf("wss://%s:%s%s", host, port, path)
+	hostPort := net.JoinHostPort(host, port)
+	address := fmt.Sprintf("wss://%s%s", hostPort, path)
 	conn, resp, err := dialer.Dial(address, nil)
 	if err == nil {
 		defer resp.Body.Close()
 	} else {
-		address = fmt.Sprintf("wss://%s:%s", host, port)
+		address = fmt.Sprintf("wss://%s", hostPort)
 		conn, resp, err = dialer.Dial(address, nil)
 		if err != nil {
 			return err
