@@ -5,25 +5,25 @@
 ## Quick Navigation by Role
 
 ### 🔒 Security Engineers
-**Start here:** [TLS_SECURITY_ANALYSIS.md](./TLS_SECURITY_ANALYSIS.md)
+**Start here:** [TLS_SECURITY_ANALYSIS.md](./detailed-analysis/TLS_SECURITY_ANALYSIS.md)
 - **Critical clarification:** `InsecureSkipVerify: true` is NOT a vulnerability
 - SHIP's self-signed certificate model explained
 - Real security risks: rate limiting and resource exhaustion
 - Security improvement recommendations
 
-**Next:** [IMPROVEMENT_SUGGESTIONS.md](./IMPROVEMENT_SUGGESTIONS.md) for prioritized security fixes
+**Next:** [IMPROVEMENT_SUGGESTIONS.md](./detailed-analysis/IMPROVEMENT_SUGGESTIONS.md) for prioritized security fixes
 
 ### 👨‍💻 Developers / Implementation Teams
-**Start here:** [IMPLEMENTATION_QUALITY_ANALYSIS.md](./IMPLEMENTATION_QUALITY_ANALYSIS.md)
+**Start here:** [IMPLEMENTATION_QUALITY_ANALYSIS.md](./detailed-analysis/IMPLEMENTATION_QUALITY_ANALYSIS.md)
 - **Implementation Score:** 7.5/10
 - Critical gaps: PIN verification, resource limits
 - Detailed improvement roadmap with 4 phases
 - Testing strategy recommendations
 
-**Deep dive:** [SPEC_DEVIATIONS.md](./SPEC_DEVIATIONS.md) for implementation choices
+**Deep dive:** [SPEC_DEVIATIONS.md](./detailed-analysis/SPEC_DEVIATIONS.md) for implementation choices
 
 ### 📋 Standards Teams / Protocol Designers
-**Start here:** [SHIP_1.0.1_ANALYSIS.md](./SHIP_1.0.1_ANALYSIS.md)
+**Start here:** [SHIP_1.0.1_ANALYSIS.md](./specific-issues/SHIP_1.0.1_ANALYSIS.md)
 - **50+ specification ambiguities documented**
 - Critical issues: double connection race conditions
 - Security contradictions in certificate validation
@@ -31,7 +31,7 @@
 
 
 ### 🏢 Project Managers / Business Stakeholders
-**Start here:** [IMPROVEMENT_SUGGESTIONS.md](./IMPROVEMENT_SUGGESTIONS.md)
+**Start here:** [IMPROVEMENT_SUGGESTIONS.md](./detailed-analysis/IMPROVEMENT_SUGGESTIONS.md)
 - Prioritized issue list (P1-P4) with effort estimates
 - Quick reference table for decision making
 - Immediate action items identified
@@ -60,29 +60,29 @@
 ## Reading Paths by Goal
 
 ### "I need to verify security implementation"
-1. [TLS_SECURITY_ANALYSIS.md](./TLS_SECURITY_ANALYSIS.md) - Security model clarification
-2. [IMPROVEMENT_SUGGESTIONS.md](./IMPROVEMENT_SUGGESTIONS.md) - Real security issues (P1)
+1. [TLS_SECURITY_ANALYSIS.md](./detailed-analysis/TLS_SECURITY_ANALYSIS.md) - Security model clarification
+2. [IMPROVEMENT_SUGGESTIONS.md](./detailed-analysis/IMPROVEMENT_SUGGESTIONS.md) - Real security issues (P1)
 
 ### "I need to understand implementation status"
-1. [IMPLEMENTATION_QUALITY_ANALYSIS.md](./IMPLEMENTATION_QUALITY_ANALYSIS.md) - Current state (7.5/10)
-2. [SPEC_DEVIATIONS.md](./SPEC_DEVIATIONS.md) - What's different and why
-3. [IMPROVEMENT_SUGGESTIONS.md](./IMPROVEMENT_SUGGESTIONS.md) - What needs fixing
+1. [IMPLEMENTATION_QUALITY_ANALYSIS.md](./detailed-analysis/IMPLEMENTATION_QUALITY_ANALYSIS.md) - Current state (7.5/10)
+2. [SPEC_DEVIATIONS.md](./detailed-analysis/SPEC_DEVIATIONS.md) - What's different and why
+3. [IMPROVEMENT_SUGGESTIONS.md](./detailed-analysis/IMPROVEMENT_SUGGESTIONS.md) - What needs fixing
 
 ### "I'm facing interoperability issues"
-1. [SPEC_DEVIATIONS.md](./SPEC_DEVIATIONS.md) - Key differences affecting compatibility
-2. [SHIP_1.0.1_ANALYSIS.md](./SHIP_1.0.1_ANALYSIS.md) - Spec ambiguities causing variations
-3. [SHIP_Requirements_Analysis.md](./SHIP_Requirements_Analysis.md) - Installation/commissioning issues
+1. [SPEC_DEVIATIONS.md](./detailed-analysis/SPEC_DEVIATIONS.md) - Key differences affecting compatibility
+2. [SHIP_1.0.1_ANALYSIS.md](./specific-issues/SHIP_1.0.1_ANALYSIS.md) - Spec ambiguities causing variations
+3. [SHIP_Requirements_Analysis.md](./specific-issues/SHIP_Requirements_Analysis.md) - Installation/commissioning issues
 
 ### "I need to implement SHIP protocol"
-1. [SHIP_1.0.1_ANALYSIS.md](./SHIP_1.0.1_ANALYSIS.md) - Critical ambiguities to navigate
-2. [IMPLEMENTATION_QUALITY_ANALYSIS.md](./IMPLEMENTATION_QUALITY_ANALYSIS.md) - Lessons learned
-3. [SPEC_DEVIATIONS.md](./SPEC_DEVIATIONS.md) - Reasonable implementation choices
-4. [TLS_SECURITY_ANALYSIS.md](./TLS_SECURITY_ANALYSIS.md) - Security model understanding
+1. [SHIP_1.0.1_ANALYSIS.md](./specific-issues/SHIP_1.0.1_ANALYSIS.md) - Critical ambiguities to navigate
+2. [IMPLEMENTATION_QUALITY_ANALYSIS.md](./detailed-analysis/IMPLEMENTATION_QUALITY_ANALYSIS.md) - Lessons learned
+3. [SPEC_DEVIATIONS.md](./detailed-analysis/SPEC_DEVIATIONS.md) - Reasonable implementation choices
+4. [TLS_SECURITY_ANALYSIS.md](./detailed-analysis/TLS_SECURITY_ANALYSIS.md) - Security model understanding
 
 ### "I need to plan improvements"
-1. [IMPROVEMENT_SUGGESTIONS.md](./IMPROVEMENT_SUGGESTIONS.md) - Prioritized action items
-2. [IMPLEMENTATION_QUALITY_ANALYSIS.md](./IMPLEMENTATION_QUALITY_ANALYSIS.md) - 4-phase roadmap
-3. [SPEC_DEVIATIONS.md](./SPEC_DEVIATIONS.md) - Which deviations to keep
+1. [IMPROVEMENT_SUGGESTIONS.md](./detailed-analysis/IMPROVEMENT_SUGGESTIONS.md) - Prioritized action items
+2. [IMPLEMENTATION_QUALITY_ANALYSIS.md](./detailed-analysis/IMPLEMENTATION_QUALITY_ANALYSIS.md) - 4-phase roadmap
+3. [SPEC_DEVIATIONS.md](./detailed-analysis/SPEC_DEVIATIONS.md) - Which deviations to keep
 
 ## Key Findings Summary
 
