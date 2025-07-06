@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/mocks"
 	"github.com/enbility/ship-go/model"
 	"github.com/stretchr/testify/assert"
@@ -33,7 +34,11 @@ func TestApprovePendingHandshake_RaceCondition(t *testing.T) {
 	mockDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(nil).Maybe()
 	mockDataWriter.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Maybe()
 	mockInfoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Maybe()
-	mockInfoProvider.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Maybe()
+	// Fix race: Use a matcher that doesn't reflect on connection internals
+	connectionMatcher := mock.MatchedBy(func(conn api.ShipConnectionInterface) bool {
+		return conn != nil
+	})
+	mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
 
 	// Create a connection in pending state
 	conn := NewConnectionHandler(
@@ -105,7 +110,7 @@ func TestApprovePendingHandshake_RaceCondition(t *testing.T) {
 	}
 	
 	// Cleanup: stop any timers
-	conn.stopHandshakeTimer()
+	conn.stopTimerSafe()
 	// Wait for abort cleanup if needed
 	if abortCount == 1 {
 		time.Sleep(time.Second + 100*time.Millisecond)
@@ -156,7 +161,11 @@ func TestApproveIfPending(t *testing.T) {
 			mockDataWriter.EXPECT().InitDataProcessing(mock.Anything).Maybe()
 			mockDataWriter.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Maybe()
 			mockInfoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Maybe()
-			mockInfoProvider.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Maybe()
+			// Fix race: Use a matcher that doesn't reflect on connection internals
+	connectionMatcher := mock.MatchedBy(func(conn api.ShipConnectionInterface) bool {
+		return conn != nil
+	})
+	mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
 			if tt.expectSuccess {
 				mockDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
 				mockDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(nil).Maybe()
@@ -194,7 +203,7 @@ func TestApproveIfPending(t *testing.T) {
 			}
 			
 			// Cleanup: stop any timers
-			conn.stopHandshakeTimer()
+			conn.stopTimerSafe()
 			
 			// Wait for any async operations to complete
 			time.Sleep(time.Millisecond * 100)
@@ -246,7 +255,11 @@ func TestAbortIfPending(t *testing.T) {
 			mockDataWriter.EXPECT().InitDataProcessing(mock.Anything).Maybe()
 			mockDataWriter.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Maybe()
 			mockInfoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Maybe()
-			mockInfoProvider.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Maybe()
+			// Fix race: Use a matcher that doesn't reflect on connection internals
+	connectionMatcher := mock.MatchedBy(func(conn api.ShipConnectionInterface) bool {
+		return conn != nil
+	})
+	mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
 			if tt.expectSuccess {
 				mockDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
 				mockDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(nil).Maybe()
@@ -295,7 +308,11 @@ func TestHandshakeTimer_ConcurrentStartStop(t *testing.T) {
 	mockDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
 	mockDataWriter.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Maybe()
 	mockInfoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Maybe()
-	mockInfoProvider.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Maybe()
+	// Fix race: Use a matcher that doesn't reflect on connection internals
+	connectionMatcher := mock.MatchedBy(func(conn api.ShipConnectionInterface) bool {
+		return conn != nil
+	})
+	mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
 	
 	conn := NewConnectionHandler(
 		mockInfoProvider,
@@ -324,14 +341,14 @@ func TestHandshakeTimer_ConcurrentStartStop(t *testing.T) {
 			time.Sleep(time.Microsecond * 100)
 			
 			// Stop timer immediately
-			conn.stopHandshakeTimer()
+			conn.stopTimerSafe()
 		}(i)
 	}
 	
 	wg.Wait()
 	
 	// Final cleanup - stop any remaining timers
-	conn.stopHandshakeTimer()
+	conn.stopTimerSafe()
 	
 	// Wait for timer goroutines to complete
 	time.Sleep(time.Millisecond * 100)
@@ -349,7 +366,11 @@ func TestStopTimerSafe(t *testing.T) {
 	mockDataWriter.EXPECT().InitDataProcessing(mock.Anything).Maybe()
 	mockDataWriter.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Maybe()
 	mockInfoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Maybe()
-	mockInfoProvider.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Maybe()
+	// Fix race: Use a matcher that doesn't reflect on connection internals
+	connectionMatcher := mock.MatchedBy(func(conn api.ShipConnectionInterface) bool {
+		return conn != nil
+	})
+	mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
 	mockDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(nil).Maybe()
 	mockDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
 	

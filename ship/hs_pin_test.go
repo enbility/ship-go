@@ -83,7 +83,8 @@ func (s *PinSuite) BeforeTest(suiteName, testName string) {
 }
 
 func (s *PinSuite) AfterTest(suiteName, testName string) {
-	s.sut.stopHandshakeTimer()
+	// Close the connection which will properly stop timers and wait for completion
+	s.sut.CloseConnection(false, 4001, "test cleanup")
 }
 
 func (s *PinSuite) Test_Init() {

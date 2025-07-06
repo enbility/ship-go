@@ -50,7 +50,7 @@ func (c *ShipConnection) handshakeProtocol_smeProtHStateServerListenProposal(mes
 		return
 	}
 
-	c.stopHandshakeTimer()
+	c.stopTimerSafe()
 
 	protocolHandshake := c.protocolHandshake()
 	protocolHandshake.MessageProtocolHandshake.HandshakeType = model.ProtocolHandshakeTypeTypeSelect
@@ -80,7 +80,7 @@ func (c *ShipConnection) handshakeProtocol_smeProtHStateServerListenConfirm(mess
 		return
 	}
 
-	c.stopHandshakeTimer()
+	c.stopTimerSafe()
 
 	c.setAndHandleState(model.SmeProtHStateServerOk)
 }
@@ -147,7 +147,7 @@ func (c *ShipConnection) handshakeProtocol_smeProtHStateClientListenChoice(messa
 		return
 	}
 
-	c.stopHandshakeTimer()
+	c.stopTimerSafe()
 
 	protocolHandshake := c.protocolHandshake()
 	protocolHandshake.MessageProtocolHandshake.HandshakeType = model.ProtocolHandshakeTypeTypeSelect
@@ -161,7 +161,7 @@ func (c *ShipConnection) handshakeProtocol_smeProtHStateClientListenChoice(messa
 }
 
 func (c *ShipConnection) abortProtocolHandshake(err model.MessageProtocolHandshakeErrorErrorType) {
-	c.stopHandshakeTimer()
+	c.stopTimerSafe()
 
 	msg := model.MessageProtocolHandshakeError{
 		Error: err,

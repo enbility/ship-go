@@ -84,7 +84,7 @@ func (c *ShipConnection) handshakeHello_ReadyTimeout() {
 
 // SME_HELLO_ABORT
 func (c *ShipConnection) handshakeHello_Abort() {
-	c.stopHandshakeTimer()
+	c.stopTimerSafe()
 
 	if err := c.handshakeHelloSend(model.ConnectionHelloPhaseTypeAborted, 0, false); err != nil {
 		c.endHandshakeWithError(err)
@@ -137,7 +137,7 @@ func (c *ShipConnection) handshakeHello_PendingListen(timeout bool, message []by
 			return
 		}
 
-		c.stopHandshakeTimer()
+		c.stopTimerSafe()
 
 		// conversion is safe
 		newDuration := time.Duration(*hello.Waiting) * time.Millisecond // #nosec G115
@@ -161,7 +161,7 @@ func (c *ShipConnection) handshakeHello_PendingListen(timeout bool, message []by
 
 	case model.ConnectionHelloPhaseTypePending:
 		if hello.Waiting != nil && hello.ProlongationRequest == nil {
-			c.stopHandshakeTimer()
+			c.stopTimerSafe()
 
 			// conversion is safe
 			newDuration := time.Duration(*hello.Waiting) * time.Millisecond // #nosec G115

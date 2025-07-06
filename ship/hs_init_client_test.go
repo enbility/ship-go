@@ -75,7 +75,8 @@ func (s *InitClientSuite) BeforeTest(suiteName, testName string) {
 }
 
 func (s *InitClientSuite) AfterTest(suiteName, testName string) {
-	s.sut.stopHandshakeTimer()
+	// Close the connection which will properly stop timers and wait for completion
+	s.sut.CloseConnection(false, 4001, "test cleanup")
 }
 
 func (s *InitClientSuite) Test_Init() {

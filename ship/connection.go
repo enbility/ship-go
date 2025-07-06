@@ -50,10 +50,11 @@ type ShipConnection struct {
 	// SendProlongationRequest SHIP 13.4.4.1.3: Local timer to request for prolongation at the communication partner in time (i.e. before the communication partner's Wait-For-Ready-Timer expires).
 	//
 	// ProlongationRequestReply SHIP 13.4.4.1.3: Detection of response timeout on prolongation request.
-	handshakeTimerRunning  bool
-	handshakeTimerType     timeoutTimerType
-	handshakeTimerStopChan chan struct{}
-	handshakeTimerMux      sync.Mutex
+	handshakeTimer        *time.Timer
+	handshakeTimerType    timeoutTimerType
+	handshakeTimerMux     sync.Mutex
+	handshakeTimerDone    chan struct{} // Signals when timer goroutine has completed
+	handshakeTimerRunning bool          // For test assertions only
 
 	lastReceivedWaitingValue time.Duration // required for Prolong-Request-Reply-Timer
 
@@ -86,7 +87,7 @@ func NewConnectionHandler(
 		smeError:     nil,
 	}
 
-	ship.handshakeTimerStopChan = make(chan struct{})
+	ship.handshakeTimerDone = make(chan struct{})
 
 	if dataHandler != nil {
 		dataHandler.InitDataProcessing(ship)
@@ -148,7 +149,7 @@ func (c *ShipConnection) ApproveIfPending() bool {
 	c.mux.Unlock()
 
 	// Now handle state transitions without lock to avoid deadlock
-	c.stopHandshakeTimer()
+	c.stopTimerSafe()
 	c.handleState(false, nil)
 	
 	// TODO: check if we need to do some validations before moving on to the next state
@@ -175,7 +176,7 @@ func (c *ShipConnection) AbortIfPending() bool {
 	c.mux.Unlock()
 
 	// Now handle state transitions without lock to avoid deadlock
-	c.stopHandshakeTimer()
+	c.stopTimerSafe()
 	c.handleState(false, nil)
 	
 	return true
@@ -184,7 +185,14 @@ func (c *ShipConnection) AbortIfPending() bool {
 // close this ship connection
 func (c *ShipConnection) CloseConnection(safe bool, code int, reason string) {
 	c.shutdownOnce.Do(func() {
-		c.stopHandshakeTimer()
+		// Stop timer and wait for completion with a reasonable timeout
+		done := c.stopHandshakeTimer()
+		select {
+		case <-done:
+			// Timer stopped cleanly
+		case <-time.After(100 * time.Millisecond):
+			// Timeout waiting for timer
+		}
 
 		// handshake is completed if approved or aborted
 		state := c.getState()

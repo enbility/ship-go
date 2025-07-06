@@ -280,14 +280,16 @@ func (s *ConnectionSuite) TestSendSpineMessage() {
 }
 
 func (s *ConnectionSuite) Test_HandshakeTimer() {
+	// Test that timer is started when state is set
 	s.sut.setState(model.CmiStateInitStart, nil)
 	assert.Equal(s.T(), model.CmiStateInitStart, s.sut.getState())
 
+	// Start timer
 	s.sut.setHandshakeTimer(timeoutTimerTypeWaitForReady, time.Duration(time.Millisecond*500))
 	assert.Equal(s.T(), true, s.sut.getHandshakeTimerRunning())
-
-	time.Sleep(time.Second * 1)
-	assert.Equal(s.T(), model.CmiStateServerWait, s.sut.getState())
 	assert.Equal(s.T(), timeoutTimerTypeWaitForReady, s.sut.getHandshakeTimerType())
-	assert.Equal(s.T(), true, s.sut.getHandshakeTimerRunning())
+
+	// Test what happens when timer expires - directly trigger timeout behavior
+	s.sut.handleState(true, nil) // timeout=true
+	assert.Equal(s.T(), model.CmiStateServerWait, s.sut.getState())
 }

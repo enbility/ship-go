@@ -81,7 +81,7 @@ func TestSetStateTimerDeadlock(t *testing.T) {
 		test.Run(t)
 		
 		// Cleanup: ensure timer is stopped and connection is closed
-		conn.stopHandshakeTimer()
+		conn.stopTimerSafe()
 		
 		// Close the connection to ensure all resources are cleaned up
 		conn.CloseConnection(false, 4001, "test cleanup")
@@ -145,7 +145,7 @@ func TestSetStateTimerRaceCondition(t *testing.T) {
 			"Final state should be valid")
 		
 		// Cleanup: ensure timer is stopped and connection is closed
-		conn.stopHandshakeTimer()
+		conn.stopTimerSafe()
 		
 		// Close the connection to ensure all resources are cleaned up
 		conn.CloseConnection(false, 4001, "test cleanup")
@@ -185,7 +185,7 @@ func TestTimerLifecycleDeadlock(t *testing.T) {
 				case 0:
 					// Direct timer operations
 					conn.setHandshakeTimer(timeoutTimerTypeWaitForReady, time.Second*5)
-					conn.stopHandshakeTimer()
+					conn.stopTimerSafe()
 				case 1:
 					// State changes that trigger timers
 					conn.setState(model.SmeHelloStateReadyInit, nil)
@@ -204,7 +204,7 @@ func TestTimerLifecycleDeadlock(t *testing.T) {
 		test.Run(t)
 		
 		// Cleanup: ensure timer is stopped and connection is closed
-		conn.stopHandshakeTimer()
+		conn.stopTimerSafe()
 		
 		// Close the connection to ensure all resources are cleaned up
 		conn.CloseConnection(false, 4001, "test cleanup")
@@ -350,7 +350,7 @@ func TestConcurrentStateChangeWithTimerExpiry(t *testing.T) {
 		wg.Wait()
 		
 		// Clean up any remaining timer
-		conn.stopHandshakeTimer()
+		conn.stopTimerSafe()
 		
 		// Wait for timer goroutines to complete
 		time.Sleep(time.Millisecond * 50)
@@ -395,7 +395,7 @@ func TestLockOrderingViolation(t *testing.T) {
 					conn.setState(model.SmeHelloStateReadyInit, nil)
 					_ = conn.getState()
 					_ = conn.getHandshakeTimerRunning()
-					conn.stopHandshakeTimer()
+					conn.stopTimerSafe()
 					conn.setState(model.SmeHelloStateOk, nil)
 				}
 			}()
@@ -437,7 +437,7 @@ func TestNoGoroutineLeak(t *testing.T) {
 		time.Sleep(time.Millisecond * 5) // Let cleanup complete
 		
 		// Stop any remaining timers
-		conn.stopHandshakeTimer()
+		conn.stopTimerSafe()
 		
 		// Close connection to clean up all resources
 		conn.CloseConnection(false, 4001, "test cleanup")

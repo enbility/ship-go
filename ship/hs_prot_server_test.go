@@ -75,7 +75,8 @@ func (s *ProServerSuite) BeforeTest(suiteName, testName string) {
 }
 
 func (s *ProServerSuite) AfterTest(suiteName, testName string) {
-	s.sut.stopHandshakeTimer()
+	// Close the connection which will properly stop timers and wait for completion
+	s.sut.CloseConnection(false, 4001, "test cleanup")
 }
 
 func (s *ProServerSuite) Test_Init() {
