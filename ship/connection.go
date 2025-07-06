@@ -115,36 +115,70 @@ func (c *ShipConnection) ShipHandshakeState() (model.ShipMessageExchangeState, e
 
 // invoked when pairing for a pending request is approved
 func (c *ShipConnection) ApprovePendingHandshake() {
-	state := c.getState()
-	if state != model.SmeHelloStatePendingListen {
-		// TODO: what to do if the state is different?
-
-		return
-	}
-
-	// TODO: move this into hs_hello.go and add tests
-
-	// HELLO_OK
-	c.stopHandshakeTimer()
-	c.setAndHandleState(model.SmeHelloStateReadyInit)
-
-	// TODO: check if we need to do some validations before moving on to the next state
-	c.setAndHandleState(model.SmeHelloStateOk)
+	// Use the new atomic method to avoid race conditions
+	c.ApproveIfPending()
 }
 
 // invoked when pairing for a pending request is denied
 func (c *ShipConnection) AbortPendingHandshake() {
-	state := c.getState()
-	if state != model.SmeHelloStatePendingListen && state != model.SmeHelloStateReadyListen {
-		// TODO: what to do if the state is differnet?
+	// Use the new atomic method to avoid race conditions
+	c.AbortIfPending()
+}
 
-		return
+// ApproveIfPending atomically approves the handshake if in pending state
+// Returns true if the approval was successful, false otherwise
+//
+// This method addresses a race condition where concurrent approve/abort operations
+// could result in inconsistent state. The previous implementation had a time-of-check-time-of-use
+// (TOCTOU) bug where the state was read without holding the lock, then actions were taken
+// based on that potentially stale state.
+//
+// The atomic implementation ensures that the state check and update happen together
+// while holding the lock, preventing race conditions.
+func (c *ShipConnection) ApproveIfPending() bool {
+	c.mux.Lock()
+	
+	if c.smeState != model.SmeHelloStatePendingListen {
+		c.mux.Unlock()
+		return false
 	}
+	
+	// Update state while holding lock
+	c.smeState = model.SmeHelloStateReadyInit
+	c.mux.Unlock()
 
-	// TODO: Move this into hs_hello.go and add tests
-
+	// Now handle state transitions without lock to avoid deadlock
 	c.stopHandshakeTimer()
-	c.setAndHandleState(model.SmeHelloStateAbort)
+	c.handleState(false, nil)
+	
+	// TODO: check if we need to do some validations before moving on to the next state
+	c.setAndHandleState(model.SmeHelloStateOk)
+	
+	return true
+}
+
+// AbortIfPending atomically aborts the handshake if in pending or ready state
+// Returns true if the abort was successful, false otherwise
+//
+// Similar to ApproveIfPending, this method prevents race conditions during
+// concurrent handshake operations by atomically checking and updating the state.
+func (c *ShipConnection) AbortIfPending() bool {
+	c.mux.Lock()
+	
+	if c.smeState != model.SmeHelloStatePendingListen && c.smeState != model.SmeHelloStateReadyListen {
+		c.mux.Unlock()
+		return false
+	}
+	
+	// Update state while holding lock
+	c.smeState = model.SmeHelloStateAbort
+	c.mux.Unlock()
+
+	// Now handle state transitions without lock to avoid deadlock
+	c.stopHandshakeTimer()
+	c.handleState(false, nil)
+	
+	return true
 }
 
 // close this ship connection

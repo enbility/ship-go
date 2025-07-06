@@ -72,6 +72,15 @@ if incomingRequest {
 - Document this deviation clearly for users
 - Consider implementing a compatibility mode
 
+**Race Condition Note**:
+The double connection prevention logic has an inherent race condition window that cannot be completely eliminated in distributed systems. The implementation includes the following mitigations:
+
+1. **Atomic Connection Registry Operations**: The `UnregisterConnectionIfMatch()` method ensures atomic compare-and-delete operations to prevent race conditions when connections are being closed while new ones register.
+
+2. **Connection Timing**: There's still a small window between checking for existing connections and registering new ones where race conditions can occur. This is documented and accepted as a limitation of distributed systems.
+
+3. **Testing**: Comprehensive race condition tests have been added to verify the implementation remains stable under concurrent connection scenarios.
+
 ---
 
 ### 2. PIN Verification Implementation

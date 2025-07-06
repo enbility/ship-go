@@ -284,3 +284,33 @@ func (c *ShipConnection) getHandshakeTimerType() timeoutTimerType {
 
 	return c.handshakeTimerType
 }
+
+// stopTimerSafe atomically stops the handshake timer if it's running
+// Returns true if the timer was stopped, false if it wasn't running
+//
+// This method addresses a race condition in timer management where the timer
+// running state was checked without holding the lock continuously through the
+// operation. The atomic implementation prevents concurrent timer operations
+// from conflicting with each other.
+func (c *ShipConnection) stopTimerSafe() bool {
+	c.handshakeTimerMux.Lock()
+	defer c.handshakeTimerMux.Unlock()
+	
+	if !c.handshakeTimerRunning {
+		return false
+	}
+	
+	// Send stop signal
+	select {
+	case c.handshakeTimerStopChan <- struct{}{}:
+	default:
+	}
+	
+	c.handshakeTimerRunning = false
+	return true
+}
+
+// startHandshakeTimer starts the handshake timer (exposed for testing)
+func (c *ShipConnection) startHandshakeTimer(duration time.Duration, timerType timeoutTimerType) {
+	c.setHandshakeTimer(timerType, duration)
+}

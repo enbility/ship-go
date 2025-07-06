@@ -23,17 +23,12 @@ func (h *Hub) HandleConnectionClosed(connection api.ShipConnectionInterface, han
 
 	// only remove this connection if it is the registered one for the ski!
 	// as we can have double connections but only one can be registered
-	if existingC := h.connectionForSKI(remoteSki); existingC != nil {
-		if existingC.DataHandler() == connection.DataHandler() {
-			h.muxCon.Lock()
-			delete(h.connections, connection.RemoteSKI())
-			h.muxCon.Unlock()
-		}
+	// Use the new atomic method to avoid race conditions
+	h.UnregisterConnectionIfMatch(remoteSki, connection)
 
-		// connection close was after a completed handshake, so we can reset the attetmpt counter
-		if handshakeCompleted {
-			h.removeConnectionAttemptCounter(connection.RemoteSKI())
-		}
+	// connection close was after a completed handshake, so we can reset the attempt counter
+	if handshakeCompleted {
+		h.removeConnectionAttemptCounter(connection.RemoteSKI())
 	}
 
 	h.hubReader.RemoteSKIDisconnected(connection.RemoteSKI())

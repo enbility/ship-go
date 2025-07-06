@@ -491,3 +491,26 @@ func (h *Hub) connectionForSKI(ski string) api.ShipConnectionInterface {
 	}
 	return con
 }
+
+// UnregisterConnectionIfMatch atomically unregisters a connection if it matches the provided one
+// Returns true if the connection was unregistered, false otherwise
+//
+// This method prevents race conditions during connection cleanup where a connection
+// could be replaced between the lookup and delete operations. The previous implementation
+// would check the connection without holding the lock, then delete it in a separate
+// operation, allowing a new connection to be registered and accidentally deleted.
+//
+// The atomic compare-and-delete ensures we only remove the specific connection instance
+// that is being closed, not a newly registered replacement.
+func (h *Hub) UnregisterConnectionIfMatch(ski string, conn api.ShipConnectionInterface) bool {
+	h.muxCon.Lock()
+	defer h.muxCon.Unlock()
+	
+	current, exists := h.connections[ski]
+	if !exists || current != conn {
+		return false
+	}
+	
+	delete(h.connections, ski)
+	return true
+}
