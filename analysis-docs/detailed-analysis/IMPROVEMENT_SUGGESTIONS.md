@@ -77,15 +77,20 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
   - Allow connections but notify operators
   - Aligns with spec section 12.1.1
 
-### 1.5 Weak Random for Security Delays
+### 1.5 Weak Random for Security Delays ✅ WON'T FIX
 - **Priority**: P4
-- **Severity**: Low
-- **Impact**: Security - Predictable delays
+- **Severity**: Low (False Positive)
+- **Impact**: None - Not a security issue
 - **Location**: `hub/hub_connections.go:443`
 - **Issue**: Uses math/rand for reconnection delays
-- **Recommendation**:
-  - Use crypto/rand for security-sensitive randomness
-  - Document the security implications
+- **Status**: Won't Fix - Correctly uses math/rand for non-security purpose
+- **Analysis**:
+  - The randomness is used purely for collision avoidance in distributed systems
+  - Purpose is to stagger reconnection attempts to prevent double connections
+  - Not security-sensitive: predictable delays provide no exploitable advantage
+  - The `#nosec G404` comment correctly identifies this as a false positive
+  - Since Go 1.20+, math/rand is automatically seeded (project uses Go 1.23.0)
+- **Conclusion**: Current implementation is correct and optimal. Using crypto/rand would be over-engineering without security benefit
 
 ---
 
