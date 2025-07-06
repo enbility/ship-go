@@ -36,13 +36,15 @@ func (s *MdnsSuite) BeforeTest(suiteName, testName string) {
 	s.mdnsProvider = mocks.NewMdnsProviderInterface(s.T())
 	s.mdnsProvider.On("ResolveEntries", mock.Anything, mock.Anything).Maybe().Return()
 	s.mdnsProvider.On("Shutdown").Maybe().Return()
+	s.mdnsProvider.On("Announce", mock.Anything, mock.Anything, mock.Anything).Maybe().Return(nil)
+	s.mdnsProvider.On("Unannounce").Maybe().Return()
 
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAll)
-	s.sut.mdnsProvider = s.mdnsProvider
+	s.sut.SetTestProvider(s.mdnsProvider)
 }
 
 func (s *MdnsSuite) AfterTest(suiteName, testName string) {
@@ -60,11 +62,14 @@ func (s *MdnsSuite) Test_LongStrings() {
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAvahiOnly)
-	s.sut.mdnsProvider = s.mdnsProvider
+	s.sut.SetTestProvider(s.mdnsProvider)
 
-	_ = s.sut.Start(s.mdnsSearch)
-	// Can't do an assertion check, as the result depends on the
-	// system this test is being ran on
+	err := s.sut.Start(s.mdnsSearch)
+	assert.Nil(s.T(), err)
+	
+	// Verify string truncation works
+	assert.Equal(s.T(), "brandbrandbrandbrandbrandbrandbr", s.sut.deviceBrand)
+	assert.Equal(s.T(), "modelmodelmodelmodelmodelmodelmo", s.sut.deviceModel)
 }
 
 func (s *MdnsSuite) Test_safeQRCodeKeyValue() {
@@ -102,11 +107,13 @@ func (s *MdnsSuite) Test_AvahiOnly() {
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAvahiOnly)
-	s.sut.mdnsProvider = s.mdnsProvider
+	s.sut.SetTestProvider(s.mdnsProvider)
 
-	_ = s.sut.Start(s.mdnsSearch)
-	// Can't do an assertion check, as the result depends on the
-	// system this test is being ran on
+	err := s.sut.Start(s.mdnsSearch)
+	assert.Nil(s.T(), err)
+	
+	// Verify the provider selection is correct
+	assert.Equal(s.T(), MdnsProviderSelectionAvahiOnly, s.sut.providerSelection)
 }
 
 func (s *MdnsSuite) Test_GoZeroConfOnly() {
@@ -117,7 +124,7 @@ func (s *MdnsSuite) Test_GoZeroConfOnly() {
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionGoZeroConfOnly)
-	s.sut.mdnsProvider = s.mdnsProvider
+	s.sut.SetTestProvider(s.mdnsProvider)
 
 	err := s.sut.Start(s.mdnsSearch)
 	assert.Nil(s.T(), err)
@@ -287,4 +294,41 @@ func (s *MdnsSuite) Test_ProcessMdnsEntry() {
 
 	s.sut.processMdnsEntry(elements, name, host, ips, port, true)
 	assert.Equal(s.T(), 0, len(s.sut.mdnsEntries()))
+}
+
+func (s *MdnsSuite) Test_SetTestProvider() {
+	// Test that SetTestProvider allows injection of mock provider
+	mockProvider := s.mdnsProvider
+	mockProvider.On("Announce", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockProvider.On("Unannounce").Return()
+	
+	s.sut.SetTestProvider(mockProvider)
+	
+	err := s.sut.Start(s.mdnsSearch)
+	assert.Nil(s.T(), err)
+	
+	// Verify the injected provider is used
+	assert.Equal(s.T(), mockProvider, s.sut.testProvider)
+	assert.Equal(s.T(), mockProvider, s.sut.mdnsProvider)
+}
+
+func (s *MdnsSuite) Test_ProviderSelection() {
+	// Test that provider selection configurations are preserved
+	testCases := []struct {
+		name      string
+		selection MdnsProviderSelection
+	}{
+		{"All", MdnsProviderSelectionAll},
+		{"AvahiOnly", MdnsProviderSelectionAvahiOnly},
+		{"ZeroconfOnly", MdnsProviderSelectionGoZeroConfOnly},
+	}
+	
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			manager := NewMDNS("test", "brand", "model", "type", "serial",
+				[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
+				"shipid", "serviceName", 4729, nil, tc.selection)
+			assert.Equal(t, tc.selection, manager.providerSelection)
+		})
+	}
 }

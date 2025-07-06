@@ -72,6 +72,9 @@ type MdnsManager struct {
 
 	mdnsProvider api.MdnsProviderInterface
 
+	// testProvider is used to inject mock providers for testing
+	testProvider api.MdnsProviderInterface
+
 	shutdownOnce sync.Once
 
 	providerSelection MdnsProviderSelection
@@ -164,7 +167,11 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 	// assign the cb before mDNS is initialised, so that we don't miss any found services
 	m.report = cb
 
-	switch m.providerSelection {
+	// If a test provider is injected, use it instead of creating a real provider
+	if m.testProvider != nil {
+		m.mdnsProvider = m.testProvider
+	} else {
+		switch m.providerSelection {
 	case MdnsProviderSelectionAll:
 		// First try avahi, if not available use zerconf
 		provider := NewAvahiProvider(ifaceIndexes)
@@ -187,6 +194,7 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 		// Only use Zeroconf
 		m.mdnsProvider = NewZeroconfProvider(ifaces)
 		_ = m.mdnsProvider.Start(true, m.processMdnsEntry)
+		}
 	}
 
 	// on startup always start mDNS announcement
@@ -307,6 +315,11 @@ func (m *MdnsManager) SetAutoAccept(accept bool) {
 	if err := m.AnnounceMdnsEntry(); err != nil {
 		logging.Log().Debug("mdns: changing mdns entry failed", err)
 	}
+}
+
+// SetTestProvider injects a mock provider for testing purposes
+func (m *MdnsManager) SetTestProvider(provider api.MdnsProviderInterface) {
+	m.testProvider = provider
 }
 
 // Returns a safe to use key value pair for the QR code text in the proper format
