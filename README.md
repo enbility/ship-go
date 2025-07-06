@@ -76,6 +76,20 @@ make test-all               # All tests
 make test-ci                # Simulate CI environment
 ```
 
+#### Fast Test Execution with Test Build Tags
+
+The library supports a `test` build tag that reduces timer values for faster test execution:
+
+```bash
+# Run tests with short timers (120x faster)
+go test -tags=test -race ./ship
+
+# Production timers: 60s hello timeout, 10s CMI timeout
+# Test timers: 500ms hello timeout, 500ms CMI timeout
+```
+
+See [ship/TEST_BUILD_TAGS.md](ship/TEST_BUILD_TAGS.md) for detailed documentation on when and how to use test build tags.
+
 ### Development Workflow
 
 ```bash
