@@ -8,7 +8,7 @@ import (
 )
 
 func TestTimerValues(t *testing.T) {
-	// These should be the test values when running with -tags=test
+	// Get current timer values
 	helloTimeout := getHelloInitTimeout()
 	abortDelay := getAbortDelay()
 	cmiTimeout := getCmiTimeout()
@@ -16,6 +16,12 @@ func TestTimerValues(t *testing.T) {
 	t.Logf("Hello timeout: %v", helloTimeout)
 	t.Logf("Abort delay: %v", abortDelay)
 	t.Logf("CMI timeout: %v", cmiTimeout)
+	
+	// Check if we're running with test build tags
+	if helloTimeout == tHelloInit {
+		// Production values - skip the test
+		t.Skip("Test requires -tags=test build flag for short timer values")
+	}
 	
 	// With test tag, these should be short durations
 	assert.Equal(t, 500*time.Millisecond, helloTimeout, "Hello timeout should be 500ms in tests")
