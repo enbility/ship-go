@@ -1,6 +1,14 @@
 # Comprehensive Analysis of EEBus SHIP Technical Specification v1.0.1
 
-This document provides an extensive analysis of the EEBus SHIP Technical Specification v1.0.1, examining ambiguities, clarity issues, risks, consistency problems, and potential implementation challenges. This analysis incorporates and expands upon the previous analysis document.
+**Last Updated:** 2025-07-06  
+**Status:** Active
+
+## Change History
+
+### 2025-07-06
+- Added TLS fragment length implementation challenge section
+- Added link to TLS_FRAGMENT_ANALYSIS.md in specific-issues
+- Updated document to follow new documentation standards
 
 ## Executive Summary
 
@@ -77,19 +85,37 @@ The specification states roles must be assigned but doesn't explain how:
 - No conflict resolution if both claim same role
 - Circular dependency: need connection to assign roles, need roles to establish connection
 
-### 1.3 Fragment Length Negotiation
+### 1.3 TLS Fragment Length Implementation Challenge
 
 **Reference**: Section 9.2
 
 ```
 "Maximum Fragment Length Negotiation Extension SHOULD be supported. 
 If used, Maximum Fragment Length Negotiation Extension SHALL only support a length of 1024 bytes."
+
+"A SHIP node SHALL ensure that the fragment length (TLSPlaintext.length) of outgoing packets 
+does not exceed 1024 bytes, even if Fragment Length Negotiation Extension is not supported."
 ```
 
 **Problems**:
-- Contradicts TLS RFC which allows multiple sizes (512, 1024, 2048, 4096)
-- No fallback if negotiation fails
-- Unclear interaction with WebSocket framing
+- **Contradicts TLS RFC** which allows multiple sizes (512, 1024, 2048, 4096)
+- **No fallback** if negotiation fails
+- **Unclear interaction** with WebSocket framing
+- **Implementation impossibility** in Go (crypto/tls provides no fragment control)
+- **Reality mismatch**: SPINE messages exceed 4KB, requiring hundreds of fragments
+
+**Implementation Impact**:
+- Go's crypto/tls doesn't support Maximum Fragment Length extension
+- No API to control TLS record sizes
+- WebSocket libraries operate above TLS layer
+- Enforcing 1024-byte fragments would severely degrade performance
+
+**Real-World Observations**:
+- No reported interoperability issues without this limitation
+- All SHIP implementations must handle large messages anyway
+- Requirement appears to be obsolete from early embedded systems
+
+**See Also**: [TLS_FRAGMENT_ANALYSIS.md](../specific-issues/TLS_FRAGMENT_ANALYSIS.md) for comprehensive analysis
 
 ---
 

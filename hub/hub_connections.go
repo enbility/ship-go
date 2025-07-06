@@ -76,10 +76,8 @@ func (h *Hub) startWebsocketServer() error {
 // HTTP Server callback for handling incoming connection requests
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.Upgrader{
-		ReadBufferSize:  ws.MaxMessageSize,
-		WriteBufferSize: ws.MaxMessageSize,
-		CheckOrigin:     func(r *http.Request) bool { return true },
-		Subprotocols:    []string{api.ShipWebsocketSubProtocol}, // SHIP 10.2: Sub protocol "ship" is required
+		CheckOrigin:  func(r *http.Request) bool { return true },
+		Subprotocols: []string{api.ShipWebsocketSubProtocol}, // SHIP 10.2: Sub protocol "ship" is required
 	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -108,6 +106,9 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 		return
 	}
+
+	// Set read limit to prevent DoS attacks
+	conn.SetReadLimit(ws.MaxMessageSize)
 
 	// normalize the incoming SKI
 	remoteService := api.NewServiceDetails(ski)
@@ -213,6 +214,9 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 		errorString := fmt.Sprintf("closing connection to %s: ignoring this connection", remoteService.SKI())
 		return errors.New(errorString)
 	}
+
+	// Set read limit to prevent DoS attacks
+	conn.SetReadLimit(ws.MaxMessageSize)
 
 	dataHandler := ws.NewWebsocketConnection(conn, remoteService.SKI())
 	shipConnection := ship.NewConnectionHandler(h, dataHandler, ship.ShipRoleClient,

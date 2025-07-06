@@ -1,6 +1,18 @@
 # SHIP Analysis Documentation - Start Here
 
-**Purpose:** This directory contains comprehensive analysis of the SHIP specification and ship-go implementation. This guide helps you find the right information for your role and needs.
+**Last Updated:** 2025-07-06  
+**Status:** Active
+
+## Change History
+
+### 2025-07-06
+- Updated directory structure to reflect reorganization
+- Added reference to TLS_FRAGMENT_ANALYSIS.md in specific-issues
+- Updated document to follow new documentation standards
+- Renamed SHIP_Requirements_Analysis.md to SHIP_Installation_Requirements_Analysis.md
+- Removed references to unpublished documents
+- Added Document Purpose Guide section
+- Incorporated content from ANALYSIS_HISTORY.md
 
 ## Quick Navigation by Role
 
@@ -23,7 +35,7 @@
 **Deep dive:** [SPEC_DEVIATIONS.md](./detailed-analysis/SPEC_DEVIATIONS.md) for implementation choices
 
 ### 📋 Standards Teams / Protocol Designers
-**Start here:** [SHIP_1.0.1_ANALYSIS.md](./specific-issues/SHIP_1.0.1_ANALYSIS.md)
+**Start here:** [SHIP_1.0.1_ANALYSIS.md](./detailed-analysis/SHIP_1.0.1_ANALYSIS.md)
 - **50+ specification ambiguities documented**
 - Critical issues: double connection race conditions
 - Security contradictions in certificate validation
@@ -47,15 +59,33 @@
   ├── IMPLEMENTATION_QUALITY_ANALYSIS.md   ← Implementation assessment
   ├── SPEC_DEVIATIONS.md                  ← Compliance analysis
   ├── IMPROVEMENT_SUGGESTIONS.md          ← Prioritized fixes
-  └── TLS_SECURITY_ANALYSIS.md            ← Security clarifications
-
-📁 specific-issues/                        ← Protocol & spec analysis
+  ├── TLS_SECURITY_ANALYSIS.md            ← Security clarifications
   ├── SHIP_1.0.1_ANALYSIS.md              ← Base spec analysis
-  └── SHIP_Requirements_Analysis.md        ← Installation requirements
+  └── SHIP_Installation_Requirements_Analysis.md ← Installation requirements
 
-📁 meta/                                   ← Analysis history
-  └── ANALYSIS_HISTORY.md                  ← Version tracking
+📁 specific-issues/                        ← Focused issue analysis
+  ├── TLS_FRAGMENT_ANALYSIS.md            ← TLS fragment length issue
+  ├── TLS_1024_IMPLEMENTATION_EFFORT.md   ← Implementation effort for TLS limit
+  └── OpenSSL_Integration_Analysis.md     ← OpenSSL integration feasibility
+
+📁 meta/                                   ← Supporting documents
+  └── DOCUMENTATION_STANDARDS.md           ← Documentation guidelines
 ```
+
+## Document Purpose Guide
+
+### Technical Analysis Documents (detailed-analysis/)
+- **IMPLEMENTATION_QUALITY_ANALYSIS.md**: Comprehensive quality assessment with 7.5/10 score and 4-phase improvement roadmap
+- **SPEC_DEVIATIONS.md**: All deviations from SHIP v1.0.1 with rationale and impact assessment
+- **IMPROVEMENT_SUGGESTIONS.md**: Prioritized fixes (P1-P4) with effort estimates and quick reference table
+- **TLS_SECURITY_ANALYSIS.md**: Clarifies why `InsecureSkipVerify: true` is correct per SHIP spec
+- **SHIP_1.0.1_ANALYSIS.md**: Documents 50+ specification ambiguities and their implementation impact
+- **SHIP_Installation_Requirements_Analysis.md**: Analysis of installation process ambiguities and risks
+
+### Focused Analysis (specific-issues/)
+- **TLS_FRAGMENT_ANALYSIS.md**: Deep dive into why 1024-byte TLS fragment requirement is not supported in Go
+- **TLS_1024_IMPLEMENTATION_EFFORT.md**: Detailed analysis of effort required to implement TLS fragment limit
+- **OpenSSL_Integration_Analysis.md**: Feasibility study of using OpenSSL to achieve TLS compliance
 
 ## Reading Paths by Goal
 
@@ -70,11 +100,13 @@
 
 ### "I'm facing interoperability issues"
 1. [SPEC_DEVIATIONS.md](./detailed-analysis/SPEC_DEVIATIONS.md) - Key differences affecting compatibility
-2. [SHIP_1.0.1_ANALYSIS.md](./specific-issues/SHIP_1.0.1_ANALYSIS.md) - Spec ambiguities causing variations
-3. [SHIP_Requirements_Analysis.md](./specific-issues/SHIP_Requirements_Analysis.md) - Installation/commissioning issues
+2. [SHIP_1.0.1_ANALYSIS.md](./detailed-analysis/SHIP_1.0.1_ANALYSIS.md) - Spec ambiguities causing variations
+3. [SHIP_Installation_Requirements_Analysis.md](./detailed-analysis/SHIP_Installation_Requirements_Analysis.md) - Installation/commissioning issues
+4. [TLS_FRAGMENT_ANALYSIS.md](./specific-issues/TLS_FRAGMENT_ANALYSIS.md) - TLS fragment length requirements
+5. [TLS_1024_IMPLEMENTATION_EFFORT.md](./specific-issues/TLS_1024_IMPLEMENTATION_EFFORT.md) - How to implement if required
 
 ### "I need to implement SHIP protocol"
-1. [SHIP_1.0.1_ANALYSIS.md](./specific-issues/SHIP_1.0.1_ANALYSIS.md) - Critical ambiguities to navigate
+1. [SHIP_1.0.1_ANALYSIS.md](./detailed-analysis/SHIP_1.0.1_ANALYSIS.md) - Critical ambiguities to navigate
 2. [IMPLEMENTATION_QUALITY_ANALYSIS.md](./detailed-analysis/IMPLEMENTATION_QUALITY_ANALYSIS.md) - Lessons learned
 3. [SPEC_DEVIATIONS.md](./detailed-analysis/SPEC_DEVIATIONS.md) - Reasonable implementation choices
 4. [TLS_SECURITY_ANALYSIS.md](./detailed-analysis/TLS_SECURITY_ANALYSIS.md) - Security model understanding
@@ -121,17 +153,3 @@
 | P3 | PIN verification | Feature gap | Medium | Implement if needed |
 | P4 | Fragment negotiation | Edge cases | Low | Monitor for issues |
 
----
-
-**Last Updated:** 2025-07-03  
-**Analysis Version:** 1.0 - Comprehensive review of SHIP v1.0.1 and ship-go implementation
-
----
-
-## Version History
-
-### Version 1.0 (2025-07-03)
-- Initial comprehensive analysis of SHIP specifications
-- Complete implementation quality assessment
-- Security model clarification
-- Prioritized improvement recommendations

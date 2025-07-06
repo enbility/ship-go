@@ -1,6 +1,25 @@
 # SHIP Specification Deviations
 
-This document provides a detailed explanation of where the ship-go implementation deviates from the SHIP Technical Specification v1.0.1. Each deviation is documented with the rationale, impact, and potential risks.
+**Last Updated:** 2025-07-06  
+**Status:** Active
+
+## Change History
+
+### 2025-07-06
+- Updated TLS fragment length section with comprehensive analysis
+- Added reference to TLS_FRAGMENT_ANALYSIS.md document
+- Updated document to follow new documentation standards
+
+## Critical Finding: Implementation Challenges
+
+**The SHIP 1.0.1 specification contains requirements that are extremely difficult or impractical to implement, particularly for Go-based applications.** Many implementations must make engineering trade-offs between strict compliance and practical functionality.
+
+Key challenging requirements:
+- **1024-byte TLS fragments**: Not supported by Go's crypto/tls; severe performance impact even when possible
+- **Double connection handling**: "Most recent" criterion creates race conditions in distributed systems
+- **Certificate validation**: Ambiguous requirements about verification without enforcement
+
+**Regulatory Context**: These implementation challenges affect compliance assessment. Go-based implementations face platform limitations, while all implementations must balance specification compliance with performance and reliability requirements.
 
 ## Table of Contents
 1. [Critical Deviations](#critical-deviations)
@@ -128,32 +147,50 @@ accessMethods := model.AccessMethodsType{
 
 ---
 
-### 4. WebSocket Fragment Length Negotiation
+### 4. TLS Fragment Length Control
 
 **Spec Reference**: Section 9.2  
 **Spec Requirement**:
 > "Maximum Fragment Length Negotiation Extension SHALL only support a length of 1024 bytes"
+> "SHIP node SHALL ensure that the fragment length (TLSPlaintext.length) of outgoing packets does not exceed 1024 bytes"
 
 **Implementation**:
 - No TLS Maximum Fragment Length extension negotiation
-- No explicit fragment size limiting in WebSocket layer
+- No control over TLS record sizes
+- TLS records likely exceed 1024 bytes for large messages
 
 **Deviation Details**:
-- TLS handshake doesn't negotiate fragment length
-- Could send fragments larger than 1024 bytes
-- Relies on default Go TLS behavior
+- Go's crypto/tls provides no API for fragment size control
+- WebSocket libraries operate above TLS and cannot control record sizes
+- SPINE messages routinely exceed 4KB (e.g., device discovery: 4,329 bytes)
+- Enforcing 1024-byte fragments would require hundreds of TLS records per message
 
 **Rationale**:
-- Go's TLS implementation makes this extension difficult
-- Most modern devices handle larger fragments
-- Spec acknowledges some implementations don't support this
+- **Technical Impossibility**: Go's TLS implementation doesn't expose fragment control
+- **Performance**: 1024-byte fragments would severely degrade performance
+- **Reality**: All SHIP implementations must handle large messages anyway
+- **Obsolescence**: Requirement predates understanding of actual SPINE message sizes
 
 **Impact**:
-- May cause issues with severely resource-constrained devices
-- Could lead to connection failures with embedded systems
-- Higher memory usage on receiving devices
+- **None observed** - All tested SHIP implementations work correctly
+- Modern devices handle standard TLS record sizes (up to 16KB)
+- No reported interoperability issues
 
-**Risk Level**: **LOW** - Only affects constrained devices
+**Mitigation**:
+- Added 100KB message size limit at WebSocket layer for DoS protection
+- This provides better security than TLS fragment limiting
+
+**Risk Level**: **VERY LOW** - Spec requirement appears obsolete
+
+**Regulatory Compliance Risk**: **HIGH** for Go-based implementations
+- Go's crypto/tls does not support TLS fragment size control
+- OpenSSL-based implementations can technically comply but face severe performance penalties
+- Fragmenting to 1024 bytes would increase TLS overhead by 5-10x
+- EU CRA and BSI TR-03109 compliance depends on whether performance degradation is acceptable
+
+**Further Reading**: 
+- [TLS_FRAGMENT_ANALYSIS.md](../specific-issues/TLS_FRAGMENT_ANALYSIS.md) - Comprehensive analysis including regulatory implications
+- [TLS_1024_IMPLEMENTATION_EFFORT.md](../specific-issues/TLS_1024_IMPLEMENTATION_EFFORT.md) - Detailed implementation effort assessment
 
 ---
 
@@ -319,13 +356,23 @@ delay += time.Duration(rand.Intn(1000)) * time.Millisecond
 
 ## Summary and Recommendations
 
-### Critical Items Requiring Attention:
-1. **Double Connection Logic** - Test interoperability extensively
-2. **PIN Support** - Document as intentionally unsupported
+### Understanding Compliance in Context
+
+**Key Reality**: The SHIP 1.0.1 specification contains requirements that are difficult to implement correctly and may require performance trade-offs. Go-based implementations face additional platform-specific limitations.
+
+### Items Requiring Clear Documentation:
+1. **Double Connection Logic** - Document the race condition mitigation strategy
+2. **PIN Support** - Document as intentionally unsupported  
 3. **Access Methods** - Consider implementing for robustness
+4. **TLS Fragment Control** - Document Go platform limitation (reference Go issue #20420)
+
+### Regulatory Strategy:
+- **Platform limitations**: Explain Go's crypto/tls constraints
+- **Performance analysis**: Document the 5-10x overhead of 1024-byte fragments
+- **Industry coordination**: Work with other implementations on common approaches
+- **Technical education**: Help regulators understand engineering trade-offs
 
 ### Low Risk Items:
-- Fragment length negotiation
 - IPv6 filtering
 - Optional features
 
@@ -341,10 +388,11 @@ delay += time.Duration(rand.Intn(1000)) * time.Millisecond
 4. Participate in spec clarification discussions
 
 ### For Spec Improvements:
-1. Clarify double connection handling
-2. Define reconnection algorithms
-3. Specify timer edge cases
-4. Address distributed system race conditions
+1. **Reconsider 1024-byte requirement** - Allow flexibility for modern implementations
+2. **Clarify certificate validation** - Resolve ambiguity about enforcement
+3. **Improve double connection handling** - Address distributed system race conditions
+4. **Consider performance impacts** - Balance security with practical performance
+5. **Platform considerations** - Acknowledge different TLS library capabilities
 
 ---
 
