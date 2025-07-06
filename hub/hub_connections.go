@@ -140,8 +140,8 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // return if there is a connection for a SKI
 func (h *Hub) isSkiConnected(ski string) bool {
-	h.muxCon.Lock()
-	defer h.muxCon.Unlock()
+	h.muxCon.RLock()
+	defer h.muxCon.RUnlock()
 
 	// The connection with the higher SKI should retain the connection
 	_, ok := h.connections[ski]
@@ -423,8 +423,8 @@ func (h *Hub) removeConnectionAttemptCounter(ski string) {
 
 // get the current attempt counter
 func (h *Hub) getCurrentConnectionAttemptCounter(ski string) (int, bool) {
-	h.muxConAttempt.Lock()
-	defer h.muxConAttempt.Unlock()
+	h.muxConAttempt.RLock()
+	defer h.muxConAttempt.RUnlock()
 
 	counter, exists := h.connectionAttemptCounter[ski]
 
@@ -461,8 +461,8 @@ func (h *Hub) setConnectionAttemptRunning(ski string, active bool) {
 
 // return if a connection attempt is runnning/in progress
 func (h *Hub) isConnectionAttemptRunning(ski string) bool {
-	h.muxConAttempt.Lock()
-	defer h.muxConAttempt.Unlock()
+	h.muxConAttempt.RLock()
+	defer h.muxConAttempt.RUnlock()
 
 	running, exists := h.connectionAttemptRunning[ski]
 	if !exists {
@@ -482,8 +482,8 @@ func (h *Hub) registerConnection(connection api.ShipConnectionInterface) {
 
 // return the connection for a specific SKI
 func (h *Hub) connectionForSKI(ski string) api.ShipConnectionInterface {
-	h.muxCon.Lock()
-	defer h.muxCon.Unlock()
+	h.muxCon.RLock()
+	defer h.muxCon.RUnlock()
 
 	con, ok := h.connections[ski]
 	if !ok {

@@ -16,9 +16,14 @@ const (
 	cmiCloseTimeout         = 100 * time.Millisecond
 	tHelloInit              = 60 * time.Second // SHIP 13.4.4.1.3
 	tHelloInc               = 60 * time.Second
-	tHelloProlongThrInc     = 30 * time.Second
 	tHelloProlongWaitingGap = 15 * time.Second
-	tHelloProlongMin        = 1 * time.Second
+)
+
+// Variables that can be overridden in tests
+var (
+	tHelloProlongMin    = 1 * time.Second  // Minimum prolongation time
+	tHelloProlongThrInc = 30 * time.Second // Prolongation threshold increment
+	tAbortDelay         = 1 * time.Second  // Delay before closing connection after abort state
 )
 
 type timeoutTimerType uint

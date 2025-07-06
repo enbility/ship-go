@@ -37,6 +37,12 @@ jobs:
       - name: Test
         run: go test -race -v -coverprofile=coverage_temp.out  -covermode=atomic ./...
 
+      - name: Deadlock Detection Tests
+        run: go test -race -tags=deadlock -timeout=30s -v ./ship ./hub
+
+      - name: Stress Tests
+        run: go test -race -tags=stress -timeout=60s ./ship ./hub
+
       - name: Remove mocks from coverage
         run: grep -v "/ship-go/mocks/" coverage_temp.out > coverage.out
 

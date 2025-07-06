@@ -75,15 +75,15 @@ func (h *Hub) SetAutoAccept(autoaccept bool) {
 
 // check if auto accept is true
 func (h *Hub) IsAutoAcceptEnabled() bool {
-	h.muxReg.Lock()
-	defer h.muxReg.Unlock()
+	h.muxReg.RLock()
+	defer h.muxReg.RUnlock()
 
 	return h.autoaccept
 }
 
 func (h *Hub) checkHasStarted() bool {
-	h.muxStarted.Lock()
-	defer h.muxStarted.Unlock()
+	h.muxStarted.RLock()
+	defer h.muxStarted.RUnlock()
 	return h.hasStarted
 }
 

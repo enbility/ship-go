@@ -21,10 +21,11 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
 | Double Connection Deviation | P1 | High | Interoperability | ⚠️ Different approach |
 | Resource Leaks on Error | P1 | High | Reliability | ⚠️ Needs audit |
 | Race Conditions | P2 | High | Reliability | ✅ Fixed |
+| Potential Deadlocks | P2 | High | Reliability | ✅ Fixed |
 | Fragment Length Negotiation | P2 | Medium | Interoperability | ❌ Not implemented |
 | Access Methods Limited | P2 | Medium | Functionality | ⚠️ Partial |
 | Test Coverage | P2 | High | Reliability | ⚠️ ~70% |
-| Lock Contention | P2 | Medium | Performance | ⚠️ Needs optimization |
+| Lock Contention | P2 | Medium | Performance | ✅ Optimized (RWMutex) |
 | Certificate Expiry Warnings | P3 | Low | Monitoring | ❌ Not implemented |
 | JSON-UTF16 Support | P4 | Low | Compatibility | ❌ Optional feature |
 
@@ -177,17 +178,27 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
   - Add leak detection tests
   - Implement connection tracking
 
-### 3.3 Potential Deadlocks
+### 3.3 Potential Deadlocks ✅ FIXED
 - **Priority**: P2
 - **Severity**: High
 - **Impact**: Reliability - Application hang
 - **Location**: Nested lock acquisitions
 - **Issue**: Multiple locks acquired in different orders
-- **Recommendation**:
-  - Document lock ordering requirements
-  - Use deadlock detection in tests
-  - Refactor to reduce lock nesting
-  - Consider lock-free alternatives
+- **Status**: **RESOLVED** - Implemented comprehensive deadlock prevention
+- **Resolution**:
+  - ✅ Fixed setState() deadlock with two-phase state updates
+  - ✅ Documented lock ordering hierarchy (muxReg → muxCon → muxConAttempt → muxMdns → muxStarted)
+  - ✅ Converted 7 hub methods to use RWMutex for better concurrency
+  - ✅ Added go-deadlock integration for enhanced detection
+  - ✅ Created comprehensive deadlock detection tests
+  - ✅ Added stress tests for high-concurrency scenarios
+  - ✅ Integrated deadlock tests into CI/CD pipeline
+  - ✅ Created concurrency guides for future development
+- **Implementation Details**:
+  - Two-phase state updates separate lock acquisition from timer operations
+  - Prevents circular dependencies between mutex and timer operations
+  - RWMutex optimization for read-heavy operations improves performance
+  - Atomic operations for pending state transitions prevent races
 
 ### 3.4 Race Conditions ✅ FIXED
 - **Priority**: P2
@@ -208,17 +219,22 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
 
 ## 4. Performance Issues
 
-### 4.1 Lock Contention
+### 4.1 Lock Contention ✅ OPTIMIZED
 - **Priority**: P2
 - **Severity**: Medium
 - **Impact**: Performance - Reduced throughput
 - **Location**: Multiple components with nested mutexes
 - **Issue**: Heavy mutex usage across layers
-- **Recommendation**:
-  - Use sync.Map for concurrent-safe maps
-  - Implement reader-writer locks where appropriate
-  - Add mutex contention profiling
-  - Consider channel-based coordination
+- **Status**: **IMPROVED** - Implemented RWMutex optimizations
+- **Resolution**:
+  - ✅ Converted 7 hub methods to use RWMutex (connectionForSKI, isSkiConnected, etc.)
+  - ✅ Documented lock ordering to prevent deadlocks
+  - ✅ Added comprehensive benchmarks for lock contention
+  - ✅ Reduced lock hold times with two-phase state updates
+- **Remaining Optimizations**:
+  - Consider sync.Map for SKI->Connection lookups
+  - Add mutex contention profiling for production monitoring
+  - Consider channel-based coordination for some patterns
 
 ### 4.2 Excessive Buffer Allocation
 - **Priority**: P3

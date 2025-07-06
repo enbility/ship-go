@@ -46,40 +46,51 @@ func (c *ShipConnection) handleShipMessage(timeout bool, message []byte) {
 
 // set a new handshake state and handle timers if needed
 func (c *ShipConnection) setState(newState model.ShipMessageExchangeState, err error) {
+	// Phase 1: Update state atomically while holding lock
+	var timerOp func()
+	var shouldNotify bool
+	var notifyState model.ShipState
+	
 	c.mux.Lock()
-
 	oldState := c.smeState
-
 	c.smeState = newState
 	logging.Log().Trace(c.RemoteSKI(), "SHIP state changed to:", newState)
 
+	// Determine timer operation while holding lock, but don't execute it yet
 	switch newState {
 	case model.SmeHelloStateReadyInit:
-		c.setHandshakeTimer(timeoutTimerTypeWaitForReady, tHelloInit)
+		timerOp = func() { c.setHandshakeTimer(timeoutTimerTypeWaitForReady, getHelloInitTimeout()) }
 	case model.SmeHelloStatePendingInit:
-		c.setHandshakeTimer(timeoutTimerTypeWaitForReady, tHelloInit)
+		timerOp = func() { c.setHandshakeTimer(timeoutTimerTypeWaitForReady, getHelloInitTimeout()) }
 	case model.SmeHelloStateOk:
-		c.stopHandshakeTimer()
+		timerOp = func() { c.stopHandshakeTimer() }
 	case model.SmeHelloStateAbort, model.SmeHelloStateAbortDone, model.SmeHelloStateRemoteAbortDone, model.SmeHelloStateRejected:
-		c.stopHandshakeTimer()
+		timerOp = func() { c.stopHandshakeTimer() }
 	case model.SmeProtHStateClientListenChoice:
-		c.setHandshakeTimer(timeoutTimerTypeWaitForReady, cmiTimeout)
+		timerOp = func() { c.setHandshakeTimer(timeoutTimerTypeWaitForReady, getCmiTimeout()) }
 	case model.SmeProtHStateClientOk:
-		c.stopHandshakeTimer()
+		timerOp = func() { c.stopHandshakeTimer() }
 	}
 
 	c.smeError = nil
 	if oldState != newState {
 		c.smeError = err
-		state := model.ShipState{
+		shouldNotify = true
+		notifyState = model.ShipState{
 			State: newState,
 			Error: err,
 		}
-		c.mux.Unlock()
-		c.infoProvider.HandleShipHandshakeStateUpdate(c.remoteSKI, state)
-		return
 	}
 	c.mux.Unlock()
+
+	// Phase 2: Execute timer operations and notifications without holding lock
+	if timerOp != nil {
+		timerOp()
+	}
+	
+	if shouldNotify {
+		c.infoProvider.HandleShipHandshakeStateUpdate(c.remoteSKI, notifyState)
+	}
 }
 
 func (c *ShipConnection) getState() model.ShipMessageExchangeState {
@@ -153,7 +164,7 @@ func (c *ShipConnection) handleState(timeout bool, message []byte) {
 
 	case model.SmeHelloStateAbortDone, model.SmeHelloStateRemoteAbortDone:
 		go func() {
-			<-time.After(time.Second)
+			<-time.After(tAbortDelay)
 			c.CloseConnection(false, 4452, "Node rejected by application")
 		}()
 

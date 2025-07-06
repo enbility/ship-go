@@ -32,6 +32,92 @@ Includes:
   - [EXECUTIVE_SUMMARY.md](analysis-docs/EXECUTIVE_SUMMARY.md) - Business-level overview with key findings (implementation score: 7.5/10)
   - Detailed technical analysis including security model, specification deviations, and improvement roadmap
 
+- **Concurrency Guides** - Thread safety and deadlock prevention
+  - [Hub Concurrency Guide](hub/CONCURRENCY_GUIDE.md) - Lock ordering and thread safety patterns
+  - [Ship Concurrency Guide](ship/CONCURRENCY_GUIDE.md) - Connection concurrency patterns
+
+- **Testing Documentation** - Additional testing resources
+  - [Tests Directory](tests/) - Testing guides and utilities
+
+## Development
+
+### Quick Start
+
+```bash
+# Build the project
+make build
+
+# Run tests with race detection
+make test-race
+
+# Run deadlock detection tests
+make test-deadlock
+
+# Complete development test cycle
+make dev-test
+```
+
+### Testing
+
+```bash
+# Standard testing
+make test                    # Basic tests
+make test-race              # Race detection
+make test-short             # Quick tests only
+
+# Concurrency testing
+make test-deadlock          # Deadlock detection
+make test-deadlock-specific # Core deadlock tests only
+make test-stress            # High-load stress tests
+make test-concurrency       # All concurrency tests
+
+# Comprehensive testing
+make test-all               # All tests
+make test-ci                # Simulate CI environment
+```
+
+### Development Workflow
+
+```bash
+# Quick development cycle
+make dev-test               # Format, lint, and test
+
+# Pre-commit validation
+make pre-commit             # Complete validation
+
+# Performance monitoring
+make benchmark              # Run benchmarks
+make profile-cpu            # Generate CPU profile
+```
+
+### Debugging Concurrency Issues
+
+```bash
+# Debug deadlocks
+make debug-deadlock         # Verbose deadlock testing
+make test-multicore         # Test with different core counts
+
+# Debug race conditions  
+make debug-race             # Multiple test runs
+make test-race-verbose      # Detailed race output
+
+# Performance debugging
+make benchmark-contention   # Lock contention analysis
+```
+
+### CI/CD Integration
+
+The project includes comprehensive CI/CD testing:
+
+- **Standard workflow**: Runs on every push/PR with race detection and deadlock tests
+- **Concurrency workflow**: Enhanced testing for concurrency-critical changes
+- **Nightly monitoring**: Continuous validation of thread safety
+
+Local simulation of CI tests:
+```bash
+make test-ci               # Run exactly what CI runs
+```
+
 ## Implementation notes
 
 - Double connection handling is not implemented according to SHIP 12.2.2. Instead the connection initiated by the higher SKI will be kept. Much simpler and always works

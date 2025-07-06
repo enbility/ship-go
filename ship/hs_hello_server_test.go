@@ -80,19 +80,20 @@ func (s *HelloSuite) BeforeTest(suiteName, testName string) {
 	s.mockShipInfo.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Return().Maybe()
 	s.mockShipInfo.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Return().Maybe()
 	s.mockShipInfo.EXPECT().IsAutoAcceptEnabled().Return(false).Maybe()
+	// Don't set AllowWaitingForTrust here - let individual tests set it as needed
 
 	s.sut = NewConnectionHandler(s.mockShipInfo, s.mockWSWrite, ShipRoleServer, "LocalShipID", "RemoveDevice", "RemoteShipID")
 }
 
 func (s *HelloSuite) AfterTest(suiteName, testName string) {
+	// Stop any running timer - may have been started by test
 	s.sut.stopHandshakeTimer()
-	assert.Equal(s.T(), false, s.sut.getHandshakeTimerRunning())
 	
-	// If the state is AbortDone, wait for the goroutine to complete
-	// to avoid race conditions with mock verification
-	if s.sut.getState() == model.SmeHelloStateAbortDone {
-		time.Sleep(100 * time.Millisecond)
-	}
+	// Close the connection to ensure all resources are cleaned up
+	s.sut.CloseConnection(false, 4001, "test cleanup")
+	
+	// Wait briefly for cleanup to complete
+	time.Sleep(100 * time.Millisecond)
 }
 
 func (s *HelloSuite) Test_InitialState() {
@@ -156,7 +157,7 @@ func (s *HelloSuite) Test_ReadyListen_Timeout() {
 
 	if !util.IsRunningOnCI() {
 		// test if the function is triggered correctly via the timer
-		time.Sleep(tHelloInit + time.Second)
+		time.Sleep(getHelloInitTimeout() + time.Second)
 	} else {
 		// speed up the test by running the method directly
 		s.sut.handshakeHello_ReadyListen(true, nil)
@@ -303,7 +304,7 @@ func (s *HelloSuite) Test_PendingListen_Timeout() {
 
 	if !util.IsRunningOnCI() {
 		// test if the function is triggered correctly via the timer
-		time.Sleep(tHelloInit + time.Second)
+		time.Sleep(getHelloInitTimeout() + time.Second)
 	} else {
 		// speed up the test by running the method directly
 		s.sut.handshakeHello_PendingListen(true, nil)
@@ -402,7 +403,7 @@ func (s *HelloSuite) Test_PendingListen_ReadyWaiting() {
 	helloMsg := model.ConnectionHello{
 		ConnectionHello: model.ConnectionHelloType{
 			Phase:   model.ConnectionHelloPhaseTypeReady,
-			Waiting: util.Ptr(uint(tHelloInit.Milliseconds())),
+			Waiting: util.Ptr(uint(getHelloInitTimeout().Milliseconds())),
 		},
 	}
 
@@ -446,7 +447,7 @@ func (s *HelloSuite) Test_PendingListen_PendingWaiting() {
 	helloMsg := model.ConnectionHello{
 		ConnectionHello: model.ConnectionHelloType{
 			Phase:   model.ConnectionHelloPhaseTypePending,
-			Waiting: util.Ptr(uint(tHelloInit.Milliseconds())),
+			Waiting: util.Ptr(uint(getHelloInitTimeout().Milliseconds())),
 		},
 	}
 

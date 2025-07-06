@@ -57,11 +57,11 @@ type Hub struct {
 
 	hasStarted bool
 
-	muxCon        sync.Mutex
-	muxConAttempt sync.Mutex
-	muxReg        sync.Mutex
+	muxCon        sync.RWMutex
+	muxConAttempt sync.RWMutex
+	muxReg        sync.RWMutex
 	muxMdns       sync.Mutex
-	muxStarted    sync.Mutex
+	muxStarted    sync.RWMutex
 }
 
 func NewHub(hubReader api.HubReaderInterface,
@@ -140,13 +140,13 @@ func (h *Hub) ServiceForSKI(ski string) *api.ServiceDetails {
 func (h *Hub) numberPairedServices() int {
 	amount := 0
 
-	h.muxReg.Lock()
+	h.muxReg.RLock()
 	for _, service := range h.remoteServices {
 		if service.Trusted() {
 			amount++
 		}
 	}
-	h.muxReg.Unlock()
+	h.muxReg.RUnlock()
 
 	return amount
 }
@@ -154,9 +154,9 @@ func (h *Hub) numberPairedServices() int {
 // startup mDNS if a paired service is not connected
 func (h *Hub) checkAutoReannounce() {
 	countPairedServices := h.numberPairedServices()
-	h.muxCon.Lock()
+	h.muxCon.RLock()
 	countConnections := len(h.connections)
-	h.muxCon.Unlock()
+	h.muxCon.RUnlock()
 
 	if countPairedServices > countConnections {
 		_ = h.mdns.AnnounceMdnsEntry()

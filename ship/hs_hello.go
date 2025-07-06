@@ -12,7 +12,7 @@ import (
 
 // SME_HELLO_STATE_READY_INIT
 func (c *ShipConnection) handshakeHello_Init() {
-	if err := c.handshakeHelloSend(model.ConnectionHelloPhaseTypeReady, tHelloInit, false); err != nil {
+	if err := c.handshakeHelloSend(model.ConnectionHelloPhaseTypeReady, getHelloInitTimeout(), false); err != nil {
 		c.setAndHandleState(model.SmeHelloStateAbort)
 		return
 	}
@@ -50,10 +50,10 @@ func (c *ShipConnection) handshakeHello_ReadyListen(timeout bool, message []byte
 		if *hello.ProlongationRequest {
 			if c.infoProvider.AllowWaitingForTrust(c.remoteSKI) {
 				// re-init timer
-				c.setHandshakeTimer(timeoutTimerTypeWaitForReady, tHelloInit)
+				c.setHandshakeTimer(timeoutTimerTypeWaitForReady, getHelloInitTimeout())
 			}
 
-			if err := c.handshakeHelloSend(model.ConnectionHelloPhaseTypeReady, tHelloInit, false); err != nil {
+			if err := c.handshakeHelloSend(model.ConnectionHelloPhaseTypeReady, getHelloInitTimeout(), false); err != nil {
 				c.endHandshakeWithError(err)
 			}
 
@@ -96,7 +96,7 @@ func (c *ShipConnection) handshakeHello_Abort() {
 
 // SME_HELLO_PENDING_INIT
 func (c *ShipConnection) handshakeHello_PendingInit() {
-	if err := c.handshakeHelloSend(model.ConnectionHelloPhaseTypePending, tHelloInit, false); err != nil {
+	if err := c.handshakeHelloSend(model.ConnectionHelloPhaseTypePending, getHelloInitTimeout(), false); err != nil {
 		c.endHandshakeWithError(err)
 		return
 	}
@@ -189,7 +189,7 @@ func (c *ShipConnection) handshakeHello_PendingListen(timeout bool, message []by
 
 		if hello.Waiting == nil && hello.ProlongationRequest != nil && *hello.ProlongationRequest {
 			// if we got a prolongation request, accept it
-			if err := c.handshakeHelloSend(model.ConnectionHelloPhaseTypePending, tHelloInit, false); err != nil {
+			if err := c.handshakeHelloSend(model.ConnectionHelloPhaseTypePending, getHelloInitTimeout(), false); err != nil {
 				c.endHandshakeWithError(err)
 			}
 
@@ -219,7 +219,7 @@ func (c *ShipConnection) handshakeHello_PendingProlongationRequest() {
 	}
 
 	// TODO: we need to set the timer to the last received waiting value
-	c.setHandshakeTimer(timeoutTimerTypeProlongRequestReply, tHelloInit)
+	c.setHandshakeTimer(timeoutTimerTypeProlongRequestReply, getHelloInitTimeout())
 }
 
 func (c *ShipConnection) handshakeHello_PendingTimeout() {
@@ -234,7 +234,7 @@ func (c *ShipConnection) handshakeHello_PendingTimeout() {
 	}
 
 	if c.lastReceivedWaitingValue == 0 {
-		newValue := float64(tHelloInit.Milliseconds()) * 1.1
+		newValue := float64(getHelloInitTimeout().Milliseconds()) * 1.1
 		c.lastReceivedWaitingValue = time.Duration(newValue)
 	}
 	c.setHandshakeTimer(timeoutTimerTypeProlongRequestReply, c.lastReceivedWaitingValue)
