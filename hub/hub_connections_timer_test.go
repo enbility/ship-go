@@ -11,6 +11,7 @@ import (
 
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/mocks"
+	"github.com/enbility/ship-go/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -44,6 +45,47 @@ func setupTestHubForTimer(t *testing.T) *Hub {
 // generateTestSKI generates a test SKI
 func generateTestSKI(index int) string {
 	return fmt.Sprintf("test-ski-%d", index)
+}
+
+// TestConnectionDelayTimerCancellationQuick tests timer cancellation without waiting for expiry
+func TestConnectionDelayTimerCancellationQuick(t *testing.T) {
+	hub := setupTestHubForTimer(t)
+	hub.Start()
+	defer hub.Shutdown()
+	
+	initialGoroutines := runtime.NumGoroutine()
+	
+	// Create and immediately cancel timers
+	for i := 0; i < 50; i++ {
+		ski := generateTestSKI(i)
+		entry := &api.MdnsEntry{
+			Name:       "device-" + ski,
+			Identifier: ski,
+			Register:   true,
+		}
+		
+		// Register service as paired
+		service := api.NewServiceDetails(ski)
+		service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
+		hub.muxReg.Lock()
+		hub.remoteServices[ski] = service
+		hub.muxReg.Unlock()
+		
+		// Start connection (creates timer)
+		hub.coordinateConnectionInitations(ski, entry)
+		
+		// Immediately simulate successful connection (cancels timer)
+		mockConn := mocks.NewShipConnectionInterface(t)
+		mockConn.EXPECT().RemoteSKI().Return(ski).Maybe()
+		mockConn.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
+		hub.registerConnection(mockConn)
+	}
+	
+	// Verify no goroutine growth
+	time.Sleep(100 * time.Millisecond) // Brief pause for cleanup
+	finalGoroutines := runtime.NumGoroutine()
+	assert.LessOrEqual(t, finalGoroutines-initialGoroutines, 2, 
+		"goroutines should not accumulate with proper timer cancellation")
 }
 
 // TestConnectionDelayTimerLeak tests for timer goroutine leaks in connection coordination
@@ -112,6 +154,11 @@ func TestConnectionDelayTimerLeak(t *testing.T) {
 			t.Skip("Skipping long-running test in short mode")
 		}
 		
+		// Skip in CI to prevent timeouts - use TestConnectionDelayTimerCancellationQuick instead
+		if util.IsRunningOnCI() {
+			t.Skip("Skipping long-running test in CI")
+		}
+		
 		hub := setupTestHubForTimer(t)
 		hub.Start()
 		defer hub.Shutdown()
@@ -166,7 +213,8 @@ func TestConnectionDelayTimerLeak(t *testing.T) {
 		}
 		
 		// Wait for all timers to expire
-		time.Sleep(12 * time.Second)
+		// With 2 attempts, max delay is 10s (second attempt: 3-10s range)
+		time.Sleep(11 * time.Second)
 		
 		// Final goroutine check
 		finalGoroutines := runtime.NumGoroutine()
