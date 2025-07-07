@@ -20,6 +20,43 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// connectionDelayTimer manages a cancellable timer for connection delays
+type connectionDelayTimer struct {
+	timer *time.Timer
+	done  chan struct{}
+}
+
+// newConnectionDelayTimer creates a new cancellable timer
+func newConnectionDelayTimer(duration time.Duration, f func()) *connectionDelayTimer {
+	cdt := &connectionDelayTimer{
+		done: make(chan struct{}),
+	}
+	
+	cdt.timer = time.AfterFunc(duration, func() {
+		select {
+		case <-cdt.done:
+			// Timer was cancelled, don't run the function
+			return
+		default:
+			// Timer not cancelled, run the function
+			f()
+		}
+	})
+	
+	return cdt
+}
+
+// Stop cancels the timer if it hasn't fired yet
+func (cdt *connectionDelayTimer) Stop() bool {
+	if cdt.timer.Stop() {
+		// Timer was stopped before firing
+		close(cdt.done)
+		return true
+	}
+	// Timer already fired or was stopped
+	return false
+}
+
 // Websocket connection handling
 func (h *Hub) verifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 	skiFound := false
@@ -243,8 +280,12 @@ func (h *Hub) keepThisConnection(conn *websocket.Conn, incomingRequest bool, rem
 	// different approach: The connection initiated by the higher SKI will be kept
 
 	remoteSKI := remoteService.SKI()
-	existingC := h.connectionForSKI(remoteSKI)
-	if existingC == nil {
+	
+	// Atomic check-and-action to prevent TOCTOU race conditions
+	h.muxCon.Lock()
+	existingC, exists := h.connections[remoteSKI]
+	if !exists {
+		h.muxCon.Unlock()
 		return true
 	}
 
@@ -258,9 +299,18 @@ func (h *Hub) keepThisConnection(conn *websocket.Conn, incomingRequest bool, rem
 	if keep {
 		// we have an existing connection
 		// so keep the new (most recent) and close the old one
+		// Atomically remove the old connection while holding the lock
+		delete(h.connections, remoteSKI)
+		h.muxCon.Unlock()
+		
 		logging.Log().Debug("closing existing double connection")
-		go existingC.CloseConnection(false, 0, "")
+		// Close the old connection outside the lock to prevent deadlock
+		go func(oldConn api.ShipConnectionInterface) {
+			oldConn.CloseConnection(false, 0, "")
+		}(existingC)
 	} else {
+		h.muxCon.Unlock()
+		
 		connType := "incoming"
 		if !incomingRequest {
 			connType = "outgoing"
@@ -298,14 +348,13 @@ func (h *Hub) coordinateConnectionInitations(ski string, entry *api.MdnsEntry) {
 
 	logging.Log().Debugf("delaying connection to %s by %s to minimize double connection probability", ski, duration)
 
-	// we do not stop this thread and just let the timer run out
-	// otherwise we would need a stop channel for each ski
-	go func() {
-		// wait
-		<-time.After(duration)
-
+	// Create a cancellable timer
+	timer := newConnectionDelayTimer(duration, func() {
 		h.prepareConnectionInitation(ski, counter, entry)
-	}()
+	})
+	
+	// Store the timer so it can be cancelled if needed
+	h.storeConnectionDelayTimer(ski, timer)
 }
 
 // invoked by coordinateConnectionInitations either with a delay or directly
@@ -477,7 +526,11 @@ func (h *Hub) registerConnection(connection api.ShipConnectionInterface) {
 	h.muxCon.Lock()
 	defer h.muxCon.Unlock()
 
-	h.connections[connection.RemoteSKI()] = connection
+	ski := connection.RemoteSKI()
+	h.connections[ski] = connection
+	
+	// Cancel any pending connection delay timer since connection succeeded
+	h.cancelConnectionDelayTimer(ski)
 }
 
 // return the connection for a specific SKI
@@ -513,4 +566,28 @@ func (h *Hub) UnregisterConnectionIfMatch(ski string, conn api.ShipConnectionInt
 	
 	delete(h.connections, ski)
 	return true
+}
+
+// storeConnectionDelayTimer stores a timer for a SKI, cancelling any existing timer
+func (h *Hub) storeConnectionDelayTimer(ski string, timer *connectionDelayTimer) {
+	h.muxTimers.Lock()
+	defer h.muxTimers.Unlock()
+	
+	// Cancel any existing timer
+	if existing, ok := h.connectionDelayTimers[ski]; ok {
+		existing.Stop()
+	}
+	
+	h.connectionDelayTimers[ski] = timer
+}
+
+// cancelConnectionDelayTimer cancels and removes a timer for a SKI
+func (h *Hub) cancelConnectionDelayTimer(ski string) {
+	h.muxTimers.Lock()
+	defer h.muxTimers.Unlock()
+	
+	if timer, ok := h.connectionDelayTimers[ski]; ok {
+		timer.Stop()
+		delete(h.connectionDelayTimers, ski)
+	}
 }

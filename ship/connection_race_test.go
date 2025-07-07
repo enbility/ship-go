@@ -3,7 +3,8 @@
 // are properly synchronized and don't cause data races or inconsistent state.
 //
 // All tests should be run with the -race flag to enable Go's race detector:
-//   go test -race ./ship
+//
+//	go test -race ./ship
 //
 // The tests use high concurrency (50-100 goroutines) to increase the likelihood
 // of detecting race conditions that might only occur under load.
@@ -27,7 +28,7 @@ func TestApprovePendingHandshake_RaceCondition(t *testing.T) {
 	// Setup
 	mockInfoProvider := mocks.NewShipConnectionInfoProviderInterface(t)
 	mockDataWriter := mocks.NewWebsocketDataWriterInterface(t)
-	
+
 	// Mock expectations
 	mockDataWriter.EXPECT().InitDataProcessing(mock.Anything).Maybe()
 	mockDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
@@ -49,18 +50,18 @@ func TestApprovePendingHandshake_RaceCondition(t *testing.T) {
 		"remote-ski",
 		"remote-ship-id",
 	)
-	
+
 	// Set to pending state
 	conn.setState(model.SmeHelloStatePendingListen, nil)
-	
+
 	// Run concurrent operations
 	var wg sync.WaitGroup
 	const numGoroutines = 100
-	
+
 	approveCount := 0
 	abortCount := 0
 	var countMux sync.Mutex
-	
+
 	// Half will try to approve, half will try to abort
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
@@ -86,17 +87,17 @@ func TestApprovePendingHandshake_RaceCondition(t *testing.T) {
 			}()
 		}
 	}
-	
+
 	wg.Wait()
-	
+
 	// Verify that only one operation succeeded
 	// Due to atomic operations, exactly one approve or one abort should succeed
 	assert.Equal(t, 1, approveCount+abortCount,
 		"Expected exactly one operation to succeed, got approve=%d, abort=%d", approveCount, abortCount)
-	
+
 	// Allow time for state transitions to complete
 	time.Sleep(time.Millisecond * 20)
-	
+
 	// Final state should be consistent with what succeeded
 	finalState := conn.getState()
 	if approveCount == 1 {
@@ -108,7 +109,7 @@ func TestApprovePendingHandshake_RaceCondition(t *testing.T) {
 		assert.Equal(t, model.SmeHelloStateAbortDone, finalState,
 			"State should be AbortDone after abort")
 	}
-	
+
 	// Cleanup: stop any timers
 	conn.stopTimerSafe()
 	// Wait for abort cleanup if needed
@@ -150,27 +151,27 @@ func TestApproveIfPending(t *testing.T) {
 			expectedState: model.SmeHelloStateAbort,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup
 			mockInfoProvider := mocks.NewShipConnectionInfoProviderInterface(t)
 			mockDataWriter := mocks.NewWebsocketDataWriterInterface(t)
-			
+
 			// Mock expectations - include cleanup expectations
 			mockDataWriter.EXPECT().InitDataProcessing(mock.Anything).Maybe()
 			mockDataWriter.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Maybe()
 			mockInfoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Maybe()
 			// Fix race: Use a matcher that doesn't reflect on connection internals
-	connectionMatcher := mock.MatchedBy(func(conn api.ShipConnectionInterface) bool {
-		return conn != nil
-	})
-	mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
+			connectionMatcher := mock.MatchedBy(func(conn api.ShipConnectionInterface) bool {
+				return conn != nil
+			})
+			mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
 			if tt.expectSuccess {
 				mockDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
 				mockDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(nil).Maybe()
 			}
-			
+
 			conn := NewConnectionHandler(
 				mockInfoProvider,
 				mockDataWriter,
@@ -179,20 +180,20 @@ func TestApproveIfPending(t *testing.T) {
 				"remote-ski",
 				"remote-ship-id",
 			)
-			
+
 			// Set initial state
 			conn.setState(tt.initialState, nil)
-			
+
 			// Test the new method (to be implemented)
 			success := conn.ApproveIfPending()
-			
+
 			assert.Equal(t, tt.expectSuccess, success)
-			
+
 			// Allow time for state transitions
 			if tt.expectSuccess {
 				time.Sleep(time.Millisecond * 50)
 			}
-			
+
 			state := conn.getState()
 			// For successful approval, state transitions through multiple states
 			// We just check it's not in pending anymore
@@ -201,10 +202,10 @@ func TestApproveIfPending(t *testing.T) {
 			} else {
 				assert.Equal(t, tt.expectedState, state)
 			}
-			
+
 			// Cleanup: stop any timers
 			conn.stopTimerSafe()
-			
+
 			// Wait for any async operations to complete
 			time.Sleep(time.Millisecond * 100)
 		})
@@ -244,27 +245,27 @@ func TestAbortIfPending(t *testing.T) {
 			expectedState: model.SmeHelloStateAbort,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup
 			mockInfoProvider := mocks.NewShipConnectionInfoProviderInterface(t)
 			mockDataWriter := mocks.NewWebsocketDataWriterInterface(t)
-			
+
 			// Mock expectations
 			mockDataWriter.EXPECT().InitDataProcessing(mock.Anything).Maybe()
 			mockDataWriter.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Maybe()
 			mockInfoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Maybe()
 			// Fix race: Use a matcher that doesn't reflect on connection internals
-	connectionMatcher := mock.MatchedBy(func(conn api.ShipConnectionInterface) bool {
-		return conn != nil
-	})
-	mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
+			connectionMatcher := mock.MatchedBy(func(conn api.ShipConnectionInterface) bool {
+				return conn != nil
+			})
+			mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
 			if tt.expectSuccess {
 				mockDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
 				mockDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(nil).Maybe()
 			}
-			
+
 			conn := NewConnectionHandler(
 				mockInfoProvider,
 				mockDataWriter,
@@ -273,25 +274,25 @@ func TestAbortIfPending(t *testing.T) {
 				"remote-ski",
 				"remote-ship-id",
 			)
-			
+
 			// Set initial state
 			conn.setState(tt.initialState, nil)
-			
+
 			// Test the new method (to be implemented)
 			success := conn.AbortIfPending()
-			
+
 			assert.Equal(t, tt.expectSuccess, success)
-			
+
 			// Allow time for state transitions
 			if tt.expectSuccess {
 				time.Sleep(time.Millisecond * 10)
 			}
-			
+
 			state := conn.getState()
 			assert.Equal(t, tt.expectedState, state)
 		})
 	}
-	
+
 	// Ensure any background goroutines complete
 	// Abort state triggers a 1-second delayed close
 	time.Sleep(time.Second + 100*time.Millisecond)
@@ -302,7 +303,7 @@ func TestHandshakeTimer_ConcurrentStartStop(t *testing.T) {
 	// Setup
 	mockInfoProvider := mocks.NewShipConnectionInfoProviderInterface(t)
 	mockDataWriter := mocks.NewWebsocketDataWriterInterface(t)
-	
+
 	mockDataWriter.EXPECT().InitDataProcessing(mock.Anything).Maybe()
 	mockDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(nil).Maybe()
 	mockDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
@@ -313,7 +314,7 @@ func TestHandshakeTimer_ConcurrentStartStop(t *testing.T) {
 		return conn != nil
 	})
 	mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
-	
+
 	conn := NewConnectionHandler(
 		mockInfoProvider,
 		mockDataWriter,
@@ -322,37 +323,37 @@ func TestHandshakeTimer_ConcurrentStartStop(t *testing.T) {
 		"remote-ski",
 		"remote-ship-id",
 	)
-	
+
 	// Run concurrent timer operations
 	var wg sync.WaitGroup
 	const numGoroutines = 10 // Reduced to avoid too many timer goroutines
-	
+
 	// Start and stop timer concurrently
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
-		
+
 		go func(iteration int) {
 			defer wg.Done()
-			
+
 			// Start timer with longer duration to avoid firing
 			conn.setHandshakeTimer(timeoutTimerTypeWaitForReady, time.Second*5)
-			
+
 			// Small delay to allow timer to start
 			time.Sleep(time.Microsecond * 100)
-			
+
 			// Stop timer immediately
 			conn.stopTimerSafe()
 		}(i)
 	}
-	
+
 	wg.Wait()
-	
+
 	// Final cleanup - stop any remaining timers
 	conn.stopTimerSafe()
-	
+
 	// Wait for timer goroutines to complete
 	time.Sleep(time.Millisecond * 100)
-	
+
 	// Verify timer is in consistent state
 	assert.False(t, conn.getHandshakeTimerRunning(), "Timer should not be running after all operations")
 }
@@ -362,7 +363,7 @@ func TestStopTimerSafe(t *testing.T) {
 	// Setup
 	mockInfoProvider := mocks.NewShipConnectionInfoProviderInterface(t)
 	mockDataWriter := mocks.NewWebsocketDataWriterInterface(t)
-	
+
 	mockDataWriter.EXPECT().InitDataProcessing(mock.Anything).Maybe()
 	mockDataWriter.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Maybe()
 	mockInfoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Maybe()
@@ -373,7 +374,7 @@ func TestStopTimerSafe(t *testing.T) {
 	mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
 	mockDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(nil).Maybe()
 	mockDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
-	
+
 	conn := NewConnectionHandler(
 		mockInfoProvider,
 		mockDataWriter,
@@ -382,26 +383,26 @@ func TestStopTimerSafe(t *testing.T) {
 		"remote-ski",
 		"remote-ship-id",
 	)
-	
+
 	// Test stopping when timer not running
 	stopped := conn.stopTimerSafe()
 	assert.False(t, stopped, "Should return false when timer not running")
-	
+
 	// Start timer with longer duration to avoid firing during test
 	conn.startHandshakeTimer(time.Second*5, timeoutTimerTypeWaitForReady)
 	assert.True(t, conn.getHandshakeTimerRunning(), "Timer should be running")
-	
+
 	// Stop timer safely
 	stopped = conn.stopTimerSafe()
 	assert.True(t, stopped, "Should return true when timer was stopped")
 	assert.False(t, conn.getHandshakeTimerRunning(), "Timer should not be running")
-	
+
 	// Try to stop again
 	stopped = conn.stopTimerSafe()
 	assert.False(t, stopped, "Should return false when timer already stopped")
-	
+
 	// Wait for any timer goroutines to complete
 	time.Sleep(time.Millisecond * 100)
-	
+
 	// No need for explicit cleanup here since timers are already stopped
 }

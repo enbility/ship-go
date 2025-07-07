@@ -50,7 +50,7 @@ func (c *ShipConnection) setState(newState model.ShipMessageExchangeState, err e
 	var timerOp func()
 	var shouldNotify bool
 	var notifyState model.ShipState
-	
+
 	c.mux.Lock()
 	oldState := c.smeState
 	c.smeState = newState
@@ -87,7 +87,7 @@ func (c *ShipConnection) setState(newState model.ShipMessageExchangeState, err e
 	if timerOp != nil {
 		timerOp()
 	}
-	
+
 	if shouldNotify {
 		c.infoProvider.HandleShipHandshakeStateUpdate(c.remoteSKI, notifyState)
 	}
@@ -239,19 +239,19 @@ func (c *ShipConnection) endHandshakeWithError(err error) {
 // set the handshake timer to a new duration and start the channel
 func (c *ShipConnection) setHandshakeTimer(timerType timeoutTimerType, duration time.Duration) {
 	c.stopHandshakeTimer()
-	
+
 	c.handshakeTimerMux.Lock()
 	defer c.handshakeTimerMux.Unlock()
-	
+
 	// Create a new done channel for this timer
 	c.handshakeTimerDone = make(chan struct{})
 	done := c.handshakeTimerDone
-	
+
 	c.handshakeTimerType = timerType
 	c.handshakeTimerRunning = true
 	c.handshakeTimer = time.AfterFunc(duration, func() {
 		defer close(done) // Signal completion when this goroutine exits
-		
+
 		c.handshakeTimerMux.Lock()
 		// Check if this timer is still active
 		if c.handshakeTimer == nil {
@@ -261,41 +261,42 @@ func (c *ShipConnection) setHandshakeTimer(timerType timeoutTimerType, duration 
 		c.handshakeTimer = nil
 		c.handshakeTimerRunning = false
 		c.handshakeTimerMux.Unlock()
-		
+
 		c.handleState(true, nil)
 	})
 }
-
-
 
 // stopHandshakeTimer stops the timer and returns a channel that closes when the timer goroutine completes
 func (c *ShipConnection) stopHandshakeTimer() <-chan struct{} {
 	c.handshakeTimerMux.Lock()
 	defer c.handshakeTimerMux.Unlock()
-	
+
 	if c.handshakeTimer == nil {
 		// No timer running, return closed channel
 		ch := make(chan struct{})
 		close(ch)
 		return ch
 	}
-	
+
 	// Stop the timer
-	c.handshakeTimer.Stop()
+	stopped := c.handshakeTimer.Stop()
 	done := c.handshakeTimerDone
 	c.handshakeTimer = nil
 	c.handshakeTimerRunning = false
-	
-	// The timer's goroutine will close the done channel
+
+	// If we successfully stopped the timer (it hadn't fired yet),
+	// we need to close the done channel ourselves since the timer
+	// function won't run to close it
+	if stopped && done != nil {
+		// Use a goroutine to avoid potential deadlock if someone is waiting on done
+		go func() {
+			// Ensure we don't panic on double close (defensive programming)
+			defer func() { recover() }()
+			close(done)
+		}()
+	}
+
 	return done
-}
-
-
-func (c *ShipConnection) setHandshakeTimerRunning(value bool) {
-	c.handshakeTimerMux.Lock()
-	defer c.handshakeTimerMux.Unlock()
-
-	c.handshakeTimerRunning = value
 }
 
 func (c *ShipConnection) getHandshakeTimerRunning() bool {
@@ -330,11 +331,11 @@ func (c *ShipConnection) stopTimerSafe() bool {
 	c.handshakeTimerMux.Lock()
 	wasRunning := c.handshakeTimerRunning
 	c.handshakeTimerMux.Unlock()
-	
+
 	if wasRunning {
 		c.stopHandshakeTimer()
 	}
-	
+
 	return wasRunning
 }
 

@@ -135,12 +135,16 @@ func TestConnectionRegistrationRace(t *testing.T) {
 		// 3. conn1 (if unregister failed and new registration was blocked)
 		
 		// Log unexpected states
-		if finalConn == nil {
+		switch finalConn {
+		case nil:
 			t.Logf("Iteration %d: No connection (potential race - connection lost)", i)
-		} else if finalConn == conn1 {
+		case conn1:
 			t.Logf("Iteration %d: Still have conn1 (unregister failed)", i)
+		case conn2:
+			// Expected outcome - conn2 is registered
+		default:
+			t.Logf("Iteration %d: Unexpected connection", i)
 		}
-		// conn2 is the expected outcome
 	}
 	
 	t.Logf("Registration race test completed:")

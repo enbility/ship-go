@@ -2,6 +2,7 @@ package mdns
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"sync"
 	"time"
@@ -44,6 +45,10 @@ type AvahiProvider struct {
 
 	mux   sync.Mutex
 	muxEl sync.RWMutex // used for serviceElements
+	
+	// Prevent multiple reconnection goroutines
+	reconnectInProgress bool
+	reconnectMux        sync.Mutex
 }
 
 func NewAvahiProvider(ifaceIndexes []int32) *AvahiProvider {
@@ -146,6 +151,20 @@ func (a *AvahiProvider) Shutdown() {
 	}
 	a.mux.Unlock()
 
+	// Wait for any reconnection goroutine to stop
+	for {
+		a.reconnectMux.Lock()
+		inProgress := a.reconnectInProgress
+		a.reconnectMux.Unlock()
+		
+		if !inProgress {
+			break
+		}
+		
+		logging.Log().Debug("mdns: avahi - waiting for reconnection goroutine to stop")
+		time.Sleep(100 * time.Millisecond)
+	}
+
 	// Unannounce the service
 	a.Unannounce()
 
@@ -231,27 +250,61 @@ func (a *AvahiProvider) avahiCallback(event avahi.Event) {
 	}
 	a.mux.Unlock()
 
+	// Prevent multiple reconnection goroutines
+	a.reconnectMux.Lock()
+	if a.reconnectInProgress {
+		a.reconnectMux.Unlock()
+		logging.Log().Debug("mdns: avahi - reconnection already in progress")
+		return
+	}
+	a.reconnectInProgress = true
+	a.reconnectMux.Unlock()
+
 	// try to reconnect until successull
 	go a.attemptReconnect(cb, serviceData)
 }
 
-// attempt to reconnect to the avahi daemon endlessly
+// attempt to reconnect to the avahi daemon with exponential backoff
 func (a *AvahiProvider) attemptReconnect(cb api.MdnsResolveCB, serviceData *mdnsServiceData) {
+	defer func() {
+		// Clear the reconnection flag when done
+		a.reconnectMux.Lock()
+		a.reconnectInProgress = false
+		a.reconnectMux.Unlock()
+	}()
+
+	baseDelay := time.Second
+	maxDelay := 30 * time.Second  // Maximum 30 seconds between attempts
+	currentDelay := baseDelay
+	attempt := 0
+
 	for {
 		a.mux.Lock()
-		isManualShutdown := a.manualShutdown
-		a.mux.Unlock()
-		if isManualShutdown {
+		if a.manualShutdown {
+			a.mux.Unlock()
 			return
 		}
+		a.mux.Unlock()
 
-		<-time.After(time.Second)
+		// Wait with exponential backoff
+		time.Sleep(currentDelay)
+		attempt++
+
+		logging.Log().Debugf("mdns: avahi - reconnection attempt %d (delay: %v)", attempt, currentDelay)
 
 		if !a.Start(true, cb) {
+			// Exponential backoff with jitter
+			currentDelay = currentDelay * 2
+			// Add jitter (±10%)
+			jitter := time.Duration(float64(currentDelay) * 0.1 * (2*rand.Float64() - 1))
+			currentDelay = currentDelay + jitter
+			if currentDelay > maxDelay {
+				currentDelay = maxDelay
+			}
 			continue
 		}
 
-		logging.Log().Debug("mdns: avahi - reconnected")
+		logging.Log().Debug("mdns: avahi - reconnected successfully")
 
 		if serviceData != nil {
 			if err := a.Announce(serviceData.Name, serviceData.Port, serviceData.Txt); err != nil {

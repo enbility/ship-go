@@ -57,6 +57,10 @@ type Hub struct {
 
 	hasStarted bool
 
+	// connection delay timers that can be cancelled
+	connectionDelayTimers map[string]*connectionDelayTimer
+	muxTimers             sync.RWMutex
+
 	muxCon        sync.RWMutex
 	muxConAttempt sync.RWMutex
 	muxReg        sync.RWMutex
@@ -75,6 +79,7 @@ func NewHub(hubReader api.HubReaderInterface,
 		connectionAttemptRunning: make(map[string]bool),
 		remoteServices:           make(map[string]*api.ServiceDetails),
 		knownMdnsEntries:         make([]*api.MdnsEntry, 0),
+		connectionDelayTimers:    make(map[string]*connectionDelayTimer),
 		hubReader:                hubReader,
 		port:                     port,
 		certifciate:              certificate,
@@ -108,6 +113,15 @@ func (h *Hub) Start() {
 // close all connections
 func (h *Hub) Shutdown() {
 	h.mdns.Shutdown()
+	
+	// Cancel all pending connection delay timers
+	h.muxTimers.Lock()
+	for ski, timer := range h.connectionDelayTimers {
+		timer.Stop()
+		delete(h.connectionDelayTimers, ski)
+	}
+	h.muxTimers.Unlock()
+	
 	for _, c := range h.connections {
 		c.CloseConnection(false, 0, "")
 	}

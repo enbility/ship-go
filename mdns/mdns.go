@@ -96,6 +96,11 @@ type MdnsManager struct {
 
 	providerSelection MdnsProviderSelection
 
+	// Signal handler management
+	signalHandler    chan os.Signal
+	signalHandlerMux sync.Mutex
+	signalOnce       sync.Once
+
 	mux,
 	muxAnnounced sync.Mutex
 }
@@ -221,15 +226,19 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 		return err
 	}
 
-	// catch signals
-	go func() {
-		signalC := make(chan os.Signal, 1)
-		signal.Notify(signalC, os.Interrupt, syscall.SIGTERM)
+	// Set up signal handler only once
+	m.signalOnce.Do(func() {
+		m.signalHandlerMux.Lock()
+		m.signalHandler = make(chan os.Signal, 1)
+		signal.Notify(m.signalHandler, os.Interrupt, syscall.SIGTERM)
+		signalChan := m.signalHandler // capture for goroutine
+		m.signalHandlerMux.Unlock()
 
-		<-signalC // wait for signal
-
-		m.Shutdown()
-	}()
+		go func() {
+			<-signalChan // wait for signal
+			m.Shutdown()
+		}()
+	})
 
 	return nil
 }
@@ -261,6 +270,15 @@ func (m *MdnsManager) Shutdown() {
 			}()
 			m.mdnsProvider = nil
 		}
+
+		// Clean up signal handler
+		m.signalHandlerMux.Lock()
+		if m.signalHandler != nil {
+			signal.Stop(m.signalHandler)
+			close(m.signalHandler)
+			m.signalHandler = nil
+		}
+		m.signalHandlerMux.Unlock()
 	})
 }
 

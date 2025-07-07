@@ -138,12 +138,12 @@ func (c *ShipConnection) AbortPendingHandshake() {
 // while holding the lock, preventing race conditions.
 func (c *ShipConnection) ApproveIfPending() bool {
 	c.mux.Lock()
-	
+
 	if c.smeState != model.SmeHelloStatePendingListen {
 		c.mux.Unlock()
 		return false
 	}
-	
+
 	// Update state while holding lock
 	c.smeState = model.SmeHelloStateReadyInit
 	c.mux.Unlock()
@@ -151,10 +151,10 @@ func (c *ShipConnection) ApproveIfPending() bool {
 	// Now handle state transitions without lock to avoid deadlock
 	c.stopTimerSafe()
 	c.handleState(false, nil)
-	
+
 	// TODO: check if we need to do some validations before moving on to the next state
 	c.setAndHandleState(model.SmeHelloStateOk)
-	
+
 	return true
 }
 
@@ -165,12 +165,12 @@ func (c *ShipConnection) ApproveIfPending() bool {
 // concurrent handshake operations by atomically checking and updating the state.
 func (c *ShipConnection) AbortIfPending() bool {
 	c.mux.Lock()
-	
+
 	if c.smeState != model.SmeHelloStatePendingListen && c.smeState != model.SmeHelloStateReadyListen {
 		c.mux.Unlock()
 		return false
 	}
-	
+
 	// Update state while holding lock
 	c.smeState = model.SmeHelloStateAbort
 	c.mux.Unlock()
@@ -178,7 +178,7 @@ func (c *ShipConnection) AbortIfPending() bool {
 	// Now handle state transitions without lock to avoid deadlock
 	c.stopTimerSafe()
 	c.handleState(false, nil)
-	
+
 	return true
 }
 

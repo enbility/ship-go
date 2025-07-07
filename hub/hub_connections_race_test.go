@@ -63,8 +63,12 @@ func TestConnectionRegistration_ConcurrentCloseAndReplace(t *testing.T) {
 		
 		// Verify state is consistent
 		finalConn := hub.connectionForSKI(testSKI)
-		assert.True(t, finalConn == nil || finalConn == conn2,
-			"Final connection should be either nil or conn2, iteration %d", i)
+		switch finalConn {
+		case nil, conn2:
+			// Expected: either no connection or the second connection
+		default:
+			t.Errorf("Final connection should be either nil or conn2, iteration %d", i)
+		}
 	}
 }
 
