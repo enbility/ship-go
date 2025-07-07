@@ -27,6 +27,20 @@ const (
 	MdnsProviderSelectionGoZeroConfOnly                              // Only us Go native zeroconf
 )
 
+// ProviderFactory defines functions for creating mDNS providers
+type ProviderFactory struct {
+	NewAvahi    func([]int32) api.MdnsProviderInterface
+	NewZeroconf func([]net.Interface) api.MdnsProviderInterface
+}
+
+// DefaultProviderFactory returns the standard provider factory
+func DefaultProviderFactory() *ProviderFactory {
+	return &ProviderFactory{
+		NewAvahi:    func(ifaceIndexes []int32) api.MdnsProviderInterface { return NewAvahiProvider(ifaceIndexes) },
+		NewZeroconf: func(ifaces []net.Interface) api.MdnsProviderInterface { return NewZeroconfProvider(ifaces) },
+	}
+}
+
 type MdnsManager struct {
 	// The certificates SKI
 	ski string
@@ -74,6 +88,9 @@ type MdnsManager struct {
 
 	// testProvider is used to inject mock providers for testing
 	testProvider api.MdnsProviderInterface
+
+	// providerFactory creates provider instances, can be overridden for testing
+	providerFactory *ProviderFactory
 
 	shutdownOnce sync.Once
 
@@ -124,6 +141,7 @@ func NewMDNS(
 		ifaces:            ifaces,
 		providerSelection: providerSelection,
 		entries:           make(map[string]*api.MdnsEntry),
+		providerFactory:   DefaultProviderFactory(),
 	}
 
 	return m
@@ -171,30 +189,31 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 	if m.testProvider != nil {
 		m.mdnsProvider = m.testProvider
 	} else {
-		switch m.providerSelection {
-	case MdnsProviderSelectionAll:
-		// First try avahi, if not available use zerconf
-		provider := NewAvahiProvider(ifaceIndexes)
-		if provider.Start(false, m.processMdnsEntry) {
-			m.mdnsProvider = provider
-		} else {
-			provider.Shutdown()
+		// Validate provider factory is available
+		if m.providerFactory == nil {
+			return errors.New("mDNS provider factory not initialized")
+		}
 
-			// Avahi is not availble, use Zeroconf
-			m.mdnsProvider = NewZeroconfProvider(ifaces)
-			if !m.mdnsProvider.Start(false, m.processMdnsEntry) {
-				return errors.New("No mDNS provider available")
-			}
+		var err error
+		switch m.providerSelection {
+		case MdnsProviderSelectionAll:
+			err = m.initializeProviderWithFallback(ifaceIndexes, ifaces)
+		case MdnsProviderSelectionAvahiOnly:
+			err = m.initializeAvahiProvider(ifaceIndexes, true)
+		case MdnsProviderSelectionGoZeroConfOnly:
+			err = m.initializeZeroconfProvider(ifaces, true)
+		default:
+			return fmt.Errorf("invalid mDNS provider selection: %d", m.providerSelection)
 		}
-	case MdnsProviderSelectionAvahiOnly:
-		// Only use Avahi
-		m.mdnsProvider = NewAvahiProvider(ifaceIndexes)
-		_ = m.mdnsProvider.Start(true, m.processMdnsEntry)
-	case MdnsProviderSelectionGoZeroConfOnly:
-		// Only use Zeroconf
-		m.mdnsProvider = NewZeroconfProvider(ifaces)
-		_ = m.mdnsProvider.Start(true, m.processMdnsEntry)
+		
+		if err != nil {
+			return err
 		}
+	}
+
+	// Validate that a provider was successfully set
+	if m.mdnsProvider == nil {
+		return errors.New("failed to initialize any mDNS provider")
 	}
 
 	// on startup always start mDNS announcement
@@ -218,14 +237,30 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 // Shutdown all of mDNS
 func (m *MdnsManager) Shutdown() {
 	m.shutdownOnce.Do(func() {
-		m.UnannounceMdnsEntry()
+		logging.Log().Debug("mdns: shutting down mDNS manager")
+		
+		// Safely unannounce the service
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logging.Log().Debug("mdns: panic during unannounce:", r)
+				}
+			}()
+			m.UnannounceMdnsEntry()
+		}()
 
-		if m.mdnsProvider == nil {
-			return
+		// Safely shutdown provider
+		if m.mdnsProvider != nil {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logging.Log().Debug("mdns: panic during provider shutdown:", r)
+					}
+				}()
+				m.mdnsProvider.Shutdown()
+			}()
+			m.mdnsProvider = nil
 		}
-
-		m.mdnsProvider.Shutdown()
-		m.mdnsProvider = nil
 	})
 }
 
@@ -234,7 +269,21 @@ func (m *MdnsManager) Shutdown() {
 // Any other service should only invoke this whenever it is not connected to a CEM service
 func (m *MdnsManager) AnnounceMdnsEntry() error {
 	if m.mdnsProvider == nil {
-		return nil
+		return errors.New("cannot announce mDNS entry: no provider available")
+	}
+
+	// Validate required fields
+	if len(m.identifier) == 0 {
+		return errors.New("cannot announce mDNS entry: service identifier is empty")
+	}
+	if len(m.ski) == 0 {
+		return errors.New("cannot announce mDNS entry: SKI is empty")
+	}
+	if len(m.serviceName) == 0 {
+		return errors.New("cannot announce mDNS entry: service name is empty")
+	}
+	if m.port <= 0 || m.port > 65535 {
+		return fmt.Errorf("cannot announce mDNS entry: invalid port %d", m.port)
 	}
 
 	serviceIdentifier := m.identifier
@@ -279,12 +328,16 @@ func (m *MdnsManager) AnnounceMdnsEntry() error {
 
 // Stop the mDNS announcement on the network
 func (m *MdnsManager) UnannounceMdnsEntry() {
-	if !m.isServiceAnnounced() || m.mdnsProvider == nil {
+	if !m.isServiceAnnounced() {
+		return
+	}
+	
+	if m.mdnsProvider == nil {
 		return
 	}
 
-	m.mdnsProvider.Unannounce()
 	logging.Log().Debug("mdns: stop announcement")
+	m.mdnsProvider.Unannounce()
 
 	m.setIsServiceAnnounce(false)
 }
@@ -320,6 +373,11 @@ func (m *MdnsManager) SetAutoAccept(accept bool) {
 // SetTestProvider injects a mock provider for testing purposes
 func (m *MdnsManager) SetTestProvider(provider api.MdnsProviderInterface) {
 	m.testProvider = provider
+}
+
+// SetProviderFactory injects a custom provider factory for testing purposes
+func (m *MdnsManager) SetProviderFactory(factory *ProviderFactory) {
+	m.providerFactory = factory
 }
 
 // Returns a safe to use key value pair for the QR code text in the proper format
@@ -571,4 +629,65 @@ func (m *MdnsManager) RequestMdnsEntries() {
 
 	entries := m.copyMdnsEntries()
 	go m.report.ReportMdnsEntries(entries, false)
+}
+
+// initializeProviderWithFallback attempts to initialize Avahi first, then falls back to Zeroconf
+func (m *MdnsManager) initializeProviderWithFallback(ifaceIndexes []int32, ifaces []net.Interface) error {
+	// Try Avahi first
+	if err := m.initializeAvahiProvider(ifaceIndexes, false); err == nil {
+		return nil
+	} else {
+		logging.Log().Debug("mdns: Avahi provider failed, attempting Zeroconf fallback:", err)
+	}
+
+	// Fallback to Zeroconf
+	if err := m.initializeZeroconfProvider(ifaces, false); err == nil {
+		return nil
+	} else {
+		logging.Log().Debug("mdns: Zeroconf provider also failed:", err)
+	}
+
+	return errors.New("no mDNS provider available - both Avahi and Zeroconf failed to initialize")
+}
+
+// initializeAvahiProvider creates and starts an Avahi provider
+func (m *MdnsManager) initializeAvahiProvider(ifaceIndexes []int32, autoReconnect bool) error {
+	if m.providerFactory.NewAvahi == nil {
+		return errors.New("Avahi provider factory function not available")
+	}
+
+	provider := m.providerFactory.NewAvahi(ifaceIndexes)
+	if provider == nil {
+		return errors.New("failed to create Avahi provider instance")
+	}
+
+	if !provider.Start(autoReconnect, m.processMdnsEntry) {
+		// Clean up failed provider
+		provider.Shutdown()
+		return errors.New("Avahi provider failed to start")
+	}
+
+	m.mdnsProvider = provider
+	return nil
+}
+
+// initializeZeroconfProvider creates and starts a Zeroconf provider  
+func (m *MdnsManager) initializeZeroconfProvider(ifaces []net.Interface, autoReconnect bool) error {
+	if m.providerFactory.NewZeroconf == nil {
+		return errors.New("Zeroconf provider factory function not available")
+	}
+
+	provider := m.providerFactory.NewZeroconf(ifaces)
+	if provider == nil {
+		return errors.New("failed to create Zeroconf provider instance")
+	}
+
+	if !provider.Start(autoReconnect, m.processMdnsEntry) {
+		// Clean up failed provider
+		provider.Shutdown()
+		return errors.New("Zeroconf provider failed to start")
+	}
+
+	m.mdnsProvider = provider
+	return nil
 }
