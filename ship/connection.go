@@ -111,7 +111,9 @@ func (c *ShipConnection) Run() {
 
 // provides the current ship state and error value if the state is in error
 func (c *ShipConnection) ShipHandshakeState() (model.ShipMessageExchangeState, error) {
-	return c.getState(), c.smeError
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	return c.smeState, c.smeError
 }
 
 // invoked when pairing for a pending request is approved
