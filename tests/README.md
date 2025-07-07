@@ -47,7 +47,7 @@ Deadlock and concurrency tests are co-located with the code they test:
 
 - **`ship/`** package tests are in `ship/*_test.go`
 - **`hub/`** package tests are in `hub/*_test.go`
-- **Shared utilities** are in `util/testhelper/`
+- **Shared utilities** are in `internal/testing/testhelper/`
 
 This organization ensures:
 - Tests have access to internal methods and types

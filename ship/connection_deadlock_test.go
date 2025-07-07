@@ -3,6 +3,9 @@
 // to detect potential deadlocks from nested lock acquisitions.
 //
 // Run with: go test -race -tags=deadlock -timeout=30s ./ship
+
+//go:build deadlock
+
 package ship
 
 import (
@@ -11,9 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/enbility/ship-go/internal/testing/testhelper"
 	"github.com/enbility/ship-go/mocks"
 	"github.com/enbility/ship-go/model"
-	"github.com/enbility/ship-go/util/testhelper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

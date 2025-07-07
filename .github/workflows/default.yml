@@ -43,11 +43,10 @@ jobs:
       - name: Stress Tests
         run: go test -race -tags=stress -timeout=180s ./ship ./hub
 
-      - name: Remove mocks from coverage
-        run: grep -v "/ship-go/mocks/" coverage_temp.out > coverage_temp2.out
-
-      - name: Remove Testhelper from coverage
-        run: grep -v "/ship-go/utils/testhelper/" coverage_temp2.out > coverage.out
+      - name: Remove test utilities from coverage
+        run: |
+          grep -v -E "/ship-go/(mocks/|internal/testing/)" coverage_temp.out > coverage.out || true
+          echo "Coverage report filtered to exclude mocks and test utilities"
 
       - name: Send coverage
         uses: coverallsapp/github-action@v2

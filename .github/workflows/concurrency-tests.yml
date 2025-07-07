@@ -14,7 +14,7 @@ on:
     paths:
       - 'ship/**/*.go'
       - 'hub/**/*.go'
-      - 'util/testhelper/**/*.go'
+      - 'internal/testing/testhelper/**/*.go'
       - '**/*_test.go'
   # Allow manual triggering
   workflow_dispatch:

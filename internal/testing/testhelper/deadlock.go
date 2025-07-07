@@ -1,4 +1,11 @@
-// Package testhelper provides utilities for testing concurrent code and detecting deadlocks
+//go:build deadlock
+
+// Package testhelper provides utilities for testing concurrent code and detecting deadlocks.
+//
+// IMPORTANT: This package is for testing purposes only and MUST NOT be imported by production code.
+// It should only be imported by test files (*_test.go).
+//
+// To use this package, run tests with: go test -tags=deadlock
 package testhelper
 
 import (
@@ -17,21 +24,21 @@ const DeadlockTimeout = 500 * time.Millisecond
 // It will fail the test if the function doesn't complete within the timeout
 func RunWithDeadlockDetection(t *testing.T, timeout time.Duration, fn func()) {
 	t.Helper()
-	
+
 	done := make(chan struct{})
-	
+
 	go func() {
 		defer close(done)
 		fn()
 	}()
-	
+
 	select {
 	case <-done:
 		// Function completed successfully
 	case <-time.After(timeout):
 		buf := make([]byte, 1<<16)
 		stackSize := runtime.Stack(buf, true)
-		t.Fatalf("Deadlock detected! Function did not complete within %v\nGoroutine dump:\n%s", 
+		t.Fatalf("Deadlock detected! Function did not complete within %v\nGoroutine dump:\n%s",
 			timeout, buf[:stackSize])
 	}
 }
@@ -46,19 +53,19 @@ type ConcurrentTest struct {
 // Run executes the concurrent test
 func (ct *ConcurrentTest) Run(t *testing.T) {
 	t.Helper()
-	
+
 	var wg sync.WaitGroup
 	wg.Add(ct.Goroutines)
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), DeadlockTimeout*2)
 	defer cancel()
-	
+
 	errors := make(chan error, ct.Goroutines*ct.Iterations)
-	
+
 	for i := 0; i < ct.Goroutines; i++ {
 		go func(id int) {
 			defer wg.Done()
-			
+
 			for j := 0; j < ct.Iterations; j++ {
 				select {
 				case <-ctx.Done():
@@ -70,20 +77,20 @@ func (ct *ConcurrentTest) Run(t *testing.T) {
 			}
 		}(i)
 	}
-	
+
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
 		// All goroutines completed
 	case <-ctx.Done():
 		t.Fatal("Concurrent test timed out - possible deadlock")
 	}
-	
+
 	close(errors)
 	for err := range errors {
 		if err != nil {
@@ -109,7 +116,7 @@ func NewLockOrderTracker() *LockOrderTracker {
 func (lot *LockOrderTracker) RecordLock(lockName string) {
 	lot.mu.Lock()
 	defer lot.mu.Unlock()
-	
+
 	gid := fmt.Sprintf("%d", getGoroutineID())
 	lot.orders[gid] = append(lot.orders[gid], lockName)
 }
@@ -118,7 +125,7 @@ func (lot *LockOrderTracker) RecordLock(lockName string) {
 func (lot *LockOrderTracker) RecordUnlock(lockName string) {
 	lot.mu.Lock()
 	defer lot.mu.Unlock()
-	
+
 	gid := fmt.Sprintf("%d", getGoroutineID())
 	order := lot.orders[gid]
 	if len(order) > 0 && order[len(order)-1] == lockName {
@@ -130,32 +137,32 @@ func (lot *LockOrderTracker) RecordUnlock(lockName string) {
 func (lot *LockOrderTracker) CheckForViolations() error {
 	lot.mu.Lock()
 	defer lot.mu.Unlock()
-	
+
 	// Build a map of all observed lock orderings
 	orderings := make(map[string]map[string]bool)
-	
+
 	for _, order := range lot.orders {
 		for i := 0; i < len(order)-1; i++ {
 			lock1 := order[i]
 			lock2 := order[i+1]
-			
+
 			if orderings[lock1] == nil {
 				orderings[lock1] = make(map[string]bool)
 			}
 			orderings[lock1][lock2] = true
 		}
 	}
-	
+
 	// Check for cycles (simple check for pairs)
 	for lock1, successors := range orderings {
 		for lock2 := range successors {
 			if orderings[lock2] != nil && orderings[lock2][lock1] {
-				return fmt.Errorf("lock ordering violation detected: %s -> %s and %s -> %s", 
+				return fmt.Errorf("lock ordering violation detected: %s -> %s and %s -> %s",
 					lock1, lock2, lock2, lock1)
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -165,7 +172,7 @@ func getGoroutineID() uint64 {
 	b := make([]byte, 64)
 	b = b[:runtime.Stack(b, false)]
 	var id uint64
-	fmt.Sscanf(string(b), "goroutine %d ", &id)
+	_, _ = fmt.Sscanf(string(b), "goroutine %d ", &id)
 	return id
 }
 
@@ -177,12 +184,12 @@ type WaitGroupWithTimeout struct {
 // WaitWithTimeout waits for the WaitGroup with a timeout
 func (wg *WaitGroupWithTimeout) WaitWithTimeout(timeout time.Duration) error {
 	done := make(chan struct{})
-	
+
 	go func() {
 		wg.Wait()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
 		return nil
@@ -194,16 +201,16 @@ func (wg *WaitGroupWithTimeout) WaitWithTimeout(timeout time.Duration) error {
 // AssertNoGoroutineLeaks checks that no goroutines are leaked after a test
 func AssertNoGoroutineLeaks(t *testing.T, fn func()) {
 	t.Helper()
-	
+
 	before := runtime.NumGoroutine()
-	
+
 	fn()
-	
+
 	// Give goroutines time to clean up
 	time.Sleep(100 * time.Millisecond)
-	
+
 	after := runtime.NumGoroutine()
-	
+
 	if after > before {
 		buf := make([]byte, 1<<16)
 		stackSize := runtime.Stack(buf, true)

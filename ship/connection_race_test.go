@@ -100,11 +100,11 @@ func TestApprovePendingHandshake_RaceCondition(t *testing.T) {
 	// - At most one approve can succeed (state can only transition from PendingListen once)
 	// - Multiple aborts might succeed if approve transitions to ReadyListen before abort checks
 	// - The total should be at least 1 (something must succeed from PendingListen state)
-	assert.LessOrEqual(t, approveCount, 1, 
+	assert.LessOrEqual(t, approveCount, 1,
 		"At most one approve should succeed, got %d", approveCount)
 	assert.GreaterOrEqual(t, approveCount+abortCount, 1,
 		"At least one operation should succeed, got approve=%d, abort=%d", approveCount, abortCount)
-	
+
 	// If approve succeeded, abort might also succeed due to ReadyListen state
 	if approveCount == 1 {
 		// Abort can succeed if it runs after approve transitions to ReadyListen

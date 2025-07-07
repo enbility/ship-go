@@ -8,7 +8,7 @@ package testhelper
 import (
 	"sync"
 	"time"
-	
+
 	"github.com/sasha-s/go-deadlock"
 )
 
