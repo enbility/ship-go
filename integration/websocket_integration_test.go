@@ -53,8 +53,11 @@ func TestWebSocketIntegration(t *testing.T) {
 		
 		// Create client connection
 		wsURL := "ws" + server.URL[4:]
-		clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+		clientConn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		require.NoError(t, err)
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
 		
 		// Create WebSocket wrapper
 		wsClient := ws.NewWebsocketConnection(clientConn, "test-ski")
@@ -136,8 +139,11 @@ func TestWebSocketIntegration(t *testing.T) {
 		
 		// Create client connection
 		wsURL := "ws" + server.URL[4:]
-		clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+		clientConn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		require.NoError(t, err)
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
 		
 		// Create WebSocket wrapper
 		wsClient := ws.NewWebsocketConnection(clientConn, "test-ski")
@@ -213,10 +219,13 @@ func TestWebSocketIntegration(t *testing.T) {
 				
 				// Create client connection
 				wsURL := "ws" + server.URL[4:]
-				clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+				clientConn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 				if err != nil {
 					t.Errorf("connection %d failed: %v", idx, err)
 					return
+				}
+				if resp != nil && resp.Body != nil {
+					resp.Body.Close()
 				}
 				
 				// Create WebSocket wrapper

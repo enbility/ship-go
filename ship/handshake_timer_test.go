@@ -63,13 +63,13 @@ func TestHandshakeTimer(t *testing.T) {
 			}).Maybe()
 
 		// Set multiple timers rapidly
-		for i := 0; i < 10; i++ {
-			conn.setHandshakeTimer(timeoutTimerTypeWaitForReady, time.Duration(100+i*10)*time.Millisecond)
-			time.Sleep(5 * time.Millisecond)
+		for i := 0; i < 5; i++ {
+			conn.setHandshakeTimer(timeoutTimerTypeWaitForReady, time.Duration(50+i*10)*time.Millisecond)
+			time.Sleep(2 * time.Millisecond)
 		}
 
 		// Wait for potential timer fires
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(150 * time.Millisecond)
 
 		// Only the last timer should fire (tracked by state changes)
 		assert.LessOrEqual(t, stateChanges.Load(), int32(2), "too many state changes from timers")

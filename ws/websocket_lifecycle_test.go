@@ -28,21 +28,21 @@ func TestWebSocketLifecycle(t *testing.T) {
 
 		// Create websocket connection
 		ws := NewWebsocketConnection(testWsConn, "test-ski")
-		
+
 		// Create mock data reader
 		mockReader := mocks.NewWebsocketDataReaderInterface(t)
 		mockReader.EXPECT().ReportConnectionError(mock.Anything).Return().Maybe()
 		mockReader.EXPECT().HandleIncomingWebsocketMessage(mock.Anything).Return().Maybe()
-		
+
 		// Initialize and run
 		ws.InitDataProcessing(mockReader)
-		
+
 		// Give goroutines time to start
 		time.Sleep(100 * time.Millisecond)
-		
+
 		// Close connection
 		ws.CloseDataConnection(websocket.CloseNormalClosure, "test close")
-		
+
 		// Wait for goroutines to exit
 		// We expect the pumps to exit, but the test server goroutine remains
 		assert.Eventually(t, func() bool {
@@ -65,20 +65,20 @@ func TestWebSocketLifecycle(t *testing.T) {
 
 		// Create websocket connection
 		ws := NewWebsocketConnection(testWsConn, "test-ski")
-		
+
 		// Create mock data reader
 		mockReader := mocks.NewWebsocketDataReaderInterface(t)
 		mockReader.EXPECT().ReportConnectionError(mock.Anything).Return().Maybe()
-		
+
 		// Initialize and run
 		ws.InitDataProcessing(mockReader)
-		
+
 		// Give goroutines time to start
 		time.Sleep(100 * time.Millisecond)
-		
+
 		// Simulate connection error by closing the underlying connection
 		testWsConn.Close()
-		
+
 		// Wait for goroutines to exit
 		assert.Eventually(t, func() bool {
 			current := countGoroutines()
@@ -96,21 +96,21 @@ func TestWebSocketLifecycle(t *testing.T) {
 
 		// Create websocket connection
 		ws := NewWebsocketConnection(testWsConn, "test-ski")
-		
+
 		// Create mock data reader
 		mockReader := mocks.NewWebsocketDataReaderInterface(t)
 		mockReader.EXPECT().ReportConnectionError(mock.Anything).Return().Maybe()
 		mockReader.EXPECT().HandleIncomingWebsocketMessage(mock.Anything).Return().Maybe()
-		
+
 		// Initialize and run
 		ws.InitDataProcessing(mockReader)
-		
+
 		// Give goroutines time to start
 		time.Sleep(100 * time.Millisecond)
-		
+
 		// Perform concurrent operations
 		var wg sync.WaitGroup
-		
+
 		// Multiple writers
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
@@ -119,7 +119,7 @@ func TestWebSocketLifecycle(t *testing.T) {
 				_ = ws.WriteMessageToWebsocketConnection([]byte{byte(i), byte(i)})
 			}(i)
 		}
-		
+
 		// Concurrent close attempts
 		for i := 0; i < 3; i++ {
 			wg.Add(1)
@@ -128,14 +128,14 @@ func TestWebSocketLifecycle(t *testing.T) {
 				ws.CloseDataConnection(websocket.CloseNormalClosure, "concurrent close")
 			}()
 		}
-		
+
 		// Wait for all operations to complete
 		wg.Wait()
-		
+
 		// Verify connection is closed
 		isClosed, _ := ws.IsDataConnectionClosed()
 		assert.True(t, isClosed, "connection should be closed")
-		
+
 		// Give time for cleanup
 		time.Sleep(100 * time.Millisecond)
 	})
@@ -151,22 +151,22 @@ func TestWebSocketShutdownTiming(t *testing.T) {
 
 	// Create websocket connection
 	ws := NewWebsocketConnection(testWsConn, "test-ski")
-	
+
 	// Create mock data reader
 	mockReader := mocks.NewWebsocketDataReaderInterface(t)
 	mockReader.EXPECT().ReportConnectionError(mock.Anything).Return().Maybe()
-	
+
 	// Initialize and run
 	ws.InitDataProcessing(mockReader)
-	
+
 	// Give goroutines time to start
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// Measure shutdown time
 	start := time.Now()
 	ws.CloseDataConnection(websocket.CloseNormalClosure, "timing test")
 	shutdownDuration := time.Since(start)
-	
+
 	// Verify shutdown completed quickly
 	assert.Less(t, shutdownDuration, 500*time.Millisecond, "shutdown took too long")
 }
@@ -182,23 +182,23 @@ func TestWebSocketResourceCleanup(t *testing.T) {
 
 		// Create websocket connection
 		ws := NewWebsocketConnection(testWsConn, "test-ski")
-		
+
 		// Create mock data reader
 		mockReader := mocks.NewWebsocketDataReaderInterface(t)
 		mockReader.EXPECT().ReportConnectionError(mock.Anything).Return().Maybe()
-		
+
 		// Initialize and run
 		ws.InitDataProcessing(mockReader)
-		
+
 		// Give goroutines time to start
 		time.Sleep(100 * time.Millisecond)
-		
+
 		// Close connection
 		ws.CloseDataConnection(websocket.CloseNormalClosure, "channel test")
-		
+
 		// Wait a bit for cleanup
 		time.Sleep(100 * time.Millisecond)
-		
+
 		// Try to write - should fail with closed connection error
 		err := ws.WriteMessageToWebsocketConnection([]byte{1, 2, 3})
 		require.Error(t, err)
@@ -214,19 +214,19 @@ func TestWebSocketResourceCleanup(t *testing.T) {
 
 		// Create websocket connection
 		ws := NewWebsocketConnection(testWsConn, "test-ski")
-		
+
 		// Create mock data reader
 		mockReader := mocks.NewWebsocketDataReaderInterface(t)
 		mockReader.EXPECT().ReportConnectionError(mock.Anything).Return().Maybe()
-		
+
 		// Initialize and run
 		ws.InitDataProcessing(mockReader)
-		
+
 		// Multiple close calls should not panic
 		for i := 0; i < 5; i++ {
 			ws.CloseDataConnection(websocket.CloseNormalClosure, "multiple close test")
 		}
-		
+
 		// Verify connection is closed
 		isClosed, _ := ws.IsDataConnectionClosed()
 		assert.True(t, isClosed)

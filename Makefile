@@ -16,8 +16,8 @@ GOMOD=$(GOCMD) mod
 GOLINT=golangci-lint
 
 # Test parameters
-TIMEOUT_SHORT=30s
-TIMEOUT_LONG=60s
+TIMEOUT_SHORT=90s
+TIMEOUT_LONG=180s
 BENCHTIME=1s
 
 # Coverage

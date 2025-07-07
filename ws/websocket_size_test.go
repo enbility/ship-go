@@ -14,9 +14,9 @@ func TestMaxMessageSize(t *testing.T) {
 	assert.Equal(t, expectedSize, MaxMessageSize, "MaxMessageSize should be 100KB")
 
 	// Verify it's reasonable for SPINE messages
-	typicalSPINEMessage := 50 * 1024  // 50KB typical
-	maxSPINEMessage := 80 * 1024      // 80KB for complex messages
-	
+	typicalSPINEMessage := 50 * 1024 // 50KB typical
+	maxSPINEMessage := 80 * 1024     // 80KB for complex messages
+
 	assert.Greater(t, MaxMessageSize, typicalSPINEMessage, "MaxMessageSize should be larger than typical SPINE messages")
 	assert.Greater(t, MaxMessageSize, maxSPINEMessage, "MaxMessageSize should be larger than complex SPINE messages")
 }

@@ -83,8 +83,8 @@ func (w *WebsocketConnection) isConnClosed() bool {
 }
 
 func (w *WebsocketConnection) run() {
-	w.shipWriteChannel = make(chan []byte, 1024) // Send outgoing ship messages
-	w.closeChannel = make(chan struct{}, 1)      // Listen to close events
+	w.shipWriteChannel = make(chan []byte, DefaultWriteBufferSize) // Send outgoing ship messages
+	w.closeChannel = make(chan struct{}, 1)                        // Listen to close events
 
 	w.pumpsWg.Add(2)
 	go w.readShipPump()

@@ -26,6 +26,7 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
 | Access Methods Limited | P2 | Medium | Functionality | ⚠️ Partial |
 | Test Coverage | P2 | High | Reliability | ⚠️ ~70% |
 | Lock Contention | P2 | Medium | Performance | ✅ Optimized (RWMutex) |
+| Excessive Buffer Allocation | P3 | Medium | Performance | ✅ Optimized (256) |
 | Certificate Expiry Warnings | P3 | Low | Monitoring | ❌ Not implemented |
 | JSON-UTF16 Support | P4 | Low | Compatibility | ❌ Optional feature |
 
@@ -267,17 +268,30 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
   - Add mutex contention profiling for production monitoring
   - Consider channel-based coordination for some patterns
 
-### 4.2 Excessive Buffer Allocation
+### 4.2 Excessive Buffer Allocation ✅ OPTIMIZED
 - **Priority**: P3
 - **Severity**: Medium
 - **Impact**: Performance - Memory waste
-- **Location**: `ws/websocket.go:83`
+- **Location**: `ws/websocket.go:86`
 - **Issue**: Always allocates 1024-element buffer
-- **Recommendation**:
-  - Start with smaller buffers (e.g., 64)
-  - Implement dynamic growth
-  - Make initial size configurable
-  - Add buffer utilization metrics
+- **Status**: **RESOLVED** - Buffer size optimized based on real-world analysis
+- **Resolution**:
+  - ✅ Analyzed GB of real-world EEBUS logs to determine actual usage patterns
+  - ✅ Reduced buffer size from 1024 to 256 messages (75% reduction)
+  - ✅ Added `DefaultWriteBufferSize` constant in `ws/types.go`
+  - ✅ Documented rationale based on max observed burst of 106 messages
+  - ✅ Created `ws/BUFFER_OPTIMIZATION.md` with detailed analysis
+- **Implementation Details**:
+  - Maximum observed burst: 106 messages in 100ms window
+  - Typical steady-state: 2-4 messages per second
+  - New buffer size of 256 provides >2x safety margin
+  - Memory savings: ~6KB per connection (from ~8KB to ~2KB)
+  - For 100 connections: ~600KB total memory saved
+- **Analysis Findings**:
+  - 94% of time, queue depth ≤ 2 messages
+  - Handshake phase maximum: 86 messages
+  - Messages processed very quickly (median response: 0s)
+  - SHIP protocol uses sequential request/response patterns
 
 ### 4.3 Linear Connection Lookup
 - **Priority**: P3

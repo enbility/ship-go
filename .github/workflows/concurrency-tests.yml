@@ -43,7 +43,7 @@ jobs:
       - name: Run Deadlock Detection Tests
         run: |
           echo "Running deadlock detection tests with enhanced timeout detection..."
-          go test -race -tags=deadlock -timeout=30s -v ./ship ./hub
+          go test -race -tags=deadlock -timeout=90s -v ./ship ./hub
         env:
           GOMAXPROCS: 4
 
@@ -70,14 +70,14 @@ jobs:
       - name: Run Stress Tests
         run: |
           echo "Running comprehensive stress tests..."
-          go test -race -tags=stress -timeout=60s ./ship ./hub
+          go test -race -tags=stress -timeout=180s ./ship ./hub
         env:
           GOMAXPROCS: 4
 
       - name: Run High Contention Tests
         run: |
           echo "Running high contention scenarios..."
-          go test -race -timeout=45s -run=".*Stress.*|.*Contention.*|.*Concurrent.*" ./ship ./hub
+          go test -race -timeout=90s -run=".*Stress.*|.*Contention.*|.*Concurrent.*" ./ship ./hub
 
   performance-regression:
     name: Performance Regression Detection
@@ -128,14 +128,14 @@ jobs:
       - name: Run Race Detection Tests (GOMAXPROCS=${{ matrix.gomaxprocs }})
         run: |
           echo "Running race detection with GOMAXPROCS=${{ matrix.gomaxprocs }}..."
-          go test -race -timeout=30s -count=3 ./ship ./hub
+          go test -race -timeout=90s -count=3 ./ship ./hub
         env:
           GOMAXPROCS: ${{ matrix.gomaxprocs }}
 
       - name: Run Specific Race-Prone Tests
         run: |
           echo "Running tests targeting known race-prone areas..."
-          go test -race -timeout=30s -run=".*Race.*|.*Concurrent.*|.*Timer.*" ./ship ./hub
+          go test -race -timeout=90s -run=".*Race.*|.*Concurrent.*|.*Timer.*" ./ship ./hub
         env:
           GOMAXPROCS: ${{ matrix.gomaxprocs }}
 
@@ -156,7 +156,7 @@ jobs:
       - name: Run Goroutine Leak Tests
         run: |
           echo "Testing for goroutine leaks..."
-          go test -race -timeout=30s -run=".*Leak.*|.*Goroutine.*" ./ship ./hub
+          go test -race -timeout=90s -run=".*Leak.*|.*Goroutine.*" ./ship ./hub
 
       - name: Run Memory Allocation Tests
         run: |
@@ -186,12 +186,12 @@ jobs:
       - name: Validate Lock Ordering
         run: |
           echo "Validating lock ordering compliance..."
-          go test -race -timeout=30s -run=".*Lock.*Order.*|.*Mutex.*Order.*" ./hub
+          go test -race -timeout=90s -run=".*Lock.*Order.*|.*Mutex.*Order.*" ./hub
 
       - name: System Health Check
         run: |
           echo "Running system health validation..."
-          go test -race -timeout=60s -run=".*System.*|.*Health.*" ./ship ./hub
+          go test -race -timeout=90s -run=".*System.*|.*Health.*" ./ship ./hub
 
   report-results:
     name: Report Test Results

@@ -232,8 +232,9 @@ func TestConnectionDelayTimerCancellation(t *testing.T) {
 		hub.muxTimers.RUnlock()
 		assert.False(t, exists, "timer should be removed after connection")
 		
-		// Wait to ensure timer doesn't fire
-		time.Sleep(4 * time.Second)
+		// Wait briefly to ensure timer doesn't fire
+		// Since the timer was cancelled, we don't need to wait long
+		time.Sleep(200 * time.Millisecond)
 		
 		// prepareConnectionInitation should not have been called
 		// (we can't easily test this without more mocking, but no goroutine leak is good)

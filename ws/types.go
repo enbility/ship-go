@@ -13,4 +13,10 @@ const (
 	// MaxMessageSize limits incoming message size to prevent DoS attacks
 	// and expensive EEBUS JSON conversions. Typical SPINE messages are <50KB.
 	MaxMessageSize = 100 * 1024 // 100KB
+
+	// DefaultWriteBufferSize is the default size of the write channel buffer.
+	// Based on analysis of real-world EEBUS logs, 256 messages provides
+	// a good balance between memory usage and handling burst scenarios.
+	// Maximum observed burst was 106 messages in 100ms.
+	DefaultWriteBufferSize = 256
 )
