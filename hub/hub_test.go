@@ -34,11 +34,6 @@ func TestHubSuite(t *testing.T) {
 	suite.Run(t, new(HubSuite))
 }
 
-type testStruct struct {
-	counter   int
-	timeRange connectionInitiationDelayTimeRange
-}
-
 type HubSuite struct {
 	suite.Suite
 
@@ -52,27 +47,11 @@ type HubSuite struct {
 
 	remoteSki string
 
-	tests []testStruct
-
 	sut *Hub
 }
 
 func (s *HubSuite) BeforeTest(suiteName, testName string) {
 	s.remoteSki = "remotetestski"
-
-	s.tests = []testStruct{
-		{0, connectionInitiationDelayTimeRanges[0]},
-		{1, connectionInitiationDelayTimeRanges[1]},
-		{2, connectionInitiationDelayTimeRanges[2]},
-		{3, connectionInitiationDelayTimeRanges[2]},
-		{4, connectionInitiationDelayTimeRanges[2]},
-		{5, connectionInitiationDelayTimeRanges[2]},
-		{6, connectionInitiationDelayTimeRanges[2]},
-		{7, connectionInitiationDelayTimeRanges[2]},
-		{8, connectionInitiationDelayTimeRanges[2]},
-		{9, connectionInitiationDelayTimeRanges[2]},
-		{10, connectionInitiationDelayTimeRanges[2]},
-	}
 
 	ctrl := gomock.NewController(s.T())
 	// use gomock mocks instead of mockery, as those will panic with a data race error in these tests
@@ -495,6 +474,37 @@ func (s *HubSuite) Test_ConnectFoundService_03() {
 	server.Close()
 }
 
+func (s *HubSuite) Test_ConnectFoundService_04() {
+	// get the SKI from the certificate
+	leaf, err := x509.ParseCertificate(s.sut.certifciate.Certificate[0])
+	assert.Nil(s.T(), err)
+
+	ski, err := cert.SkiFromCertificate(leaf)
+	assert.Nil(s.T(), err)
+
+	service := s.sut.ServiceForSKI(ski)
+
+	server := httptest.NewUnstartedServer(s.sut)
+	server.TLS = &tls.Config{
+		Certificates:       []tls.Certificate{s.sut.certifciate},
+		ClientAuth:         tls.RequireAnyClientCert,
+		CipherSuites:       cert.CipherSuites, // #nosec G402
+		InsecureSkipVerify: true,              // #nosec G402
+	}
+	server.StartTLS()
+
+	url, err := url.Parse(server.URL)
+	assert.Nil(s.T(), err)
+
+	err = s.sut.connectFoundService(service, url.Hostname(), url.Port(), url.Path)
+	assert.Nil(s.T(), err)
+
+	time.Sleep(time.Second)
+
+	server.CloseClientConnections()
+	server.Close()
+}
+
 func (s *HubSuite) Test_KeepThisConnection() {
 	service := s.sut.ServiceForSKI(s.remoteSki)
 
@@ -562,18 +572,19 @@ func (s *HubSuite) Test_checkHasStarted() {
 }
 
 func (s *HubSuite) Test_IncreaseConnectionAttemptCounter() {
-	for _, test := range s.tests {
-		s.sut.increaseConnectionAttemptCounter(s.remoteSki)
+	// This functionality is already tested in TestConnectionAttemptCounterMaximum
+	// and TestConnectionInitiationDelayTimeRange in hub_connections_coverage_test.go
+	// Test that the counter increments properly
+	counter1 := s.sut.increaseConnectionAttemptCounter(s.remoteSki)
+	assert.Equal(s.T(), 0, counter1)
 
-		s.sut.muxConAttempt.Lock()
-		counter, exists := s.sut.connectionAttemptCounter[s.remoteSki]
-		timeRange := connectionInitiationDelayTimeRanges[counter]
-		s.sut.muxConAttempt.Unlock()
+	counter2 := s.sut.increaseConnectionAttemptCounter(s.remoteSki)
+	assert.Equal(s.T(), 1, counter2)
 
-		assert.Equal(s.T(), true, exists)
-		assert.Equal(s.T(), test.timeRange.min, timeRange.min)
-		assert.Equal(s.T(), test.timeRange.max, timeRange.max)
-	}
+	// Verify it exists
+	currentCounter, exists := s.sut.getCurrentConnectionAttemptCounter(s.remoteSki)
+	assert.True(s.T(), exists)
+	assert.Equal(s.T(), 1, currentCounter)
 }
 
 func (s *HubSuite) Test_RemoveConnectionAttemptCounter() {
@@ -598,10 +609,13 @@ func (s *HubSuite) Test_GetCurrentConnectionAttemptCounter() {
 }
 
 func (s *HubSuite) Test_GetConnectionInitiationDelayTime() {
+	// This functionality is already tested in TestConnectionInitiationDelayTimeRange
+	// in hub_connections_coverage_test.go
 	counter, duration := s.sut.getConnectionInitiationDelayTime(s.remoteSki)
 	assert.Equal(s.T(), 0, counter)
-	assert.LessOrEqual(s.T(), float64(s.tests[counter].timeRange.min), float64(duration/time.Second))
-	assert.GreaterOrEqual(s.T(), float64(s.tests[counter].timeRange.max), float64(duration/time.Second))
+	// First attempt should be 0-3 seconds
+	assert.GreaterOrEqual(s.T(), duration, time.Duration(0))
+	assert.LessOrEqual(s.T(), duration, 3*time.Second)
 }
 
 func (s *HubSuite) Test_ConnectionAttemptRunning() {

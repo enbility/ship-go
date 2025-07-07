@@ -113,7 +113,7 @@ func (h *Hub) Start() {
 // close all connections
 func (h *Hub) Shutdown() {
 	h.mdns.Shutdown()
-	
+
 	// Cancel all pending connection delay timers
 	h.muxTimers.Lock()
 	for ski, timer := range h.connectionDelayTimers {
@@ -121,7 +121,7 @@ func (h *Hub) Shutdown() {
 		delete(h.connectionDelayTimers, ski)
 	}
 	h.muxTimers.Unlock()
-	
+
 	for _, c := range h.connections {
 		c.CloseConnection(false, 0, "")
 	}

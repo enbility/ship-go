@@ -16,28 +16,28 @@ import (
 // in connection registration when a connection is being closed while a new one registers
 func TestConnectionRegistration_ConcurrentCloseAndReplace(t *testing.T) {
 	hub := setupTestHub(t)
-	
+
 	const testSKI = "test-ski-123"
 	const numIterations = 100
-	
+
 	for i := 0; i < numIterations; i++ {
 		// Create two different connections
 		conn1 := mocks.NewShipConnectionInterface(t)
 		conn1.EXPECT().RemoteSKI().Return(testSKI).Maybe()
 		conn1.EXPECT().DataHandler().Return(nil).Maybe()
 		conn1.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
-		
+
 		conn2 := mocks.NewShipConnectionInterface(t)
 		conn2.EXPECT().RemoteSKI().Return(testSKI).Maybe()
 		conn2.EXPECT().DataHandler().Return(nil).Maybe()
 		conn2.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
-		
+
 		// Register first connection
 		hub.registerConnection(conn1)
-		
+
 		var wg sync.WaitGroup
 		wg.Add(2)
-		
+
 		// Goroutine 1: Close and unregister the first connection
 		go func() {
 			defer wg.Done()
@@ -52,15 +52,15 @@ func TestConnectionRegistration_ConcurrentCloseAndReplace(t *testing.T) {
 				}
 			}
 		}()
-		
+
 		// Goroutine 2: Register a new connection
 		go func() {
 			defer wg.Done()
 			hub.registerConnection(conn2)
 		}()
-		
+
 		wg.Wait()
-		
+
 		// Verify state is consistent
 		finalConn := hub.connectionForSKI(testSKI)
 		switch finalConn {
@@ -75,11 +75,11 @@ func TestConnectionRegistration_ConcurrentCloseAndReplace(t *testing.T) {
 // TestUnregisterConnectionIfMatch tests the new atomic unregister method
 func TestUnregisterConnectionIfMatch(t *testing.T) {
 	tests := []struct {
-		name           string
-		setupConn      bool
-		matchingConn   bool
-		expectSuccess  bool
-		expectRemoved  bool
+		name          string
+		setupConn     bool
+		matchingConn  bool
+		expectSuccess bool
+		expectRemoved bool
 	}{
 		{
 			name:          "successful unregister with matching connection",
@@ -103,19 +103,19 @@ func TestUnregisterConnectionIfMatch(t *testing.T) {
 			expectRemoved: true, // No connection to begin with
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			hub := setupTestHub(t)
 			const testSKI = "test-ski"
-			
+
 			conn := mocks.NewShipConnectionInterface(t)
 			conn.EXPECT().RemoteSKI().Return(testSKI).Maybe()
-			
+
 			if tt.setupConn {
 				hub.registerConnection(conn)
 			}
-			
+
 			// Determine which connection to pass
 			connToUnregister := conn
 			if !tt.matchingConn {
@@ -123,12 +123,12 @@ func TestUnregisterConnectionIfMatch(t *testing.T) {
 				otherConn := mocks.NewShipConnectionInterface(t)
 				connToUnregister = otherConn
 			}
-			
+
 			// Test the new method (to be implemented)
 			success := hub.UnregisterConnectionIfMatch(testSKI, connToUnregister)
-			
+
 			assert.Equal(t, tt.expectSuccess, success)
-			
+
 			// Verify connection state
 			finalConn := hub.connectionForSKI(testSKI)
 			if tt.expectRemoved {
@@ -143,37 +143,37 @@ func TestUnregisterConnectionIfMatch(t *testing.T) {
 // TestConcurrentConnectionOperations tests multiple concurrent operations
 func TestConcurrentConnectionOperations(t *testing.T) {
 	hub := setupTestHub(t)
-	
+
 	var wg sync.WaitGroup
 	const numGoroutines = 100
 	const numSKIs = 10
-	
+
 	// Create a pool of connections
 	connections := make([]api.ShipConnectionInterface, numSKIs)
 	skis := make([]string, numSKIs)
-	
+
 	for i := 0; i < numSKIs; i++ {
-		ski := string(rune('a' + i)) + "-ski"
+		ski := string(rune('a'+i)) + "-ski"
 		skis[i] = ski
-		
+
 		conn := mocks.NewShipConnectionInterface(t)
 		conn.EXPECT().RemoteSKI().Return(ski).Maybe()
 		conn.EXPECT().DataHandler().Return(nil).Maybe()
 		conn.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 		connections[i] = conn
 	}
-	
+
 	// Run concurrent operations
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			
+
 			// Pick a random SKI
 			skiIdx := idx % numSKIs
 			ski := skis[skiIdx]
 			conn := connections[skiIdx]
-			
+
 			// Perform random operation
 			switch idx % 3 {
 			case 0: // Register
@@ -185,9 +185,9 @@ func TestConcurrentConnectionOperations(t *testing.T) {
 			}
 		}(i)
 	}
-	
+
 	wg.Wait()
-	
+
 	// Verify no panics and state is consistent
 	for i, ski := range skis {
 		conn := hub.connectionForSKI(ski)
@@ -201,20 +201,20 @@ func TestConcurrentConnectionOperations(t *testing.T) {
 func setupTestHub(t *testing.T) *Hub {
 	mdns := mocks.NewMdnsInterface(t)
 	hubReader := mocks.NewHubReaderInterface(t)
-	
+
 	// Set up expectations
 	hubReader.EXPECT().RemoteSKIConnected(mock.Anything).Maybe()
 	hubReader.EXPECT().RemoteSKIDisconnected(mock.Anything).Maybe()
 	hubReader.EXPECT().ServiceShipIDUpdate(mock.Anything, mock.Anything).Maybe()
 	hubReader.EXPECT().ServicePairingDetailUpdate(mock.Anything, mock.Anything).Maybe()
-	
+
 	service := api.NewServiceDetails("test-ski")
 	service.SetShipID("test-ship-id")
-	
+
 	// Create a dummy certificate for testing
 	cert := tls.Certificate{}
-	
+
 	hub := NewHub(hubReader, mdns, 4729, cert, service)
-	
+
 	return hub
 }

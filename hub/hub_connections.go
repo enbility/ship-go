@@ -31,7 +31,7 @@ func newConnectionDelayTimer(duration time.Duration, f func()) *connectionDelayT
 	cdt := &connectionDelayTimer{
 		done: make(chan struct{}),
 	}
-	
+
 	cdt.timer = time.AfterFunc(duration, func() {
 		select {
 		case <-cdt.done:
@@ -42,7 +42,7 @@ func newConnectionDelayTimer(duration time.Duration, f func()) *connectionDelayT
 			f()
 		}
 	})
-	
+
 	return cdt
 }
 
@@ -280,7 +280,7 @@ func (h *Hub) keepThisConnection(conn *websocket.Conn, incomingRequest bool, rem
 	// different approach: The connection initiated by the higher SKI will be kept
 
 	remoteSKI := remoteService.SKI()
-	
+
 	// Atomic check-and-action to prevent TOCTOU race conditions
 	h.muxCon.Lock()
 	existingC, exists := h.connections[remoteSKI]
@@ -302,7 +302,7 @@ func (h *Hub) keepThisConnection(conn *websocket.Conn, incomingRequest bool, rem
 		// Atomically remove the old connection while holding the lock
 		delete(h.connections, remoteSKI)
 		h.muxCon.Unlock()
-		
+
 		logging.Log().Debug("closing existing double connection")
 		// Close the old connection outside the lock to prevent deadlock
 		go func(oldConn api.ShipConnectionInterface) {
@@ -310,7 +310,7 @@ func (h *Hub) keepThisConnection(conn *websocket.Conn, incomingRequest bool, rem
 		}(existingC)
 	} else {
 		h.muxCon.Unlock()
-		
+
 		connType := "incoming"
 		if !incomingRequest {
 			connType = "outgoing"
@@ -352,7 +352,7 @@ func (h *Hub) coordinateConnectionInitations(ski string, entry *api.MdnsEntry) {
 	timer := newConnectionDelayTimer(duration, func() {
 		h.prepareConnectionInitation(ski, counter, entry)
 	})
-	
+
 	// Store the timer so it can be cancelled if needed
 	h.storeConnectionDelayTimer(ski, timer)
 }
@@ -412,15 +412,7 @@ func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.Md
 	}
 
 	// try IPv4 addresses before IPv6 addresses
-	slices.SortFunc(entry.Addresses, func(a, b net.IP) int {
-		if a.To4() != nil && b.To4() == nil {
-			return -1
-		}
-		if a.To4() == nil && b.To4() != nil {
-			return 1
-		}
-		return 0
-	})
+	entry.Addresses = h.sortIPAddresses(entry.Addresses)
 
 	// try connecting via the provided IP addresses
 	for _, address := range entry.Addresses {
@@ -441,6 +433,22 @@ func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.Md
 	// no connection could be estabished via any of the provided addresses
 	// because no service was reachable at any of the addresses
 	return false
+}
+
+// try IPv4 addresses before IPv6 addresses
+func (h *Hub) sortIPAddresses(addresses []net.IP) []net.IP {
+	// Sort IP addresses to prefer IPv4 over IPv6
+	slices.SortFunc(addresses, func(a, b net.IP) int {
+		if a.To4() != nil && b.To4() == nil {
+			return -1 // a is IPv4, b is IPv6
+		}
+		if a.To4() == nil && b.To4() != nil {
+			return 1 // a is IPv6, b is IPv4
+		}
+		return 0 // both are either IPv4 or IPv6
+	})
+
+	return addresses
 }
 
 // increase the connection attempt counter for the given ski
@@ -528,7 +536,7 @@ func (h *Hub) registerConnection(connection api.ShipConnectionInterface) {
 
 	ski := connection.RemoteSKI()
 	h.connections[ski] = connection
-	
+
 	// Cancel any pending connection delay timer since connection succeeded
 	h.cancelConnectionDelayTimer(ski)
 }
@@ -558,12 +566,12 @@ func (h *Hub) connectionForSKI(ski string) api.ShipConnectionInterface {
 func (h *Hub) UnregisterConnectionIfMatch(ski string, conn api.ShipConnectionInterface) bool {
 	h.muxCon.Lock()
 	defer h.muxCon.Unlock()
-	
+
 	current, exists := h.connections[ski]
 	if !exists || current != conn {
 		return false
 	}
-	
+
 	delete(h.connections, ski)
 	return true
 }
@@ -572,12 +580,12 @@ func (h *Hub) UnregisterConnectionIfMatch(ski string, conn api.ShipConnectionInt
 func (h *Hub) storeConnectionDelayTimer(ski string, timer *connectionDelayTimer) {
 	h.muxTimers.Lock()
 	defer h.muxTimers.Unlock()
-	
+
 	// Cancel any existing timer
 	if existing, ok := h.connectionDelayTimers[ski]; ok {
 		existing.Stop()
 	}
-	
+
 	h.connectionDelayTimers[ski] = timer
 }
 
@@ -585,7 +593,7 @@ func (h *Hub) storeConnectionDelayTimer(ski string, timer *connectionDelayTimer)
 func (h *Hub) cancelConnectionDelayTimer(ski string) {
 	h.muxTimers.Lock()
 	defer h.muxTimers.Unlock()
-	
+
 	if timer, ok := h.connectionDelayTimers[ski]; ok {
 		timer.Stop()
 		delete(h.connectionDelayTimers, ski)
