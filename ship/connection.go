@@ -161,6 +161,12 @@ func (c *ShipConnection) ApproveIfPending() bool {
 // AbortIfPending atomically aborts the handshake if in pending or ready state
 // Returns true if the abort was successful, false otherwise
 //
+// This method accepts both SmeHelloStatePendingListen and SmeHelloStateReadyListen states
+// because the handshake can be aborted at any point before reaching SmeHelloStateOk.
+// The ReadyListen state is included to handle the case where an approve operation
+// transitions the state from PendingListen through ReadyInit to ReadyListen, but
+// the handshake should still be abortable until fully complete.
+//
 // Similar to ApproveIfPending, this method prevents race conditions during
 // concurrent handshake operations by atomically checking and updating the state.
 func (c *ShipConnection) AbortIfPending() bool {

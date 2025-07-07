@@ -120,8 +120,10 @@ func TestConnectionDelayTimerLeak(t *testing.T) {
 		beforeGoroutines := runtime.NumGoroutine()
 		
 		// Simulate many rapid connection attempts
+		// Reduced from 100 to 20 goroutines and from 5 to 2 attempts
+		// This still tests for leaks but runs much faster
 		var wg sync.WaitGroup
-		for i := 0; i < 100; i++ {
+		for i := 0; i < 20; i++ {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
@@ -141,7 +143,7 @@ func TestConnectionDelayTimerLeak(t *testing.T) {
 				hub.muxReg.Unlock()
 				
 				// Multiple connection attempts
-				for j := 0; j < 5; j++ {
+				for j := 0; j < 2; j++ {
 					hub.coordinateConnectionInitations(ski, entry)
 					time.Sleep(10 * time.Millisecond)
 				}
@@ -158,7 +160,8 @@ func TestConnectionDelayTimerLeak(t *testing.T) {
 			beforeGoroutines, midGoroutines, midGoroutines-beforeGoroutines)
 		
 		// Demonstrate the issue: goroutines accumulate
-		if midGoroutines-beforeGoroutines > 50 {
+		// With 20 goroutines * 2 attempts = 40 operations
+		if midGoroutines-beforeGoroutines > 20 {
 			t.Logf("ISSUE DEMONSTRATED: %d timer goroutines accumulated", midGoroutines-beforeGoroutines)
 		}
 		

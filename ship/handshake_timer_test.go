@@ -39,7 +39,7 @@ func TestHandshakeTimer(t *testing.T) {
 		// Verify no goroutine leak
 		assert.Eventually(t, func() bool {
 			return runtime.NumGoroutine() <= initialGoroutines+1
-		}, 2*time.Second, 50*time.Millisecond, "timer goroutine leaked")
+		}, 500*time.Millisecond, 50*time.Millisecond, "timer goroutine leaked")
 
 		// Verify timer state
 		assert.False(t, conn.getHandshakeTimerRunning())
@@ -80,7 +80,7 @@ func TestHandshakeTimer(t *testing.T) {
 		// Verify no goroutine leak
 		assert.Eventually(t, func() bool {
 			return runtime.NumGoroutine() <= initialGoroutines+1
-		}, 2*time.Second, 50*time.Millisecond, "timer goroutines leaked")
+		}, 500*time.Millisecond, 50*time.Millisecond, "timer goroutines leaked")
 	})
 
 	t.Run("timer_cleanup_on_close", func(t *testing.T) {
@@ -98,7 +98,7 @@ func TestHandshakeTimer(t *testing.T) {
 		// Verify timer was stopped
 		assert.Eventually(t, func() bool {
 			return runtime.NumGoroutine() <= initialGoroutines+1
-		}, 2*time.Second, 50*time.Millisecond, "timer goroutine not cleaned up on close")
+		}, 500*time.Millisecond, 50*time.Millisecond, "timer goroutine not cleaned up on close")
 	})
 
 	t.Run("concurrent_timer_operations", func(t *testing.T) {
