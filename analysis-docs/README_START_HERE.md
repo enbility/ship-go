@@ -6,6 +6,11 @@
 ## Change History
 
 ### 2025-07-08 🆕
+- Implemented enhanced diagnostic logging for double connection prevention
+- Updated Priority Action Matrix to reflect partial monitoring implementation
+- Updated related documentation (SPEC_DEVIATIONS.md, IMPROVEMENT_SUGGESTIONS.md)
+
+### 2025-07-08
 - Implemented connection limits to address resource exhaustion concerns
 - Updated IMPROVEMENT_SUGGESTIONS.md to reflect partial implementation of rate limiting
 - Added rationale for choosing simple connection limits over complex rate limiting
@@ -174,7 +179,7 @@ Comprehensive resource leak fixes have been implemented, addressing all critical
 | Priority | Issue | Impact | Effort | First Step |
 |----------|-------|--------|--------|------------|
 | P1 | Resource limits | DoS vulnerability | Medium | Add connection/rate limits |
-| P1 | Monitoring | Can't detect issues | Low | Add metrics/logging |
+| P1 | Monitoring | Can't detect issues | Low | ~~Add metrics/logging~~ ✅ Partial: Enhanced double connection logging (2025-07-08) |
 | P2 | Double connection | Interop issues | High | Test with other implementations |
 | P2 | Spec documentation | Confusion | Low | Document decisions |
 | P3 | PIN verification | Feature gap | Medium | Implement if needed |

@@ -331,6 +331,10 @@ func (h *Hub) keepThisConnection(conn *websocket.Conn, incomingRequest bool, rem
 		return true
 	}
 
+	// Log the double connection scenario for diagnostics
+	logging.Log().Debug("double connection detected with remoteSKI", remoteSKI,
+		"incoming", incomingRequest)
+
 	keep := false
 	if incomingRequest {
 		keep = remoteSKI > h.localService.SKI()
@@ -345,7 +349,7 @@ func (h *Hub) keepThisConnection(conn *websocket.Conn, incomingRequest bool, rem
 		delete(h.connections, remoteSKI)
 		h.muxCon.Unlock()
 
-		logging.Log().Debug("closing existing double connection")
+		logging.Log().Debug("closing existing double connection, keep the new one")
 		// Close the old connection outside the lock to prevent deadlock
 		go func(oldConn api.ShipConnectionInterface) {
 			oldConn.CloseConnection(false, 0, "")

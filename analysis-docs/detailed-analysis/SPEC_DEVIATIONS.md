@@ -1,9 +1,13 @@
 # SHIP Specification Deviations
 
-**Last Updated:** 2025-07-06  
+**Last Updated:** 2025-07-08  
 **Status:** Active
 
 ## Change History
+
+### 2025-07-08
+- Added enhanced diagnostic logging to double connection prevention section
+- Updated mitigation strategies to reflect implemented logging improvements
 
 ### 2025-07-06
 - Updated TLS fragment length section with comprehensive analysis
@@ -71,6 +75,7 @@ if incomingRequest {
 - Test extensively with other SHIP implementations
 - Document this deviation clearly for users
 - Consider implementing a compatibility mode
+- Enhanced diagnostic logging implemented (2025-07-08) to aid remote debugging
 
 **Race Condition Note**:
 The double connection prevention logic has an inherent race condition window that cannot be completely eliminated in distributed systems. The implementation includes the following mitigations:
@@ -80,6 +85,12 @@ The double connection prevention logic has an inherent race condition window tha
 2. **Connection Timing**: There's still a small window between checking for existing connections and registering new ones where race conditions can occur. This is documented and accepted as a limitation of distributed systems.
 
 3. **Testing**: Comprehensive race condition tests have been added to verify the implementation remains stable under concurrent connection scenarios.
+
+4. **Diagnostic Logging**: Enhanced logging (2025-07-08) captures:
+   - Detection of double connection scenarios with remote SKI
+   - Whether the connection is incoming or outgoing
+   - Decision made (keep new vs. keep existing)
+   - This aids in remote debugging when users report interoperability issues
 
 ---
 
