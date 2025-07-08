@@ -61,6 +61,10 @@ type Hub struct {
 	connectionDelayTimers map[string]*connectionDelayTimer
 	muxTimers             sync.RWMutex
 
+	// Maximum number of simultaneous connections allowed
+	// Default is 10 if not configured
+	maxConnections int
+
 	muxCon        sync.RWMutex
 	muxConAttempt sync.RWMutex
 	muxReg        sync.RWMutex
@@ -85,6 +89,7 @@ func NewHub(hubReader api.HubReaderInterface,
 		certifciate:              certificate,
 		localService:             localService,
 		mdns:                     mdns,
+		maxConnections:           10, // Default connection limit
 	}
 
 	return hub
@@ -163,6 +168,18 @@ func (h *Hub) numberPairedServices() int {
 	h.muxReg.RUnlock()
 
 	return amount
+}
+
+// SetMaxConnections sets the maximum number of simultaneous connections allowed
+// A value of 0 or less will use the default of 10
+func (h *Hub) SetMaxConnections(max int) {
+	h.muxCon.Lock()
+	defer h.muxCon.Unlock()
+	
+	if max <= 0 {
+		max = 10
+	}
+	h.maxConnections = max
 }
 
 // startup mDNS if a paired service is not connected

@@ -112,6 +112,18 @@ func (h *Hub) startWebsocketServer() error {
 
 // HTTP Server callback for handling incoming connection requests
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Check connection limit before accepting new connections
+	h.muxCon.RLock()
+	currentConnections := len(h.connections)
+	maxConnections := h.maxConnections
+	h.muxCon.RUnlock()
+	
+	if currentConnections >= maxConnections {
+		logging.Log().Debug("connection limit reached, rejecting new connection", currentConnections, maxConnections)
+		http.Error(w, "Connection limit reached", http.StatusServiceUnavailable)
+		return
+	}
+
 	upgrader := websocket.Upgrader{
 		CheckOrigin:  func(r *http.Request) bool { return true },
 		Subprotocols: []string{api.ShipWebsocketSubProtocol}, // SHIP 10.2: Sub protocol "ship" is required
@@ -191,6 +203,17 @@ func (h *Hub) isSkiConnected(ski string) bool {
 func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port, path string) error {
 	if h.isSkiConnected(remoteService.SKI()) {
 		return nil
+	}
+
+	// Check connection limit before initiating new connection
+	h.muxCon.RLock()
+	currentConnections := len(h.connections)
+	maxConnections := h.maxConnections
+	h.muxCon.RUnlock()
+	
+	if currentConnections >= maxConnections {
+		logging.Log().Debug("connection limit reached, not initiating new connection", currentConnections, maxConnections)
+		return fmt.Errorf("connection limit reached (%d/%d)", currentConnections, maxConnections)
 	}
 
 	logging.Log().Debugf("initiating connection to %s at %s:%s%s", remoteService.SKI(), host, port, path)

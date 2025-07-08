@@ -481,3 +481,122 @@ func TestConnectFoundServiceCertificateErrors(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+// TestConnectionLimit tests the connection limit functionality
+func TestConnectionLimit(t *testing.T) {
+	t.Run("default_limit", func(t *testing.T) {
+		hub := setupTestHubForTimer(t)
+		assert.Equal(t, 10, hub.maxConnections, "default connection limit should be 10")
+	})
+
+	t.Run("set_max_connections", func(t *testing.T) {
+		hub := setupTestHubForTimer(t)
+		
+		// Test setting a valid limit
+		hub.SetMaxConnections(5)
+		assert.Equal(t, 5, hub.maxConnections)
+		
+		// Test setting zero (should use default)
+		hub.SetMaxConnections(0)
+		assert.Equal(t, 10, hub.maxConnections)
+		
+		// Test setting negative (should use default)
+		hub.SetMaxConnections(-1)
+		assert.Equal(t, 10, hub.maxConnections)
+	})
+
+	t.Run("reject_incoming_when_limit_reached", func(t *testing.T) {
+		hub := setupTestHubForTimer(t)
+		hub.SetMaxConnections(2)
+
+		// Add 2 mock connections to reach the limit
+		mockConn1 := mocks.NewShipConnectionInterface(t)
+		mockConn2 := mocks.NewShipConnectionInterface(t)
+		hub.muxCon.Lock()
+		hub.connections["ski1"] = mockConn1
+		hub.connections["ski2"] = mockConn2
+		hub.muxCon.Unlock()
+
+		// Create a test request
+		req := httptest.NewRequest("GET", "/ship", nil)
+		w := httptest.NewRecorder()
+
+		// Try to serve the request - should be rejected
+		hub.ServeHTTP(w, req)
+
+		// Check that we got a 503 Service Unavailable
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+		assert.Contains(t, w.Body.String(), "Connection limit reached")
+	})
+
+	t.Run("accept_incoming_when_under_limit", func(t *testing.T) {
+		hub := setupTestHubForTimer(t)
+		hub.SetMaxConnections(5)
+
+		// Add 2 mock connections (under limit of 5)
+		mockConn1 := mocks.NewShipConnectionInterface(t)
+		mockConn2 := mocks.NewShipConnectionInterface(t)
+		hub.muxCon.Lock()
+		hub.connections["ski1"] = mockConn1
+		hub.connections["ski2"] = mockConn2
+		hub.muxCon.Unlock()
+
+		// Create a test request
+		req := httptest.NewRequest("GET", "/ship", nil)
+		req.Header.Set("Upgrade", "websocket")
+		req.Header.Set("Connection", "upgrade")
+		req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+		req.Header.Set("Sec-WebSocket-Version", "13")
+		w := httptest.NewRecorder()
+
+		// Try to serve the request - should not be rejected due to limit
+		hub.ServeHTTP(w, req)
+
+		// The request will fail for other reasons (no TLS, etc) but not due to connection limit
+		assert.NotEqual(t, http.StatusServiceUnavailable, w.Code)
+		assert.NotContains(t, w.Body.String(), "Connection limit reached")
+	})
+
+	t.Run("reject_outgoing_when_limit_reached", func(t *testing.T) {
+		hub := setupTestHubForTimer(t)
+		hub.SetMaxConnections(2)
+
+		// Add 2 mock connections to reach the limit
+		mockConn1 := mocks.NewShipConnectionInterface(t)
+		mockConn2 := mocks.NewShipConnectionInterface(t)
+		hub.muxCon.Lock()
+		hub.connections["ski1"] = mockConn1
+		hub.connections["ski2"] = mockConn2
+		hub.muxCon.Unlock()
+
+		// Try to connect to a new service
+		service := api.NewServiceDetails("ski3")
+		err := hub.connectFoundService(service, "localhost", "9999", "/")
+		
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "connection limit reached")
+		assert.Contains(t, err.Error(), "2/2")
+	})
+
+	t.Run("allow_outgoing_when_under_limit", func(t *testing.T) {
+		hub := setupTestHubForTimer(t)
+		hub.SetMaxConnections(5)
+
+		// Add 2 mock connections (under limit of 5)
+		mockConn1 := mocks.NewShipConnectionInterface(t)
+		mockConn2 := mocks.NewShipConnectionInterface(t)
+		hub.muxCon.Lock()
+		hub.connections["ski1"] = mockConn1
+		hub.connections["ski2"] = mockConn2
+		hub.muxCon.Unlock()
+
+		// Try to connect to a new service
+		service := api.NewServiceDetails("ski3")
+		err := hub.connectFoundService(service, "localhost", "9999", "/")
+		
+		// Error will occur for other reasons (connection failed) but not due to limit
+		if err != nil {
+			assert.NotContains(t, err.Error(), "connection limit reached")
+		}
+	})
+}

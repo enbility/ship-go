@@ -1,11 +1,17 @@
 # SHIP Analysis Documentation - Start Here
 
-**Last Updated:** 2025-07-07  
+**Last Updated:** 2025-07-08  
 **Status:** Active
 
 ## Change History
 
-### 2025-07-07 🆕
+### 2025-07-08 🆕
+- Implemented connection limits to address resource exhaustion concerns
+- Updated IMPROVEMENT_SUGGESTIONS.md to reflect partial implementation of rate limiting
+- Added rationale for choosing simple connection limits over complex rate limiting
+- Documented why certain suggestions (per-IP limiting, message rate limiting) were not implemented
+
+### 2025-07-07
 - Updated quality score from 7.5/10 to 8.0/10 after resource leak fixes
 - Added detailed implementation patterns and test coverage to IMPROVEMENT_SUGGESTIONS.md
 - Marked resource leak issues as resolved with comprehensive documentation
@@ -20,6 +26,13 @@
 - Incorporated content from ANALYSIS_HISTORY.md
 
 ## 🆕 Latest Updates
+
+### Connection Limits Implemented (2025-07-08)
+Simple connection limits have been added to address resource exhaustion concerns:
+- **What:** Configurable total connection limit (default: 10)
+- **Why:** Protects against buggy devices in local networks, not internet-scale attacks
+- **Not Implemented:** Complex rate limiting (per-IP, per-message) deemed unnecessary for local-only deployments
+- **Details:** See [IMPROVEMENT_SUGGESTIONS.md](./detailed-analysis/IMPROVEMENT_SUGGESTIONS.md#11-rate-limiting-and-connection-limits--partially-addressed) for rationale
 
 ### Resource Leak Fixes Completed (2025-07-07)
 Comprehensive resource leak fixes have been implemented, addressing all critical goroutine leaks and race conditions:

@@ -16,8 +16,8 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
 
 | Issue | Priority | Severity | Impact | Status |
 |-------|----------|----------|--------|--------|
-| No Rate Limiting | P1 | Critical | Security/Reliability | ❌ Missing |
-| Connection/Message Limits | P1 | Critical | Reliability | ❌ Missing |
+| No Rate Limiting | P1 | Critical→Medium | Security/Reliability | ⚠️ Partial (connection limits only) |
+| Connection/Message Limits | P1 | Critical→Medium | Reliability | ✅ Connection limits implemented |
 | Double Connection Deviation | P1 | High | Interoperability | ⚠️ Different approach |
 | Resource Leaks on Error | P1 | High | Reliability | ✅ Fixed |
 | Race Conditions | P2 | High | Reliability | ✅ Fixed |
@@ -34,17 +34,30 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
 
 ## 1. Security Issues
 
-### 1.1 No Rate Limiting ⚠️ CRITICAL
+### 1.1 Rate Limiting and Connection Limits ✅ PARTIALLY ADDRESSED
 - **Priority**: P1
-- **Severity**: Critical
+- **Severity**: Critical → Medium (reduced after implementation)
 - **Impact**: Security/Reliability - DoS vulnerability
 - **Location**: Connection and message handling
-- **Issue**: No protection against connection flooding or message spam
-- **Recommendation**:
-  - Implement connection rate limiting per IP/SKI
-  - Add message rate limiting per connection
-  - Add configurable thresholds
-  - Consider exponential backoff for repeated failures
+- **Status**: Connection limits implemented, rate limiting not implemented
+- **What was implemented**:
+  - Simple total connection limit (default: 10, configurable)
+  - Rejection of new connections when limit reached (HTTP 503)
+  - Thread-safe implementation with proper mutex usage
+- **Why this approach**:
+  - ship-go is used only in local home networks (no cloud/internet exposure)
+  - Real threats are buggy devices and resource exhaustion, not malicious attacks
+  - Home networks are trusted environments with pre-paired devices
+  - Simple connection limits address the actual problems without complexity
+- **What was NOT implemented and why**:
+  - **Per-IP rate limiting**: NAT/CGNAT issues in home networks make this problematic
+  - **Per-SKI rate limiting**: SHIP already enforces 1 connection per SKI
+  - **Message rate limiting**: Trusted devices in local networks don't need this
+  - **Time-based rate limiting**: Unnecessary complexity for the threat model
+  - **Token bucket/sliding window**: Over-engineering for home automation scale
+- **Remaining considerations**:
+  - Message flooding from buggy devices still possible (accepted risk)
+  - No protection against malicious local network actors (by design - physical access = game over)
 
 ### 1.2 TLS Configuration Clarification ✅ NOT A VULNERABILITY
 - **Priority**: P4
@@ -155,17 +168,42 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
 
 ## 3. Reliability Issues
 
-### 3.1 Resource Limits Missing
+### 3.1 Resource Limits ✅ PARTIALLY ADDRESSED
 - **Priority**: P1
-- **Severity**: Critical
+- **Severity**: Critical → Medium (reduced after implementation)
 - **Impact**: Reliability - Resource exhaustion
 - **Location**: Connection and message management
-- **Issue**: No limits on concurrent connections or buffered messages
-- **Recommendation**:
-  - Add configurable connection limit per hub
-  - Implement message queue bounds with backpressure
-  - Add memory usage limits
-  - Monitor goroutine count
+- **Status**: Connection limits implemented, message limits not implemented
+- **What was implemented**:
+  - ✅ Configurable connection limit per hub (default: 10)
+  - ✅ HTTP 503 response when incoming connection limit reached
+  - ✅ Error return when outgoing connection limit reached
+  - ✅ SetMaxConnections() API for runtime configuration
+  - ✅ Thread-safe implementation with existing mutex infrastructure
+  - ✅ Comprehensive unit tests with 100% coverage of new code
+- **Implementation Details**:
+  ```go
+  // In hub struct
+  maxConnections int // Default: 10
+  
+  // Configuration API
+  hub.SetMaxConnections(20) // 0 or negative uses default
+  
+  // Enforcement in ServeHTTP and connectFoundService
+  if len(h.connections) >= h.maxConnections {
+      return error/503
+  }
+  ```
+- **Why this simple approach**:
+  - Targets real threat model: buggy devices in local networks
+  - No cloud exposure means no internet-scale DoS concerns
+  - Per-SKI limits unnecessary (SHIP enforces 1 connection per SKI)
+  - Simple implementation reduces bugs and maintenance burden
+- **What was NOT implemented**:
+  - ❌ Message queue bounds - trusted local devices don't spam
+  - ❌ Memory usage limits - connection limit indirectly controls this
+  - ❌ Goroutine monitoring - each connection has predictable goroutines
+- **Remaining risk**: Message flooding from buggy device (accepted for simplicity)
 
 ### 3.2 Resource Leaks on Error Paths ✅ FIXED
 - **Priority**: P1

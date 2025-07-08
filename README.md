@@ -132,6 +132,32 @@ Local simulation of CI tests:
 make test-ci               # Run exactly what CI runs
 ```
 
+## Configuration
+
+### Connection Limits
+
+The hub supports configurable connection limits to prevent resource exhaustion:
+
+```go
+// Create hub with default limit of 10 connections
+hub := hub.NewHub(hubReader, mdns, port, certificate, localService)
+
+// Configure custom connection limit
+hub.SetMaxConnections(20)  // Allow up to 20 simultaneous connections
+
+// Setting 0 or negative values will use the default of 10
+hub.SetMaxConnections(0)   // Uses default of 10
+```
+
+The connection limit helps protect resource-constrained devices (e.g., Raspberry Pi) from:
+- Buggy devices creating excessive connections
+- Development mistakes (script loops)
+- General resource exhaustion
+
+When the limit is reached:
+- Incoming connections receive HTTP 503 (Service Unavailable)
+- Outgoing connection attempts return an error
+
 ## Implementation notes
 
 - Double connection handling is not implemented according to SHIP 12.2.2. Instead the connection initiated by the higher SKI will be kept. Much simpler and always works
