@@ -60,19 +60,30 @@ func (cdt *connectionDelayTimer) Stop() bool {
 // Websocket connection handling
 func (h *Hub) verifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 	skiFound := false
+	var validCert *x509.Certificate
+	var certSKI string
+
 	for _, v := range rawCerts {
 		cerificate, err := x509.ParseCertificate(v)
 		if err != nil {
 			return err
 		}
 
-		if _, err := cert.SkiFromCertificate(cerificate); err == nil {
+		if ski, err := cert.SkiFromCertificate(cerificate); err == nil {
 			skiFound = true
+			validCert = cerificate
+			certSKI = ski
 			break
 		}
 	}
 	if !skiFound {
 		return errors.New("no valid SKI provided in certificate")
+	}
+
+	// Log certificate expiration warnings (per SHIP spec 12.1.1)
+	// This does not affect the connection - we log but still allow communication
+	if validCert != nil {
+		cert.LogCertificateExpiration(validCert, certSKI)
 	}
 
 	return nil
@@ -117,7 +128,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	currentConnections := len(h.connections)
 	maxConnections := h.maxConnections
 	h.muxCon.RUnlock()
-	
+
 	if currentConnections >= maxConnections {
 		logging.Log().Debug("connection limit reached, rejecting new connection", currentConnections, maxConnections)
 		http.Error(w, "Connection limit reached", http.StatusServiceUnavailable)
@@ -155,6 +166,10 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 		return
 	}
+
+	// Log certificate expiration warnings (per SHIP spec 12.1.1)
+	// This does not affect the connection - we log but still allow communication
+	cert.LogCertificateExpiration(r.TLS.PeerCertificates[0], ski)
 
 	// Set read limit to prevent DoS attacks
 	conn.SetReadLimit(ws.MaxMessageSize)
@@ -210,7 +225,7 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 	currentConnections := len(h.connections)
 	maxConnections := h.maxConnections
 	h.muxCon.RUnlock()
-	
+
 	if currentConnections >= maxConnections {
 		logging.Log().Debug("connection limit reached, not initiating new connection", currentConnections, maxConnections)
 		return fmt.Errorf("connection limit reached (%d/%d)", currentConnections, maxConnections)
@@ -269,6 +284,10 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 		_ = conn.Close()
 		return errors.New(errorString)
 	}
+
+	// Log certificate expiration warnings (per SHIP spec 12.1.1)
+	// This does not affect the connection - we log but still allow communication
+	cert.LogCertificateExpiration(remoteCerts[0], remoteSKI)
 
 	if !h.keepThisConnection(conn, false, remoteService) {
 		errorString := fmt.Sprintf("closing connection to %s: ignoring this connection", remoteService.SKI())

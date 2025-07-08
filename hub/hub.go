@@ -175,7 +175,7 @@ func (h *Hub) numberPairedServices() int {
 func (h *Hub) SetMaxConnections(max int) {
 	h.muxCon.Lock()
 	defer h.muxCon.Unlock()
-	
+
 	if max <= 0 {
 		max = 10
 	}

@@ -491,15 +491,15 @@ func TestConnectionLimit(t *testing.T) {
 
 	t.Run("set_max_connections", func(t *testing.T) {
 		hub := setupTestHubForTimer(t)
-		
+
 		// Test setting a valid limit
 		hub.SetMaxConnections(5)
 		assert.Equal(t, 5, hub.maxConnections)
-		
+
 		// Test setting zero (should use default)
 		hub.SetMaxConnections(0)
 		assert.Equal(t, 10, hub.maxConnections)
-		
+
 		// Test setting negative (should use default)
 		hub.SetMaxConnections(-1)
 		assert.Equal(t, 10, hub.maxConnections)
@@ -572,7 +572,7 @@ func TestConnectionLimit(t *testing.T) {
 		// Try to connect to a new service
 		service := api.NewServiceDetails("ski3")
 		err := hub.connectFoundService(service, "localhost", "9999", "/")
-		
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "connection limit reached")
 		assert.Contains(t, err.Error(), "2/2")
@@ -593,7 +593,7 @@ func TestConnectionLimit(t *testing.T) {
 		// Try to connect to a new service
 		service := api.NewServiceDetails("ski3")
 		err := hub.connectFoundService(service, "localhost", "9999", "/")
-		
+
 		// Error will occur for other reasons (connection failed) but not due to limit
 		if err != nil {
 			assert.NotContains(t, err.Error(), "connection limit reached")
