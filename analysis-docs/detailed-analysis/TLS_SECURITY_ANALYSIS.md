@@ -78,12 +78,18 @@ The specification acknowledges local network usage:
 
 ## Real Security Issues to Address
 
-### 1. Missing Certificate Expiration Warnings (Low Priority)
+### 1. Missing Certificate Expiration Warnings (Low Priority) ✅ IMPLEMENTED
 
 While the spec says lifetime checks are optional, implementing them would be beneficial:
-- Add logging when certificates are expired
-- Allow connection but warn users
-- This aligns with spec: "a SHIP node MAY inform the user about the reasons for a failed optional check"
+- ✅ Added logging when certificates are expired or expiring soon
+- ✅ Allows connection but warns users
+- ✅ Aligns with spec: "a SHIP node MAY inform the user about the reasons for a failed optional check"
+
+**Implementation Details:**
+- Logs info level for certificates expiring within 30 days
+- Logs error level for expired certificates
+- Special handling for "expired today" vs "expired N days ago"
+- Handles empty common names gracefully
 
 ### 2. Weak Cipher Suite (Medium Priority)
 

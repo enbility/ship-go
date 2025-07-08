@@ -27,7 +27,7 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
 | Test Coverage | P2 | High | Reliability | ⚠️ ~70% |
 | Lock Contention | P2 | Medium | Performance | ✅ Optimized (RWMutex) |
 | Excessive Buffer Allocation | P3 | Medium | Performance | ✅ Optimized (256) |
-| Certificate Expiry Warnings | P3 | Low | Monitoring | ❌ Not implemented |
+| Certificate Expiry Warnings | P3 | Low | Monitoring | ✅ Implemented |
 | JSON-UTF16 Support | P4 | Low | Compatibility | ❌ Optional feature |
 
 ---
@@ -82,16 +82,20 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
   - Propose spec update to EEBUS for modern ciphers
   - Prefer optional cipher TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 when possible
 
-### 1.4 Certificate Expiration Warnings
+### 1.4 Certificate Expiration Warnings ✅ IMPLEMENTED
 - **Priority**: P3
 - **Severity**: Low
 - **Impact**: Monitoring
 - **Location**: Certificate validation logic
 - **Issue**: No logging for expired certificates (spec says optional)
-- **Recommendation**:
-  - Add expiration warnings in logs
-  - Allow connections but notify operators
-  - Aligns with spec section 12.1.1
+- **Status**: Implemented - Added certificate expiration logging
+- **Implementation**:
+  - Added `CheckCertificateExpiration()` and `LogCertificateExpiration()` in `cert/cert_expiration.go`
+  - Logs warnings in `verifyPeerCertificate()`, `connectFoundService()`, and `ServeHTTP()`
+  - Info level for certificates expiring within 30 days
+  - Error level for expired certificates
+  - Connections still allowed per spec section 12.1.1
+  - Comprehensive test coverage added
 
 ### 1.5 Weak Random for Security Delays ✅ WON'T FIX
 - **Priority**: P4
@@ -519,11 +523,11 @@ Implement comprehensive monitoring:
 
 ## Conclusion
 
-The ship-go implementation is well-architected and correctly implements most of the SHIP specification. The initially identified "critical TLS vulnerability" is actually correct behavior per the specification. After comprehensive resource leak fixes (completed 2025-07-07), the implementation quality has improved from 7.5/10 to 8.0/10.
+The ship-go implementation is well-architected and correctly implements most of the SHIP specification. The initially identified "critical TLS vulnerability" is actually correct behavior per the specification. After comprehensive resource leak fixes and recent improvements (connection limits and certificate expiration warnings implemented 2025-07-08), the implementation quality has improved from 7.5/10 to 8.0/10.
 
 The real priorities remaining are:
 
-1. **Resource protection** against DoS attacks (rate limiting)
+1. **Resource protection** against DoS attacks (message rate limiting - connection limits already implemented)
 2. **Interoperability testing** for spec deviations
 3. **Documentation** of implementation choices
 4. **Performance optimization** for production scale
