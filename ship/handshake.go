@@ -1,9 +1,10 @@
 package ship
 
 import (
-	"errors"
+	"fmt"
 	"time"
 
+	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/logging"
 	"github.com/enbility/ship-go/model"
 )
@@ -114,7 +115,8 @@ func (c *ShipConnection) handleState(timeout bool, message []byte) {
 
 	case model.CmiStateClientWait:
 		if timeout {
-			c.endHandshakeWithError(errors.New("ship client handshake timeout"))
+			c.endHandshakeWithError(fmt.Errorf("%w: SHIP client handshake with remote SKI %s (state: %v)", 
+				api.ErrConnectionTimeout, c.remoteSKI, model.CmiStateClientWait))
 			return
 		}
 
@@ -122,7 +124,8 @@ func (c *ShipConnection) handleState(timeout bool, message []byte) {
 
 	case model.CmiStateServerWait:
 		if timeout {
-			c.endHandshakeWithError(errors.New("ship server handshake timeout"))
+			c.endHandshakeWithError(fmt.Errorf("%w: SHIP server handshake with remote SKI %s (state: %v)", 
+				api.ErrConnectionTimeout, c.remoteSKI, model.CmiStateServerWait))
 			return
 		}
 		c.handshakeInit_cmiStateServerWait(message)

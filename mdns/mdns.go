@@ -1,7 +1,6 @@
 package mdns
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -196,7 +195,7 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 	} else {
 		// Validate provider factory is available
 		if m.providerFactory == nil {
-			return errors.New("mDNS provider factory not initialized")
+			return fmt.Errorf("mDNS provider factory not initialized for provider selection %d", m.providerSelection)
 		}
 
 		var err error
@@ -218,7 +217,7 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 
 	// Validate that a provider was successfully set
 	if m.mdnsProvider == nil {
-		return errors.New("failed to initialize any mDNS provider")
+		return fmt.Errorf("failed to initialize any mDNS provider (selection: %d)", m.providerSelection)
 	}
 
 	// on startup always start mDNS announcement
@@ -287,18 +286,18 @@ func (m *MdnsManager) Shutdown() {
 // Any other service should only invoke this whenever it is not connected to a CEM service
 func (m *MdnsManager) AnnounceMdnsEntry() error {
 	if m.mdnsProvider == nil {
-		return errors.New("cannot announce mDNS entry: no provider available")
+		return fmt.Errorf("cannot announce mDNS entry: no provider available (selection: %d)", m.providerSelection)
 	}
 
 	// Validate required fields
 	if len(m.identifier) == 0 {
-		return errors.New("cannot announce mDNS entry: service identifier is empty")
+		return fmt.Errorf("cannot announce mDNS entry: service identifier is empty (SKI: %s)", m.ski)
 	}
 	if len(m.ski) == 0 {
-		return errors.New("cannot announce mDNS entry: SKI is empty")
+		return fmt.Errorf("cannot announce mDNS entry: SKI is empty (identifier: %s)", m.identifier)
 	}
 	if len(m.serviceName) == 0 {
-		return errors.New("cannot announce mDNS entry: service name is empty")
+		return fmt.Errorf("cannot announce mDNS entry: service name is empty (SKI: %s, identifier: %s)", m.ski, m.identifier)
 	}
 	if m.port <= 0 || m.port > 65535 {
 		return fmt.Errorf("cannot announce mDNS entry: invalid port %d", m.port)
@@ -665,24 +664,24 @@ func (m *MdnsManager) initializeProviderWithFallback(ifaceIndexes []int32, iface
 		logging.Log().Debug("mdns: Zeroconf provider also failed:", err)
 	}
 
-	return errors.New("no mDNS provider available - both Avahi and Zeroconf failed to initialize")
+	return fmt.Errorf("no mDNS provider available - both Avahi and Zeroconf failed to initialize (interfaces: %d)", len(ifaces))
 }
 
 // initializeAvahiProvider creates and starts an Avahi provider
 func (m *MdnsManager) initializeAvahiProvider(ifaceIndexes []int32, autoReconnect bool) error {
 	if m.providerFactory.NewAvahi == nil {
-		return errors.New("Avahi provider factory function not available")
+		return fmt.Errorf("Avahi provider factory function not available (interfaces: %d)", len(ifaceIndexes))
 	}
 
 	provider := m.providerFactory.NewAvahi(ifaceIndexes)
 	if provider == nil {
-		return errors.New("failed to create Avahi provider instance")
+		return fmt.Errorf("failed to create Avahi provider instance (interfaces: %d)", len(ifaceIndexes))
 	}
 
 	if !provider.Start(autoReconnect, m.processMdnsEntry) {
 		// Clean up failed provider
 		provider.Shutdown()
-		return errors.New("Avahi provider failed to start")
+		return fmt.Errorf("Avahi provider failed to start (interfaces: %d, autoReconnect: %v)", len(ifaceIndexes), autoReconnect)
 	}
 
 	m.mdnsProvider = provider
@@ -692,18 +691,18 @@ func (m *MdnsManager) initializeAvahiProvider(ifaceIndexes []int32, autoReconnec
 // initializeZeroconfProvider creates and starts a Zeroconf provider  
 func (m *MdnsManager) initializeZeroconfProvider(ifaces []net.Interface, autoReconnect bool) error {
 	if m.providerFactory.NewZeroconf == nil {
-		return errors.New("Zeroconf provider factory function not available")
+		return fmt.Errorf("Zeroconf provider factory function not available (interfaces: %d)", len(ifaces))
 	}
 
 	provider := m.providerFactory.NewZeroconf(ifaces)
 	if provider == nil {
-		return errors.New("failed to create Zeroconf provider instance")
+		return fmt.Errorf("failed to create Zeroconf provider instance (interfaces: %d)", len(ifaces))
 	}
 
 	if !provider.Start(autoReconnect, m.processMdnsEntry) {
 		// Clean up failed provider
 		provider.Shutdown()
-		return errors.New("Zeroconf provider failed to start")
+		return fmt.Errorf("Zeroconf provider failed to start (interfaces: %d, autoReconnect: %v)", len(ifaces), autoReconnect)
 	}
 
 	m.mdnsProvider = provider

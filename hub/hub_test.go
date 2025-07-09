@@ -100,7 +100,8 @@ func (s *HubSuite) Test_NewConnectionsHub() {
 
 	s.mdnsService.EXPECT().Start(gomock.Any()).Return(nil).Times(1)
 
-	hub.Start()
+	err := hub.Start()
+	assert.NoError(s.T(), err)
 
 	s.mdnsService.EXPECT().Shutdown().Times(1)
 
@@ -185,7 +186,8 @@ func (s *HubSuite) Test_IsRemoteSKIPaired() {
 	assert.NotNil(s.T(), hub)
 
 	s.mdnsService.EXPECT().Start(gomock.Any()).Return(nil).Times(1)
-	hub.Start()
+	err := hub.Start()
+	assert.NoError(s.T(), err)
 
 	hub.UnregisterRemoteSKI(s.remoteSki)
 	paired = s.sut.IsRemoteServiceForSKIPaired(s.remoteSki)

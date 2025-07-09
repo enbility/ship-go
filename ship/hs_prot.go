@@ -2,8 +2,9 @@ package ship
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 
+	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/logging"
 	"github.com/enbility/ship-go/model"
 )
@@ -46,7 +47,9 @@ func (c *ShipConnection) handshakeProtocol_smeProtHStateServerListenProposal(mes
 	}
 
 	if messageProtocolHandshake.MessageProtocolHandshake.HandshakeType != model.ProtocolHandshakeTypeTypeAnnounceMax {
-		c.endHandshakeWithError(errors.New("Invalid protocol handshake request"))
+		c.endHandshakeWithError(fmt.Errorf("%w from remote SKI %s: expected %s, got %s",
+			api.ErrInvalidHandshake, c.remoteSKI, model.ProtocolHandshakeTypeTypeAnnounceMax, 
+			messageProtocolHandshake.MessageProtocolHandshake.HandshakeType))
 		return
 	}
 
@@ -169,7 +172,8 @@ func (c *ShipConnection) abortProtocolHandshake(err model.MessageProtocolHandsha
 
 	_ = c.sendShipModel(model.MsgTypeControl, msg)
 
-	c.setState(model.SmeStateError, errors.New("handshake error"))
+	c.setState(model.SmeStateError, fmt.Errorf("%w with remote SKI %s: %v", 
+		api.ErrInvalidHandshake, c.remoteSKI, err))
 
 	c.CloseConnection(false, 0, "")
 }

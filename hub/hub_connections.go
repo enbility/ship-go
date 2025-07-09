@@ -108,12 +108,12 @@ func (h *Hub) startWebsocketServer() error {
 	}
 
 	go func() {
-		if err := h.httpServer.ListenAndServeTLS("", ""); err != nil {
+		err := h.httpServer.ListenAndServeTLS("", "")
+		if err != nil && err != http.ErrServerClosed {
 			logging.Log().Error("websocket server error:", err)
-			// if the server doesn't start, we just log the error
-			// instead we should think about how to handle this error and
-			// get to a defined working state
+			h.serverStartErr = err
 		}
+		close(h.serverStarted)
 	}()
 
 	return nil
@@ -142,28 +142,28 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		logging.Log().Debug("error during connection upgrading:", err)
+		logConnectionError(err, "websocket upgrade failed:")
 		return
 	}
 
 	// check if the client supports the ship sub protocol
 	if conn.Subprotocol() != api.ShipWebsocketSubProtocol {
-		logging.Log().Debug("client does not support the ship sub protocol")
-		_ = conn.Close()
+		logging.Log().Error("client does not support the ship sub protocol")
+		h.safeClose(conn, "rejected connection")
 		return
 	}
 
 	// check if the clients certificate provides a SKI
 	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
-		logging.Log().Debug("client does not provide a certificate")
-		_ = conn.Close()
+		logging.Log().Error("client certificate validation failed: no certificate provided")
+		h.safeClose(conn, "rejected connection")
 		return
 	}
 
 	ski, err := cert.SkiFromCertificate(r.TLS.PeerCertificates[0])
 	if err != nil {
-		logging.Log().Debug(err)
-		_ = conn.Close()
+		logConnectionError(err, "client certificate SKI extraction failed:")
+		h.safeClose(conn, "rejected connection")
 		return
 	}
 
@@ -190,7 +190,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// don't allow a second connection
 	if !h.keepThisConnection(conn, true, remoteService) {
-		_ = conn.Close()
+		h.safeClose(conn, "double connection rejected")
 		return
 	}
 
@@ -265,23 +265,23 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 
 	if len(remoteCerts) == 0 || remoteCerts[0].SubjectKeyId == nil {
 		// Close connection as we couldn't get the remote SKI
-		errorString := fmt.Sprintf("closing connection to %s: could not get remote SKI from certificate", remoteService.SKI())
-		_ = conn.Close()
+		errorString := fmt.Sprintf("certificate validation failed for %s: no SKI in certificate", remoteService.SKI())
+		h.safeClose(conn, "certificate validation failed")
 		return errors.New(errorString)
 	}
 
 	if _, err := cert.SkiFromCertificate(remoteCerts[0]); err != nil {
 		// Close connection as the remote SKI can't be correct
-		errorString := fmt.Sprintf("closing connection to %s: %s", remoteService.SKI(), err)
-		_ = conn.Close()
+		errorString := fmt.Sprintf("certificate validation failed for %s: %s", remoteService.SKI(), err)
+		h.safeClose(conn, "certificate validation failed")
 		return errors.New(errorString)
 	}
 
 	remoteSKI := fmt.Sprintf("%0x", remoteCerts[0].SubjectKeyId)
 
 	if remoteSKI != remoteService.SKI() {
-		errorString := fmt.Sprintf("closing connection to %s: SKI does not match %s", remoteService.SKI(), remoteSKI)
-		_ = conn.Close()
+		errorString := fmt.Sprintf("certificate SKI mismatch: expected %s, got %s", remoteService.SKI(), remoteSKI)
+		h.safeClose(conn, "certificate validation failed")
 		return errors.New(errorString)
 	}
 
@@ -371,9 +371,12 @@ func (h *Hub) keepThisConnection(conn *websocket.Conn, incomingRequest bool, rem
 }
 
 func (h *Hub) sendWSCloseMessage(conn *websocket.Conn) {
-	_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "double connection"))
+	err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "double connection"))
+	if err != nil && !errors.Is(err, net.ErrClosed) {
+		logging.Log().Debug("failed to send close message:", err)
+	}
 	<-time.After(time.Millisecond * 100)
-	_ = conn.Close()
+	h.safeClose(conn, "websocket close")
 }
 
 // coordinate connection initiation attempts to a remove service
@@ -451,7 +454,7 @@ func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.Md
 	if len(entry.Host) > 0 {
 		logging.Log().Debug("trying to connect to", remoteService.SKI(), "at", entry.Host)
 		if err = h.connectFoundService(remoteService, entry.Host, strconv.Itoa(entry.Port), entry.Path); err != nil {
-			logging.Log().Debugf("connection to %s failed: %s", remoteService.SKI(), err)
+			logConnectionError(err, fmt.Sprintf("connection to %s at %s failed:", remoteService.SKI(), entry.Host))
 		} else {
 			return true
 		}
@@ -470,7 +473,7 @@ func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.Md
 			addressValue = "[" + address.String() + "]"
 		}
 		if err = h.connectFoundService(remoteService, addressValue, strconv.Itoa(entry.Port), entry.Path); err != nil {
-			logging.Log().Debug("connection to", remoteService.SKI(), "failed: ", err)
+			logConnectionError(err, fmt.Sprintf("connection to %s at %s failed:", remoteService.SKI(), addressValue))
 		} else {
 			return true
 		}

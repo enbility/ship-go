@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/mocks"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
@@ -158,7 +159,7 @@ func TestWebSocketErrorPaths(t *testing.T) {
 		// Next write should fail with buffer full
 		err = ws.WriteMessageToWebsocketConnection([]byte{0x03, 0x04})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "buffer is full")
+		assert.ErrorIs(t, err, api.ErrBufferFull)
 
 		// Close connection
 		ws.CloseDataConnection(websocket.CloseNormalClosure, "test")

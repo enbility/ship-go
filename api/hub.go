@@ -8,7 +8,7 @@ package api
 // Interface for handling the server and remote connections
 type HubInterface interface {
 	// Start the ConnectionsHub with all its services
-	Start()
+	Start() error
 
 	// close all connections
 	Shutdown()

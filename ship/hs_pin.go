@@ -2,8 +2,9 @@ package ship
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 
+	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/model"
 )
 
@@ -39,12 +40,13 @@ func (c *ShipConnection) handshakePin_smePinStateCheckListen(message []byte) {
 	case model.PinStateTypeNone:
 		c.setAndHandleState(model.SmePinStateCheckOk)
 	case model.PinStateTypeRequired:
-		c.endHandshakeWithError(errors.New("Got pin state: required (unsupported)"))
+		c.endHandshakeWithError(fmt.Errorf("%w: 'required' for remote SKI %s", api.ErrUnsupportedPinState, c.remoteSKI))
 	case model.PinStateTypeOptional:
-		c.endHandshakeWithError(errors.New("Got pin state: optional (unsupported)"))
+		c.endHandshakeWithError(fmt.Errorf("%w: 'optional' for remote SKI %s", api.ErrUnsupportedPinState, c.remoteSKI))
 	case model.PinStateTypePinOk:
-		c.endHandshakeWithError(errors.New("Got pin state: ok (unsupported)"))
+		c.endHandshakeWithError(fmt.Errorf("%w: 'ok' for remote SKI %s", api.ErrUnsupportedPinState, c.remoteSKI))
 	default:
-		c.endHandshakeWithError(errors.New("Got invalid pin state"))
+		c.endHandshakeWithError(fmt.Errorf("%w: '%v' from remote SKI %s", 
+			api.ErrUnsupportedPinState, connectionPinState.ConnectionPinState.PinState, c.remoteSKI))
 	}
 }

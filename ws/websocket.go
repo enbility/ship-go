@@ -2,7 +2,6 @@ package ws
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -209,7 +208,7 @@ func (w *WebsocketConnection) textFromMessage(msg []byte) string {
 // read a message from the websocket connection
 func (w *WebsocketConnection) readWebsocketMessage() ([]byte, error) {
 	if w.conn == nil {
-		return nil, errors.New("connection is not initialized")
+		return nil, fmt.Errorf("%w for remote SKI %s", api.ErrConnectionNotInitialized, w.remoteSki)
 	}
 
 	msgType, b, err := w.conn.ReadMessage()
@@ -226,11 +225,11 @@ func (w *WebsocketConnection) readWebsocketMessage() ([]byte, error) {
 
 func (w *WebsocketConnection) checkWebsocketMessage(msgType int, data []byte) error {
 	if msgType != websocket.BinaryMessage {
-		return errors.New("message is not a binary message")
+		return fmt.Errorf("websocket message from %s is not binary (type: %d)", w.remoteSki, msgType)
 	}
 
 	if len(data) < 2 {
-		return fmt.Errorf("invalid ship message length")
+		return fmt.Errorf("websocket message from %s too short: %d bytes (minimum 2)", w.remoteSki, len(data))
 	}
 
 	return nil
@@ -284,14 +283,15 @@ func (w *WebsocketConnection) WriteMessageToWebsocketConnection(message []byte) 
 	defer w.muxShipWrite.Unlock()
 
 	if w.isConnClosed() || w.shipWriteChannel == nil {
-		return errors.New(connIsClosedError)
+		return fmt.Errorf("%w for remote SKI %s", api.ErrConnectionClosed, w.remoteSki)
 	}
 
 	select {
 	case w.shipWriteChannel <- message:
 	default:
 		// too many messages are pending, this doesn't look good
-		return errors.New("could not send message, buffer is full")
+		return fmt.Errorf("%w: websocket message for remote SKI %s (buffer size: %d)", 
+			api.ErrBufferFull, w.remoteSki, DefaultWriteBufferSize)
 	}
 
 	return nil
@@ -317,7 +317,7 @@ func (w *WebsocketConnection) writeMessage(messageType int, data []byte) bool {
 // make sure websocket Write is only called once at a time
 func (w *WebsocketConnection) writeMessageWithoutErrorHandling(messageType int, data []byte) error {
 	if w.isConnClosed() {
-		return errors.New(connIsClosedError)
+		return fmt.Errorf("%w for remote SKI %s", api.ErrConnectionClosed, w.remoteSki)
 	}
 
 	w.muxConWrite.Lock()
@@ -342,7 +342,7 @@ func (w *WebsocketConnection) IsDataConnectionClosed() (bool, error) {
 	err := w.connClosedError()
 
 	if isClosed && err == nil {
-		err = errors.New("connection is closed")
+		err = fmt.Errorf("%w for remote SKI %s", api.ErrConnectionClosed, w.remoteSki)
 	}
 
 	return isClosed, err

@@ -348,9 +348,20 @@ func (_c *HubInterface_Shutdown_Call) RunAndReturn(run func()) *HubInterface_Shu
 }
 
 // Start provides a mock function for the type HubInterface
-func (_mock *HubInterface) Start() {
-	_mock.Called()
-	return
+func (_mock *HubInterface) Start() error {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Start")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func() error); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
 }
 
 // HubInterface_Start_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Start'
@@ -370,13 +381,13 @@ func (_c *HubInterface_Start_Call) Run(run func()) *HubInterface_Start_Call {
 	return _c
 }
 
-func (_c *HubInterface_Start_Call) Return() *HubInterface_Start_Call {
-	_c.Call.Return()
+func (_c *HubInterface_Start_Call) Return(err error) *HubInterface_Start_Call {
+	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *HubInterface_Start_Call) RunAndReturn(run func()) *HubInterface_Start_Call {
-	_c.Run(run)
+func (_c *HubInterface_Start_Call) RunAndReturn(run func() error) *HubInterface_Start_Call {
+	_c.Call.Return(run)
 	return _c
 }
 

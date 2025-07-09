@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/mocks"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
@@ -202,7 +203,7 @@ func TestWebSocketResourceCleanup(t *testing.T) {
 		// Try to write - should fail with closed connection error
 		err := ws.WriteMessageToWebsocketConnection([]byte{1, 2, 3})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "connection is closed")
+		assert.ErrorIs(t, err, api.ErrConnectionClosed)
 	})
 
 	t.Run("multiple_close_calls_safe", func(t *testing.T) {

@@ -9,10 +9,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"errors"
 	"fmt"
 	"math/big"
 	"time"
+
+	"github.com/enbility/ship-go/api"
 ) // #nosec G505
 
 // SHIP 9.1: the ciphers are reported insecure but are defined to be used by SHIP
@@ -87,7 +88,12 @@ func SkiFromCertificate(cert *x509.Certificate) (string, error) {
 	// check if the clients certificate provides a SKI
 	subjectKeyId := cert.SubjectKeyId
 	if len(subjectKeyId) != 20 {
-		return "", errors.New("Client certificate does not provide a SKI")
+		subject := cert.Subject.String()
+		if subject == "" {
+			subject = "unknown"
+		}
+		return "", fmt.Errorf("%w (subject: %s, SKI length: %d, expected: 20)", 
+			api.ErrInvalidSKI, subject, len(subjectKeyId))
 	}
 
 	return fmt.Sprintf("%0x", subjectKeyId), nil

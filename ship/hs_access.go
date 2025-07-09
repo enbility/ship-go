@@ -43,7 +43,7 @@ func detectAccessMethodsMessageType(data []byte) (string, error) {
 		return "methods", nil
 	}
 
-	return "", errors.New("unknown message type: expected accessMethodsRequest or accessMethods")
+	return "", errors.New("unknown access message type: expected accessMethodsRequest or accessMethods")
 }
 
 // handleAccessMethodsRequest processes an incoming access methods request
@@ -62,14 +62,15 @@ func (c *ShipConnection) handleAccessMethodsRequest() error {
 // by validating and storing the remote SHIP ID
 func (c *ShipConnection) handleAccessMethodsResponse(accessMethods *model.AccessMethods) error {
 	if accessMethods.AccessMethods.Id == nil {
-		return errors.New("Access methods response does not contain SHIP ID")
+		return fmt.Errorf("access methods response from remote SKI %s does not contain SHIP ID", c.remoteSKI)
 	}
 
 	remoteID := *accessMethods.AccessMethods.Id
 
 	// If we already know the remote ID, verify it matches
 	if len(c.remoteShipID) > 0 && c.remoteShipID != remoteID {
-		return errors.New("SHIP id mismatch")
+		return fmt.Errorf("SHIP ID mismatch for remote SKI %s: expected '%s', got '%s'", 
+			c.remoteSKI, c.remoteShipID, remoteID)
 	}
 
 	// Save and report the SHIP ID if this is the first time we see it

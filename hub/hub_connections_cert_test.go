@@ -126,7 +126,7 @@ func TestConnectFoundServiceCertificateValidation(t *testing.T) {
 		err = hub.connectFoundService(service, host, port, "")
 
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "could not get remote SKI from certificate")
+		assert.Contains(t, err.Error(), "no SKI in certificate")
 	})
 
 	t.Run("valid_certificate_wrong_ski", func(t *testing.T) {
@@ -179,7 +179,7 @@ func TestConnectFoundServiceCertificateValidation(t *testing.T) {
 		err = hub.connectFoundService(service, host, port, "")
 
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "SKI does not match")
+		assert.Contains(t, err.Error(), "certificate SKI mismatch")
 		t.Logf("Certificate has SKI: %s, service expects: %s", actualSKI, service.SKI())
 	})
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -450,7 +451,7 @@ func (c *ShipConnection) shipMessage(typ byte, model interface{}) ([]byte, error
 	}
 
 	if model == nil {
-		return nil, errors.New("invalid data")
+		return nil, fmt.Errorf("%w from remote SKI %s: model is nil", api.ErrInvalidProtocolMessage, c.remoteSKI)
 	}
 
 	msg, err := json.Marshal(model)

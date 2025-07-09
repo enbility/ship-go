@@ -3,8 +3,10 @@ package hub
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/logging"
@@ -57,6 +59,10 @@ type Hub struct {
 
 	hasStarted bool
 
+	// For tracking server startup errors
+	serverStartErr error
+	serverStarted  chan struct{}
+
 	// connection delay timers that can be cancelled
 	connectionDelayTimers map[string]*connectionDelayTimer
 	muxTimers             sync.RWMutex
@@ -90,6 +96,7 @@ func NewHub(hubReader api.HubReaderInterface,
 		localService:             localService,
 		mdns:                     mdns,
 		maxConnections:           10, // Default connection limit
+		serverStarted:            make(chan struct{}),
 	}
 
 	return hub
@@ -98,25 +105,52 @@ func NewHub(hubReader api.HubReaderInterface,
 var _ api.HubInterface = (*Hub)(nil)
 
 // Start the ConnectionsHub with all its services
-func (h *Hub) Start() {
+func (h *Hub) Start() error {
 	h.muxStarted.Lock()
-	h.hasStarted = true
-	h.muxStarted.Unlock()
+	defer h.muxStarted.Unlock()
 
 	// start the websocket server
 	if err := h.startWebsocketServer(); err != nil {
-		logging.Log().Debug("error during websocket server starting:", err)
+		return fmt.Errorf("failed to start hub: %w", err)
+	}
+
+	// Wait briefly to catch immediate startup errors
+	select {
+	case <-h.serverStarted:
+		if h.serverStartErr != nil {
+			return fmt.Errorf("websocket server failed to start: %w", h.serverStartErr)
+		}
+	case <-time.After(100 * time.Millisecond):
+		// Server is likely starting successfully
 	}
 
 	// start mDNS
-	err := h.mdns.Start(h)
-	if err != nil {
-		logging.Log().Debug("error during mdns setup:", err)
+	if err := h.mdns.Start(h); err != nil {
+		// Shutdown the server if mDNS fails
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if shutdownErr := h.httpServer.Shutdown(ctx); shutdownErr != nil {
+			logging.Log().Error("failed to shutdown HTTP server after mDNS error:", shutdownErr)
+		}
+		return fmt.Errorf("failed to start mDNS: %w", err)
 	}
+
+	h.hasStarted = true
+	return nil
 }
 
 // close all connections
 func (h *Hub) Shutdown() {
+	// First, stop accepting new connections by shutting down the HTTP server
+	if h.httpServer != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := h.httpServer.Shutdown(ctx); err != nil {
+			logging.Log().Error("HTTP server shutdown error:", err)
+		}
+	}
+
+	// Then shutdown mDNS
 	h.mdns.Shutdown()
 
 	// Cancel all pending connection delay timers
@@ -127,14 +161,47 @@ func (h *Hub) Shutdown() {
 	}
 	h.muxTimers.Unlock()
 
-	for _, c := range h.connections {
-		c.CloseConnection(false, 0, "")
+	// Close all connections with timeout
+	var wg sync.WaitGroup
+	h.muxCon.RLock()
+	connections := make(map[string]api.ShipConnectionInterface)
+	for ski, c := range h.connections {
+		connections[ski] = c
 	}
-	if h.httpServer == nil {
-		return
+	h.muxCon.RUnlock()
+
+	for ski, conn := range connections {
+		wg.Add(1)
+		go func(ski string, conn api.ShipConnectionInterface) {
+			defer wg.Done()
+			// Give connections 2 seconds to close gracefully
+			done := make(chan struct{})
+			go func() {
+				conn.CloseConnection(false, 0, "hub shutdown")
+				close(done)
+			}()
+			
+			select {
+			case <-done:
+				logging.Log().Debug("connection closed:", ski)
+			case <-time.After(2 * time.Second):
+				logging.Log().Error("connection failed to close in time:", ski)
+			}
+		}(ski, conn)
 	}
-	if err := h.httpServer.Shutdown(context.Background()); err != nil {
-		logging.Log().Error("HTTP server shutdown:", err)
+	
+	// Wait up to 3 seconds for all connections to close
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	
+	select {
+	case <-done:
+		logging.Log().Debug("all connections closed successfully")
+	case <-time.After(3 * time.Second):
+		logging.Log().Error("timeout waiting for connections to close")
 	}
 }
 

@@ -412,7 +412,7 @@ func (s *MdnsSuite) Test_ProviderFallback_BothFail() {
 	// Start should fail with appropriate error
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
-	assert.Equal(s.T(), "no mDNS provider available - both Avahi and Zeroconf failed to initialize", err.Error())
+	assert.Equal(s.T(), "no mDNS provider available - both Avahi and Zeroconf failed to initialize (interfaces: 0)", err.Error())
 	
 	// Verify both providers were attempted
 	failingAvahi.AssertCalled(s.T(), "Start", false, mock.Anything)
@@ -567,7 +567,7 @@ func (s *MdnsSuite) Test_ProviderAvahiOnly_Failure() {
 	// Start should fail because provider fails to start
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
-	assert.Equal(s.T(), "Avahi provider failed to start", err.Error())
+	assert.Equal(s.T(), "Avahi provider failed to start (interfaces: 1, autoReconnect: true)", err.Error())
 	
 	// Verify Avahi was attempted
 	failingAvahi.AssertCalled(s.T(), "Start", true, mock.Anything)
@@ -598,7 +598,7 @@ func (s *MdnsSuite) Test_ProviderZeroconfOnly_Failure() {
 	// Start should fail because provider fails to start
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
-	assert.Equal(s.T(), "Zeroconf provider failed to start", err.Error())
+	assert.Equal(s.T(), "Zeroconf provider failed to start (interfaces: 0, autoReconnect: true)", err.Error())
 	
 	// Verify Zeroconf was attempted
 	failingZeroconf.AssertCalled(s.T(), "Start", true, mock.Anything)
@@ -620,7 +620,7 @@ func (s *MdnsSuite) Test_Start_NilProviderFactory() {
 	// Start should fail with appropriate error
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
-	assert.Equal(s.T(), "mDNS provider factory not initialized", err.Error())
+	assert.Equal(s.T(), "mDNS provider factory not initialized for provider selection 0", err.Error())
 }
 
 func (s *MdnsSuite) Test_Start_InvalidProviderSelection() {
@@ -662,7 +662,7 @@ func (s *MdnsSuite) Test_Start_NilProviderCreation() {
 	// Start should fail with appropriate error
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
-	assert.Equal(s.T(), "failed to create Avahi provider instance", err.Error())
+	assert.Equal(s.T(), "failed to create Avahi provider instance (interfaces: 1)", err.Error())
 }
 
 func (s *MdnsSuite) Test_Start_NilFactoryFunction() {
@@ -685,7 +685,7 @@ func (s *MdnsSuite) Test_Start_NilFactoryFunction() {
 	// Start should fail with appropriate error
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
-	assert.Equal(s.T(), "Avahi provider factory function not available", err.Error())
+	assert.Equal(s.T(), "Avahi provider factory function not available (interfaces: 1)", err.Error())
 }
 
 func (s *MdnsSuite) Test_ImprovedFallbackErrorMessages() {
@@ -717,7 +717,7 @@ func (s *MdnsSuite) Test_ImprovedFallbackErrorMessages() {
 	// Start should fail with improved error message
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
-	assert.Equal(s.T(), "no mDNS provider available - both Avahi and Zeroconf failed to initialize", err.Error())
+	assert.Equal(s.T(), "no mDNS provider available - both Avahi and Zeroconf failed to initialize (interfaces: 0)", err.Error())
 }
 
 func (s *MdnsSuite) Test_AnnounceMdnsEntry_ValidationErrors() {
@@ -788,7 +788,7 @@ func (s *MdnsSuite) Test_AnnounceMdnsEntry_NoProvider() {
 	
 	err := s.sut.AnnounceMdnsEntry()
 	assert.NotNil(s.T(), err)
-	assert.Equal(s.T(), "cannot announce mDNS entry: no provider available", err.Error())
+	assert.Equal(s.T(), "cannot announce mDNS entry: no provider available (selection: 0)", err.Error())
 }
 
 func (s *MdnsSuite) Test_Shutdown_DefensiveProgramming() {
