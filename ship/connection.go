@@ -155,9 +155,44 @@ func (c *ShipConnection) ApproveIfPending() bool {
 	c.stopTimerSafe()
 	c.handleState(false, nil)
 
-	// TODO: check if we need to do some validations before moving on to the next state
+	// Validate connection health and trust state before completing handshake
+	if !c.validateConnectionBeforeApproval() {
+		// Validation failed, abort the handshake
+		c.setAndHandleState(model.SmeHelloStateAbort)
+		return false
+	}
+
 	c.setAndHandleState(model.SmeHelloStateOk)
 
+	return true
+}
+
+// validateConnectionBeforeApproval performs security and connection health checks
+// before transitioning from SmeHelloStateReadyInit to SmeHelloStateOk
+func (c *ShipConnection) validateConnectionBeforeApproval() bool {
+	// Check if the WebSocket connection is still active
+	if isClosed, err := c.dataWriter.IsDataConnectionClosed(); isClosed {
+		if err != nil {
+			logging.Log().Debug(c.RemoteSKI(), "Connection validation failed: WebSocket closed with error:", err)
+		} else {
+			logging.Log().Debug(c.RemoteSKI(), "Connection validation failed: WebSocket connection closed")
+		}
+		return false
+	}
+
+	// Verify that the remote service is still paired/trusted
+	if !c.infoProvider.IsRemoteServiceForSKIPaired(c.remoteSKI) {
+		logging.Log().Debug(c.RemoteSKI(), "Connection validation failed: Remote service no longer paired")
+		return false
+	}
+
+	// Check if the trust state is still valid (user hasn't revoked trust)
+	if !c.infoProvider.AllowWaitingForTrust(c.remoteSKI) {
+		logging.Log().Debug(c.RemoteSKI(), "Connection validation failed: Trust revoked")
+		return false
+	}
+
+	// All validations passed
 	return true
 }
 

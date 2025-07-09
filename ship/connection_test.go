@@ -134,9 +134,36 @@ func (s *ConnectionSuite) TestApprovePendingHandshake() {
 	s.sut.ApprovePendingHandshake()
 	assert.Equal(s.T(), model.CmiStateInitStart, s.sut.smeState)
 
+	// Test with validation failing (current mock setup returns false)
 	s.sut.smeState = model.SmeHelloStatePendingListen
 	s.sut.ApprovePendingHandshake()
-	assert.Equal(s.T(), model.SmeProtHStateServerListenProposal, s.sut.smeState)
+	// Allow time for state transition to complete
+	time.Sleep(50 * time.Millisecond)
+	// With validation failing, the handshake should be aborted
+	assert.Equal(s.T(), model.SmeHelloStateAbortDone, s.sut.smeState)
+}
+
+func (s *ConnectionSuite) TestApprovePendingHandshake_ValidationSuccess() {
+	// Create a new connection with successful validation mocks
+	infoProvider := mocks.NewShipConnectionInfoProviderInterface(s.T())
+	infoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Return().Maybe()
+	infoProvider.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Return().Maybe()
+	infoProvider.EXPECT().IsRemoteServiceForSKIPaired(mock.Anything).Return(true).Maybe()
+	infoProvider.EXPECT().AllowWaitingForTrust(mock.Anything).Return(true).Maybe()
+
+	wsDataWriter := mocks.NewWebsocketDataWriterInterface(s.T())
+	wsDataWriter.EXPECT().InitDataProcessing(mock.Anything).Return().Maybe()
+	wsDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(nil).Maybe()
+	wsDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
+
+	conn := NewConnectionHandler(infoProvider, wsDataWriter, ShipRoleServer, "localShipId", "remoteSKI", "remoteShipId")
+
+	// Test successful approval when validation passes
+	conn.smeState = model.SmeHelloStatePendingListen
+	conn.ApprovePendingHandshake()
+	// Allow time for state transitions to complete
+	time.Sleep(50 * time.Millisecond)
+	assert.Equal(s.T(), model.SmeProtHStateServerListenProposal, conn.smeState)
 }
 
 func (s *ConnectionSuite) TestAbortPendingHandshake() {
@@ -147,6 +174,15 @@ func (s *ConnectionSuite) TestAbortPendingHandshake() {
 	s.sut.smeState = model.SmeHelloStatePendingListen
 	s.sut.AbortPendingHandshake()
 	assert.Equal(s.T(), model.SmeHelloStateAbortDone, s.sut.smeState)
+}
+
+func (s *ConnectionSuite) TestTransformSpineDataIntoShipJson() {
+	spineTest := `{"datagram":{"header":{"specificationVersion":"1.2.0","addressSource":{"device":"Demo-EVSE-234567890","entity":[0],"feature":0},"addressDestination":{"device":"Demo-HEMS-123456789","entity":[0],"feature":0},"msgCounter":1,"cmdClassifier":"read"},"payload":{"cmd":[{"nodeManagementDetailedDiscoveryData":{}}]}}}`
+	jsonExpected := `{"data":[{"header":[{"protocolId":"ee1.0"}]},{"payload":{"datagram":[{"header":[{"specificationVersion":"1.2.0"},{"addressSource":[{"device":"Demo-EVSE-234567890"},{"entity":[0]},{"feature":0}]},{"addressDestination":[{"device":"Demo-HEMS-123456789"},{"entity":[0]},{"feature":0}]},{"msgCounter":1},{"cmdClassifier":"read"}]},{"payload":[{"cmd":[[{"nodeManagementDetailedDiscoveryData":[]}]]}]}]}}]}`
+
+	result, err := s.sut.transformSpineDataIntoShipJson([]byte(spineTest))
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), jsonExpected, string(result))
 }
 
 func (s *ConnectionSuite) TestCloseConnection_StateComplete() {

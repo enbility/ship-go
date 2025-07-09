@@ -46,6 +46,9 @@ func TestApprovePendingHandshake_RaceCondition(t *testing.T) {
 		return conn != nil
 	})
 	mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
+	// Add expectations for validation methods
+	mockInfoProvider.EXPECT().IsRemoteServiceForSKIPaired("remote-ski").Return(true).Maybe()
+	mockInfoProvider.EXPECT().AllowWaitingForTrust("remote-ski").Return(true).Maybe()
 
 	// Create a connection in pending state
 	conn := NewConnectionHandler(
@@ -191,6 +194,9 @@ func TestApproveIfPending(t *testing.T) {
 			if tt.expectSuccess {
 				mockDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
 				mockDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(nil).Maybe()
+				// Add expectations for validation methods
+				mockInfoProvider.EXPECT().IsRemoteServiceForSKIPaired("remote-ski").Return(true).Maybe()
+				mockInfoProvider.EXPECT().AllowWaitingForTrust("remote-ski").Return(true).Maybe()
 			}
 
 			conn := NewConnectionHandler(
@@ -285,6 +291,9 @@ func TestAbortIfPending(t *testing.T) {
 			if tt.expectSuccess {
 				mockDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
 				mockDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(nil).Maybe()
+				// Add expectations for validation methods
+				mockInfoProvider.EXPECT().IsRemoteServiceForSKIPaired("remote-ski").Return(true).Maybe()
+				mockInfoProvider.EXPECT().AllowWaitingForTrust("remote-ski").Return(true).Maybe()
 			}
 
 			conn := NewConnectionHandler(

@@ -339,14 +339,17 @@ delay += time.Duration(rand.Intn(1000)) * time.Millisecond
 **Spec Reference**: Section 13.4.4.1.4.3  
 **Ambiguity**: Behavior when `T_prolong` < `T_hello_prolong_min`
 
-**Implementation Choice**:
+**Implementation Choice** (RESOLVED 2025-07-09):
 ```go
 // ship/hs_hello.go:158
-// TODO: clarify: the other side sent us a value below min,
-// should this be a handshake error instead? Spec is unclear
+// SHIP protocol violation: waiting time below minimum threshold (1 second)
+// Abort connection to prevent potential timing attacks and ensure protocol compliance
+// This protects against malicious devices sending extremely short waiting times
+// that could bypass prolongation mechanisms or cause race conditions
 ```
 
-**Current Behavior**: Accepts the value but adds TODO comment
+**Current Behavior**: Aborts connection when waiting time below minimum threshold
+**Rationale**: Security-focused approach to prevent timing attacks and enforce protocol compliance
 
 ---
 

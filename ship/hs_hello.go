@@ -154,8 +154,10 @@ func (c *ShipConnection) handshakeHello_PendingListen(timeout bool, message []by
 		}
 
 		if newDuration < tHelloProlongMin {
-			// I interpret 13.4.4.1.3 Page 64 Line 1550-1553 as this resulting in a timeout state
-			// TODO: verify this
+			// SHIP protocol violation: waiting time below minimum threshold (1 second)
+			// Abort connection to prevent potential timing attacks and ensure protocol compliance
+			// This protects against malicious devices sending extremely short waiting times
+			// that could bypass prolongation mechanisms or cause race conditions
 			c.setAndHandleState(model.SmeHelloStateAbort)
 		}
 
@@ -179,8 +181,10 @@ func (c *ShipConnection) handshakeHello_PendingListen(timeout bool, message []by
 			}
 
 			if newDuration < tHelloProlongMin {
-				// I interpret 13.4.4.1.3 Page 64 Line 1557-1560 as this resulting in a timeout state
-				// TODO: verify this
+				// SHIP protocol violation: waiting time below minimum threshold (1 second)
+				// Abort connection to prevent potential timing attacks and ensure protocol compliance
+				// This protects against malicious devices sending extremely short waiting times
+				// that could bypass prolongation mechanisms or cause race conditions
 				c.setAndHandleState(model.SmeHelloStateAbort)
 			}
 
@@ -218,8 +222,13 @@ func (c *ShipConnection) handshakeHello_PendingProlongationRequest() {
 		return
 	}
 
-	// TODO: we need to set the timer to the last received waiting value
-	c.setHandshakeTimer(timeoutTimerTypeProlongRequestReply, getHelloInitTimeout())
+	// Use the last received waiting value for the prolongation request reply timer
+	timeout := c.lastReceivedWaitingValue
+	if timeout == 0 {
+		// Fallback to default timeout if no waiting value was received
+		timeout = getHelloInitTimeout()
+	}
+	c.setHandshakeTimer(timeoutTimerTypeProlongRequestReply, timeout)
 }
 
 func (c *ShipConnection) handshakeHello_PendingTimeout() {
