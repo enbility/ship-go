@@ -296,7 +296,7 @@ func TestUnregisterConnectionIfMatchUnit(t *testing.T) {
 
 // TestStartWebsocketServer tests server initialization
 func TestStartWebsocketServer(t *testing.T) {
-	hub := setupTestHubForTimer(t)
+	hub := setupTestHub(t)
 
 	// Should not error
 	err := hub.startWebsocketServer()

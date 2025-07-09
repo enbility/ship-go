@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"crypto/tls"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,6 +11,35 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+// setupTestHubForTimer creates a test hub with mocked dependencies specifically for timer tests
+func setupTestHubForTimer(t *testing.T) *Hub {
+	mdns := mocks.NewMdnsInterface(t)
+	hubReader := mocks.NewHubReaderInterface(t)
+
+	// Set up expectations
+	hubReader.EXPECT().RemoteSKIConnected(mock.Anything).Maybe()
+	hubReader.EXPECT().RemoteSKIDisconnected(mock.Anything).Maybe()
+	hubReader.EXPECT().ServiceShipIDUpdate(mock.Anything, mock.Anything).Maybe()
+	hubReader.EXPECT().ServicePairingDetailUpdate(mock.Anything, mock.Anything).Maybe()
+	hubReader.EXPECT().AllowWaitingForTrust(mock.Anything).Return(false).Maybe()
+
+	// Additional expectations for timer-specific tests
+	mdns.EXPECT().AnnounceMdnsEntry().Return(nil).Maybe()
+	mdns.EXPECT().UnannounceMdnsEntry().Maybe()
+	mdns.EXPECT().RequestMdnsEntries().Maybe()
+	mdns.EXPECT().Shutdown().Maybe()
+
+	service := api.NewServiceDetails("test-ski-timer")
+	service.SetShipID("test-ship-id")
+
+	// Create a dummy certificate for testing
+	cert := tls.Certificate{}
+
+	hub := NewHub(hubReader, mdns, 4730, cert, service)
+
+	return hub
+}
 
 // TestConnectionAttemptCounterMaximum tests that the connection attempt counter
 // properly caps at the maximum value defined by connectionInitiationDelayTimeRanges

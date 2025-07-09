@@ -24,7 +24,7 @@ func process_eebus_json_hierarchie_level(data interface{}) interface{} {
 	temp := data
 	switch temp.(type) {
 	case *ordered.OrderedMap:
-		var new_array []interface{} = make([]interface{}, 0)
+		var new_array = make([]interface{}, 0)
 
 		orderedData := data.(*ordered.OrderedMap)
 		iter := orderedData.EntriesIter()
@@ -40,7 +40,7 @@ func process_eebus_json_hierarchie_level(data interface{}) interface{} {
 		return new_array
 
 	case []interface{}:
-		var new_array []interface{} = make([]interface{}, 0)
+		var new_array = make([]interface{}, 0)
 		for _, value := range data.([]interface{}) {
 			var new_value = process_eebus_json_hierarchie_level(value)
 			new_array = append(new_array, new_value)
@@ -56,7 +56,7 @@ func JsonIntoEEBUSJson(data []byte) (string, error) {
 	// EEBUS defines the items to be ordered in the array,
 	// so we can't use map[string]interface{} as that would
 	// cause a random order when Unmarshalling
-	var temp *ordered.OrderedMap = ordered.NewOrderedMap()
+	var temp = ordered.NewOrderedMap()
 
 	if err := json.Unmarshal(data, &temp); err != nil {
 		return "", err
