@@ -670,7 +670,7 @@ func (m *MdnsManager) initializeProviderWithFallback(ifaceIndexes []int32, iface
 // initializeAvahiProvider creates and starts an Avahi provider
 func (m *MdnsManager) initializeAvahiProvider(ifaceIndexes []int32, autoReconnect bool) error {
 	if m.providerFactory.NewAvahi == nil {
-		return fmt.Errorf("Avahi provider factory function not available (interfaces: %d)", len(ifaceIndexes))
+		return fmt.Errorf("avahi provider factory function not available (interfaces: %d)", len(ifaceIndexes))
 	}
 
 	provider := m.providerFactory.NewAvahi(ifaceIndexes)
@@ -681,7 +681,7 @@ func (m *MdnsManager) initializeAvahiProvider(ifaceIndexes []int32, autoReconnec
 	if !provider.Start(autoReconnect, m.processMdnsEntry) {
 		// Clean up failed provider
 		provider.Shutdown()
-		return fmt.Errorf("Avahi provider failed to start (interfaces: %d, autoReconnect: %v)", len(ifaceIndexes), autoReconnect)
+		return fmt.Errorf("avahi provider failed to start (interfaces: %d, autoReconnect: %v)", len(ifaceIndexes), autoReconnect)
 	}
 
 	m.mdnsProvider = provider
@@ -691,7 +691,7 @@ func (m *MdnsManager) initializeAvahiProvider(ifaceIndexes []int32, autoReconnec
 // initializeZeroconfProvider creates and starts a Zeroconf provider  
 func (m *MdnsManager) initializeZeroconfProvider(ifaces []net.Interface, autoReconnect bool) error {
 	if m.providerFactory.NewZeroconf == nil {
-		return fmt.Errorf("Zeroconf provider factory function not available (interfaces: %d)", len(ifaces))
+		return fmt.Errorf("zeroconf provider factory function not available (interfaces: %d)", len(ifaces))
 	}
 
 	provider := m.providerFactory.NewZeroconf(ifaces)
@@ -702,7 +702,7 @@ func (m *MdnsManager) initializeZeroconfProvider(ifaces []net.Interface, autoRec
 	if !provider.Start(autoReconnect, m.processMdnsEntry) {
 		// Clean up failed provider
 		provider.Shutdown()
-		return fmt.Errorf("Zeroconf provider failed to start (interfaces: %d, autoReconnect: %v)", len(ifaces), autoReconnect)
+		return fmt.Errorf("zeroconf provider failed to start (interfaces: %d, autoReconnect: %v)", len(ifaces), autoReconnect)
 	}
 
 	m.mdnsProvider = provider

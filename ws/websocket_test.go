@@ -182,12 +182,16 @@ func newWSServer(t *testing.T, h http.Handler) (*httptest.Server, *http.Response
 	t.Helper()
 
 	s := httptest.NewServer(h)
-	wsURL := strings.Replace(s.URL, "http://", "ws://", -1)
-	wsURL = strings.Replace(wsURL, "https://", "wss://", -1)
+	wsURL := strings.ReplaceAll(s.URL, "http://", "ws://")
+	wsURL = strings.ReplaceAll(wsURL, "https://", "wss://")
 
 	ws, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Close response body since it's not needed after WebSocket upgrade
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
 	}
 
 	return s, resp, ws

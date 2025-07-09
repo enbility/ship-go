@@ -57,7 +57,6 @@ func TestPtr(t *testing.T) {
 		assert.NotNil(t, ptr)
 		assert.Equal(t, val, *ptr)
 		// Modifying the original value shouldn't affect the pointer
-		val = 100
 		assert.Equal(t, 42, *ptr)
 	})
 

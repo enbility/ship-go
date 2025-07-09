@@ -23,8 +23,9 @@ func TestWebSocketLifecycle(t *testing.T) {
 
 		// Create test server and connection
 		ts := &testServer{}
-		testServer, _, testWsConn := newWSServer(t, ts)
+		testServer, resp, testWsConn := newWSServer(t, ts)
 		defer testServer.Close()
+		defer resp.Body.Close()
 		defer testWsConn.Close()
 
 		// Create websocket connection
@@ -60,8 +61,9 @@ func TestWebSocketLifecycle(t *testing.T) {
 
 		// Create test server and connection
 		ts := &testServer{}
-		testServer, _, testWsConn := newWSServer(t, ts)
+		testServer, resp, testWsConn := newWSServer(t, ts)
 		defer testServer.Close()
+		defer resp.Body.Close()
 		defer testWsConn.Close()
 
 		// Create websocket connection
@@ -91,8 +93,9 @@ func TestWebSocketLifecycle(t *testing.T) {
 	t.Run("concurrent_operations_safe", func(t *testing.T) {
 		// Create test server and connection
 		ts := &testServer{}
-		testServer, _, testWsConn := newWSServer(t, ts)
+		testServer, resp, testWsConn := newWSServer(t, ts)
 		defer testServer.Close()
+		defer resp.Body.Close()
 		defer testWsConn.Close()
 
 		// Create websocket connection
@@ -146,8 +149,9 @@ func TestWebSocketLifecycle(t *testing.T) {
 func TestWebSocketShutdownTiming(t *testing.T) {
 	// Create test server and connection
 	ts := &testServer{}
-	testServer, _, testWsConn := newWSServer(t, ts)
+	testServer, resp, testWsConn := newWSServer(t, ts)
 	defer testServer.Close()
+	defer resp.Body.Close()
 	defer testWsConn.Close()
 
 	// Create websocket connection
@@ -177,8 +181,9 @@ func TestWebSocketResourceCleanup(t *testing.T) {
 	t.Run("channels_closed_on_shutdown", func(t *testing.T) {
 		// Create test server and connection
 		ts := &testServer{}
-		testServer, _, testWsConn := newWSServer(t, ts)
+		testServer, resp, testWsConn := newWSServer(t, ts)
 		defer testServer.Close()
+		defer resp.Body.Close()
 		defer testWsConn.Close()
 
 		// Create websocket connection
@@ -209,8 +214,9 @@ func TestWebSocketResourceCleanup(t *testing.T) {
 	t.Run("multiple_close_calls_safe", func(t *testing.T) {
 		// Create test server and connection
 		ts := &testServer{}
-		testServer, _, testWsConn := newWSServer(t, ts)
+		testServer, resp, testWsConn := newWSServer(t, ts)
 		defer testServer.Close()
+		defer resp.Body.Close()
 		defer testWsConn.Close()
 
 		// Create websocket connection

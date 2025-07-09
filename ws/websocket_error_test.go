@@ -142,8 +142,9 @@ func TestWebSocketErrorPaths(t *testing.T) {
 	t.Run("write_channel_full_error", func(t *testing.T) {
 		// Create test server and connection
 		ts := &testServer{}
-		testServer, _, testWsConn := newWSServer(t, ts)
+		testServer, resp, testWsConn := newWSServer(t, ts)
 		defer testServer.Close()
+		defer resp.Body.Close()
 		defer testWsConn.Close()
 
 		ws := NewWebsocketConnection(testWsConn, "test-ski")
@@ -168,8 +169,9 @@ func TestWebSocketErrorPaths(t *testing.T) {
 	t.Run("concurrent_close_and_write", func(t *testing.T) {
 		// Create test server and connection
 		ts := &testServer{}
-		testServer, _, testWsConn := newWSServer(t, ts)
+		testServer, resp, testWsConn := newWSServer(t, ts)
 		defer testServer.Close()
+		defer resp.Body.Close()
 		defer testWsConn.Close()
 
 		ws := NewWebsocketConnection(testWsConn, "test-ski")
@@ -241,8 +243,9 @@ func TestWebSocketErrorPaths(t *testing.T) {
 
 		// Create test server and connection
 		ts := &testServer{}
-		testServer, _, testWsConn := newWSServer(t, ts)
+		testServer, resp, testWsConn := newWSServer(t, ts)
 		defer testServer.Close()
+		defer resp.Body.Close()
 		defer testWsConn.Close()
 
 		ws := NewWebsocketConnection(testWsConn, "test-ski")

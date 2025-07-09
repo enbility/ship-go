@@ -12,8 +12,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const connIsClosedError string = "connection is closed"
-
 // Handling of the actual websocket connection to a remote device
 type WebsocketConnection struct {
 	// The actual websocket connection

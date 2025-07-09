@@ -296,7 +296,8 @@ func (a *AvahiProvider) attemptReconnect(cb api.MdnsResolveCB, serviceData *mdns
 			// Exponential backoff with jitter
 			currentDelay = currentDelay * 2
 			// Add jitter (±10%)
-			jitter := time.Duration(float64(currentDelay) * 0.1 * (2*rand.Float64() - 1))
+			// Using math/rand is appropriate here for non-cryptographic timing jitter
+			jitter := time.Duration(float64(currentDelay) * 0.1 * (2*rand.Float64() - 1)) //nolint:gosec
 			currentDelay = currentDelay + jitter
 			if currentDelay > maxDelay {
 				currentDelay = maxDelay
