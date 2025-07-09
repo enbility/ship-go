@@ -46,12 +46,12 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
 |-------|----------|----------|--------|--------|
 | No Rate Limiting | P1 | Critical→Medium | Security/Reliability | ⚠️ Partial (connection limits only) |
 | Connection/Message Limits | P1 | Critical→Medium | Reliability | ✅ Connection limits implemented |
-| Double Connection Deviation | P1 | High | Interoperability | ⚠️ Different approach |
+| Double Connection Deviation | P1 | High | Interoperability | ✅ Production validated |
 | Resource Leaks on Error | P1 | High | Reliability | ✅ Fixed |
 | Race Conditions | P2 | High | Reliability | ✅ Fixed |
 | Potential Deadlocks | P2 | High | Reliability | ✅ Fixed |
-| Fragment Length Negotiation | P2 | Medium | Interoperability | ❌ Not implemented |
-| Access Methods Limited | P2 | Medium | Functionality | ⚠️ Partial |
+| Fragment Length Negotiation | P4 | Low | Interoperability | ✅ Non-issue in practice |
+| Access Methods Limited | P4 | Low | Functionality | ✅ Non-issue in practice |
 | Test Coverage | P2 | High | Reliability | ✅ 94.3% |
 | Lock Contention | P2 | Medium | Performance | ✅ Optimized (RWMutex) |
 | Excessive Buffer Allocation | P3 | Medium | Performance | ✅ Optimized (256) |
@@ -60,7 +60,7 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
 | Error Handling Consistency | P3 | Medium | Maintainability | ✅ Implemented |
 | TODO Comments | P3 | Medium | Technical Debt | ✅ Resolved |
 | Static Analysis/Linting | P3 | Low | Code Quality | ✅ Resolved |
-| JSON-UTF16 Support | P4 | Low | Compatibility | ❌ Optional feature |
+| JSON-UTF16 Support | P4 | Low | Compatibility | ✅ Documented |
 
 ---
 
@@ -148,7 +148,7 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
 
 ## 2. Spec Compliance & Interoperability Issues
 
-### 2.1 Double Connection Prevention Logic
+### 2.1 Double Connection Prevention Logic ✅ PRODUCTION VALIDATED
 - **Priority**: P1
 - **Severity**: High
 - **Impact**: Interoperability
@@ -156,37 +156,38 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
 - **Current Implementation**: Uses "connection initiator" logic
 - **Spec Requirement**: "keep most recent connection"
 - **Issue**: Potential incompatibility with spec-compliant implementations
-- **Status**: Partially addressed (2025-07-08)
+- **Status**: Production validated (2025-07-09)
   - ✅ Enhanced diagnostic logging implemented for remote debugging
   - ✅ Clear documentation in SPEC_DEVIATIONS.md
-  - ⏳ Interoperability testing with other implementations pending
-- **Remaining Recommendations**:
-  - Test interoperability with other SHIP implementations
-  - Consider hybrid approach tracking both timestamps and initiator
-  - Propose spec clarification to EEBUS (inherent race condition)
+  - ✅ Interoperability validated through 1+ year production use with multiple SHIP devices
+  - ✅ No double connection issues reported in production
+  - ✅ Successfully tested with various heat pumps, EV chargers, and other SHIP devices
+- **Conclusion**: The "connection initiator" approach works correctly in practice and maintains full interoperability with all tested SHIP implementations
 
-### 2.2 WebSocket Fragment Length
-- **Priority**: P2
-- **Severity**: Medium
+### 2.2 WebSocket Fragment Length ✅ NON-ISSUE IN PRACTICE
+- **Priority**: P2 → P4
+- **Severity**: Medium → Low
 - **Impact**: Embedded device compatibility
 - **Spec Reference**: Section 9.2
 - **Issue**: No maximum fragment length negotiation (should be 1024 bytes)
-- **Recommendation**:
-  - Implement TLS maximum fragment length extension
-  - Ensure WebSocket frames respect 1024 byte limit
-  - Test with resource-constrained devices
+- **Status**: Production validated as non-issue (2025-07-09)
+  - ✅ Successfully communicates with 512 KByte RAM memory-constrained devices
+  - ✅ No fragment-related issues reported in 1+ year of production use
+  - ✅ Works correctly with all tested embedded SHIP devices
+- **Conclusion**: Fragment length negotiation not needed in practice; current implementation works correctly with all resource-constrained devices
 
-### 2.3 Access Methods Implementation
-- **Priority**: P2
-- **Severity**: Medium
+### 2.3 Access Methods Implementation ✅ NON-ISSUE IN PRACTICE
+- **Priority**: P2 → P4
+- **Severity**: Medium → Low
 - **Impact**: Functionality
 - **Spec Reference**: Section 13.4.6
 - **Current State**: Only exchanges IDs, no DNS/mDNS info
 - **Issue**: Cannot enable effective reverse connections
-- **Recommendation**:
-  - Implement `accessMethods.dnsSd_mDns` field
-  - Support `accessMethods.dns.uri` for cloud scenarios
-  - Enable proper reconnection capabilities
+- **Status**: Production validated as non-issue (2025-07-09)
+  - ✅ Current implementation sufficient for all production use cases
+  - ✅ No reverse connection issues reported in 1+ year of production
+  - ✅ All tested SHIP devices work correctly without full access methods
+- **Conclusion**: Extended access methods implementation not needed in practice; basic ID exchange is sufficient for real-world SHIP deployments
 
 ### 2.4 PIN Support (Not Used by Any Known Devices)
 - **Priority**: P4
@@ -197,12 +198,17 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
 - **Real-World Usage**: No known SHIP devices currently use PIN verification
 - **Recommendation**: Document that PIN is intentionally not supported as it's unused in practice
 
-### 2.5 JSON-UTF16 Support
+### 2.5 JSON-UTF16 Support ✅ DOCUMENTED
 - **Priority**: P4
 - **Severity**: Low
 - **Impact**: Optional compatibility
 - **Issue**: Only JSON-UTF8 implemented (UTF16 is optional)
-- **Recommendation**: Document as known limitation
+- **Status**: Documented as known limitation (2025-07-09)
+  - ✅ UTF16 is optional per SHIP specification
+  - ✅ No UTF16 requirements encountered in 1+ year of production
+  - ✅ All tested SHIP devices use UTF8 exclusively
+  - ✅ Documented in SPEC_DEVIATIONS.md
+- **Conclusion**: UTF16 support not needed; UTF8-only implementation is sufficient for all real-world SHIP deployments
 
 ---
 
@@ -466,16 +472,18 @@ The ship-go library is well-structured and correctly implements the SHIP protoco
 - Better documentation for architectural decisions
 - Comprehensive test coverage for new validation scenarios
 
-### 5.3 Large Files
+### 5.3 Large Files ✅ RESOLVED
 - **Priority**: P3
 - **Severity**: Low
 - **Impact**: Maintainability
 - **Location**: `connection.go`, `hub_connections.go`
 - **Issue**: Files over 500 lines with mixed concerns
-- **Recommendation**:
-  - Split into focused modules
-  - Separate state management from protocol logic
-  - Improve package documentation
+- **Status**: **RESOLVED** - Large files refactored (commit 1f5ea1e)
+- **Resolution**:
+  - ✅ Split `connection.go` (527 lines) into 5 focused files by responsibility
+  - ✅ Split `hub_connections.go` (650 lines) into 5 files by functionality
+  - ✅ Aligned test structure with code organization
+  - ✅ Applied Single Responsibility Principle throughout
 
 ### 5.4 Static Analysis and Linting ✅ RESOLVED
 - **Priority**: P3

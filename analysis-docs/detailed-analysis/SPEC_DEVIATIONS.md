@@ -1,9 +1,12 @@
 # SHIP Specification Deviations
 
-**Last Updated:** 2025-07-08  
+**Last Updated:** 2025-07-09  
 **Status:** Active
 
 ## Change History
+
+### 2025-07-09
+- Updated JSON-UTF16 Support section with production validation showing no real-world need
 
 ### 2025-07-08
 - Added enhanced diagnostic logging to double connection prevention section
@@ -315,7 +318,12 @@ delay += time.Duration(rand.Intn(1000)) * time.Millisecond
 - JSON-UTF16 marked as optional in spec
 - No practical demand for UTF16
 
-**Impact**: Minimal - UTF8 is the standard
+**Production Validation** (2025-07-09):
+- ✅ No UTF16 requirements encountered in 1+ year of production use
+- ✅ All tested SHIP devices use UTF8 exclusively
+- ✅ UTF8 is the de facto standard for all modern SHIP implementations
+
+**Impact**: None - UTF8-only implementation is sufficient for all real-world deployments
 
 ---
 
