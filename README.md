@@ -27,21 +27,36 @@ Includes:
 
 ## Documentation
 
-- **[analysis-docs/](analysis-docs/)** - Comprehensive analysis of SHIP protocol and implementation
-  - [README_START_HERE.md](analysis-docs/README_START_HERE.md) - Navigation guide to all analysis documents
-  - [EXECUTIVE_SUMMARY.md](analysis-docs/EXECUTIVE_SUMMARY.md) - Business-level overview with key findings (implementation score: 7.5/10)
-  - Detailed technical analysis including security model, specification deviations, and improvement roadmap
+### Getting Started
+- **[Getting Started Guide](docs/GETTING_STARTED.md)** - Complete guide to integrating ship-go (🚀 10 minute quickstart)
+- **[Security Model](SECURITY.md)** - Why `InsecureSkipVerify: true` is correct and secure
+- **[Working Examples](examples/)** - 5 complete examples from quickstart to production
+- **[Error Handling](docs/ERROR_HANDLING.md)** - Common errors and solutions
 
+### Production Deployment
+- **[Production Guide](docs/PRODUCTION.md)** - Complete deployment guide with monitoring and security
+- **[Specification Compliance](docs/SPEC_COMPLIANCE.md)** - 95% SHIP TS 1.0.1 compliance analysis
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Systematic debugging approach
+
+### Technical Deep Dive
+- **[Handshake Guide](docs/HANDSHAKE_GUIDE.md)** - 5-phase SHIP handshake with state diagrams
+- **[Connection Lifecycle](docs/CONNECTION_LIFECYCLE.md)** - Connection states and management
+- **[analysis-docs/](analysis-docs/)** - Comprehensive technical analysis
+  - [README_START_HERE.md](analysis-docs/README_START_HERE.md) - Navigation guide to all analysis documents
+  - [EXECUTIVE_SUMMARY.md](analysis-docs/EXECUTIVE_SUMMARY.md) - Business-level overview (implementation score: 8.7/10)
+  - Detailed security model, specification deviations, and improvement roadmap
+
+### Development Resources
 - **Concurrency Guides** - Thread safety and deadlock prevention
   - [Hub Concurrency Guide](hub/CONCURRENCY_GUIDE.md) - Lock ordering and thread safety patterns
   - [Ship Concurrency Guide](ship/CONCURRENCY_GUIDE.md) - Connection concurrency patterns
-
-- **Testing Documentation** - Additional testing resources
-  - [Tests Directory](tests/) - Testing guides and utilities
+- **[Testing Documentation](tests/)** - Testing guides and utilities
 
 ## Development
 
 ### Quick Start
+
+New to ship-go? Start with the [Getting Started Guide](docs/GETTING_STARTED.md) for a complete walkthrough.
 
 ```bash
 # Build the project
@@ -56,6 +71,12 @@ make test-deadlock
 # Complete development test cycle
 make dev-test
 ```
+
+**Examples:**
+- [Quickstart](examples/quickstart/) - Minimal working hub in 5 minutes
+- [Production](examples/production/) - Production-ready hub with monitoring
+- [Client](examples/client/) - Interactive client for connecting to devices
+- [Pairing](examples/pairing/) - Advanced pairing strategies
 
 ### Testing
 
@@ -160,9 +181,19 @@ When the limit is reached:
 
 ## Implementation notes
 
-- Double connection handling is not implemented according to SHIP 12.2.2. Instead the connection initiated by the higher SKI will be kept. Much simpler and always works
-- PIN Verification is _NOT_ supported other than SHIP 13.4.4.3.5.1 _"none"_ PIN state is supported!
-- Access Methods SHIP 13.4.6 only supports the most basic scenario and only works after PIN verification state is completed.
-- Supported registration mechanisms (SHIP 5):
-  - auto accept (without any interaction mechanism!)
-  - user verification
+For complete details, see [Specification Compliance](docs/SPEC_COMPLIANCE.md) (95% compliance).
+
+**Key deviations from SHIP TS 1.0.1:**
+- **Double connection handling** - Uses "connection initiator" logic instead of "most recent" (SHIP 12.2.2)
+- **PIN Verification** - Only supports "none" PIN state (SHIP 13.4.4.3.5.1)
+- **Access Methods** - Basic implementation only (SHIP 13.4.6)
+- **TLS Fragment Control** - Uses standard TLS record sizes (Go crypto/tls limitation)
+
+**Supported registration mechanisms (SHIP 5):**
+- Auto accept (for testing/demos only)
+- User verification (recommended for production)
+
+**Security Model:**
+- Uses self-signed certificates with SKI-based device identification
+- `InsecureSkipVerify: true` is **correct and secure** per SHIP specification
+- See [Security Model](SECURITY.md) for detailed explanation

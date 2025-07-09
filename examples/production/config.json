@@ -1,0 +1,18 @@
+{
+  "device_brand": "YourCompany",
+  "device_model": "SmartEnergyGateway",
+  "device_type": "EnergyManager",
+  "device_serial": "SEG-2024-001",
+  "organization": "Your Company Ltd",
+  "country": "DE",
+  "port": 4712,
+  "max_connections": 20,
+  "auto_accept_pairing": false,
+  "trusted_devices_file": "data/trusted_devices.json",
+  "certificate_file": "certs/ship.crt",
+  "private_key_file": "certs/ship.key",
+  "state_file": "data/hub_state.json",
+  "log_level": "info",
+  "metrics_enabled": true,
+  "network_interfaces": []
+}
