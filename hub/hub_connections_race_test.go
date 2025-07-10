@@ -203,10 +203,11 @@ func setupTestHub(t *testing.T) *Hub {
 	hubReader := mocks.NewHubReaderInterface(t)
 
 	// Set up expectations
-	hubReader.EXPECT().RemoteSKIConnected(mock.Anything).Maybe()
-	hubReader.EXPECT().RemoteSKIDisconnected(mock.Anything).Maybe()
-	hubReader.EXPECT().ServiceShipIDUpdate(mock.Anything, mock.Anything).Maybe()
-	hubReader.EXPECT().ServicePairingDetailUpdate(mock.Anything, mock.Anything).Maybe()
+	// Use specific type matchers to avoid race conditions with structs containing sync primitives
+	hubReader.EXPECT().RemoteSKIConnected(mock.AnythingOfType("api.ShipConnectionInterface")).Maybe()
+	hubReader.EXPECT().RemoteSKIDisconnected(mock.AnythingOfType("string")).Maybe()
+	hubReader.EXPECT().ServiceShipIDUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Maybe()
+	hubReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
 
 	service := api.NewServiceDetails("test-ski")
 	service.SetShipID("test-ship-id")

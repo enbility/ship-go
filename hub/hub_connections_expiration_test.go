@@ -26,8 +26,9 @@ func TestCertificateExpirationLogging(t *testing.T) {
 		hubReader := mocks.NewHubReaderInterface(t)
 
 		// Set up expectations
-		hubReader.EXPECT().RemoteSKIConnected(mock.Anything).Maybe()
-		hubReader.EXPECT().RemoteSKIDisconnected(mock.Anything).Maybe()
+		// Use specific type matchers to avoid race conditions
+		hubReader.EXPECT().RemoteSKIConnected(mock.AnythingOfType("api.ShipConnectionInterface")).Maybe()
+		hubReader.EXPECT().RemoteSKIDisconnected(mock.AnythingOfType("string")).Maybe()
 
 		service := api.NewServiceDetails("test-ski")
 		service.SetShipID("test-ship-id")

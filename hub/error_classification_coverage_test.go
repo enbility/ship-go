@@ -41,7 +41,7 @@ func TestLogConnectionError_ComprehensiveCoverage(t *testing.T) {
 			expectedLevel: "none",
 			description:   "should return early without logging",
 		},
-		
+
 		// Certificate related errors - should be ERROR level
 		{
 			name:          "certificate_in_error_message",
@@ -71,7 +71,7 @@ func TestLogConnectionError_ComprehensiveCoverage(t *testing.T) {
 			expectedLevel: "error",
 			description:   "case-sensitive check for certificate",
 		},
-		
+
 		// Connection refused - should be DEBUG level
 		{
 			name:          "direct_ECONNREFUSED",
@@ -94,7 +94,7 @@ func TestLogConnectionError_ComprehensiveCoverage(t *testing.T) {
 			expectedLevel: "debug",
 			description:   "deeply wrapped ECONNREFUSED is debug level",
 		},
-		
+
 		// Timeout errors - should be DEBUG level
 		{
 			name:          "timeout_error",
@@ -124,7 +124,7 @@ func TestLogConnectionError_ComprehensiveCoverage(t *testing.T) {
 			expectedLevel: "debug",
 			description:   "deadline exceeded is timeout, thus debug level",
 		},
-		
+
 		// Generic errors - should be ERROR level
 		{
 			name:          "generic_error",
@@ -147,7 +147,7 @@ func TestLogConnectionError_ComprehensiveCoverage(t *testing.T) {
 			expectedLevel: "error",
 			description:   "wrapped generic errors are error level",
 		},
-		
+
 		// Edge cases
 		{
 			name:          "empty_context",
@@ -171,7 +171,7 @@ func TestLogConnectionError_ComprehensiveCoverage(t *testing.T) {
 			description:   "multiple wrapping still detects ECONNREFUSED",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Note: We can't easily test the actual logging output without
@@ -192,12 +192,12 @@ func TestClassifyErrorLevel_Additional(t *testing.T) {
 		IsTimeout:   true,
 		IsTemporary: true,
 	}
-	
+
 	// Test that it's properly classified as timeout
 	var netErr net.Error
 	assert.True(t, errors.As(timeoutErr, &netErr))
 	assert.True(t, netErr.Timeout())
-	
+
 	// Test with nil net.Error
 	regularErr := errors.New("not a network error")
 	assert.False(t, errors.As(regularErr, &netErr))
@@ -261,7 +261,7 @@ func TestLogConnectionError_RealWorldScenarios(t *testing.T) {
 			context: "network unreachable:",
 		},
 	}
-	
+
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			err := scenario.createError()
@@ -276,12 +276,12 @@ func TestLogConnectionError_RealWorldScenarios(t *testing.T) {
 func TestLogConnectionError_ConcurrentCalls(t *testing.T) {
 	// Test concurrent calls don't cause issues
 	done := make(chan bool, 100)
-	
+
 	for i := 0; i < 100; i++ {
 		go func(idx int) {
 			var err error
 			context := fmt.Sprintf("concurrent call %d:", idx)
-			
+
 			switch idx % 4 {
 			case 0:
 				err = errors.New("certificate error")
@@ -292,12 +292,12 @@ func TestLogConnectionError_ConcurrentCalls(t *testing.T) {
 			case 3:
 				err = errors.New("generic error")
 			}
-			
+
 			logConnectionError(err, context)
 			done <- true
 		}(i)
 	}
-	
+
 	// Wait for all goroutines
 	for i := 0; i < 100; i++ {
 		<-done
@@ -307,33 +307,33 @@ func TestLogConnectionError_ConcurrentCalls(t *testing.T) {
 // TestHub_SafeClose tests the safeClose helper method
 func TestHub_SafeClose(t *testing.T) {
 	hub := setupTestHub(t)
-	
+
 	// Test with nil closer
 	assert.NotPanics(t, func() {
 		hub.safeClose(nil, "test context")
 	})
-	
+
 	// Test with closer that returns error
 	errorCloser := &mockCloser{err: errors.New("close failed")}
 	assert.NotPanics(t, func() {
 		hub.safeClose(errorCloser, "error closer")
 	})
 	assert.True(t, errorCloser.closed)
-	
+
 	// Test with successful closer
 	successCloser := &mockCloser{err: nil}
 	assert.NotPanics(t, func() {
 		hub.safeClose(successCloser, "success closer")
 	})
 	assert.True(t, successCloser.closed)
-	
+
 	// Test with net.ErrClosed (should be ignored)
 	closedCloser := &mockCloser{err: net.ErrClosed}
 	assert.NotPanics(t, func() {
 		hub.safeClose(closedCloser, "already closed")
 	})
 	assert.True(t, closedCloser.closed)
-	
+
 	// Test with "use of closed network connection" error
 	networkClosedErr := &mockCloser{err: errors.New("use of closed network connection")}
 	assert.NotPanics(t, func() {
@@ -351,11 +351,4 @@ type mockCloser struct {
 func (m *mockCloser) Close() error {
 	m.closed = true
 	return m.err
-}
-
-// mockPanicCloser panics when Close is called
-type mockPanicCloser struct{}
-
-func (m *mockPanicCloser) Close() error {
-	panic("close panicked")
 }

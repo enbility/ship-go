@@ -18,11 +18,12 @@ func setupTestHubForTimer(t *testing.T) *Hub {
 	hubReader := mocks.NewHubReaderInterface(t)
 
 	// Set up expectations
-	hubReader.EXPECT().RemoteSKIConnected(mock.Anything).Maybe()
-	hubReader.EXPECT().RemoteSKIDisconnected(mock.Anything).Maybe()
-	hubReader.EXPECT().ServiceShipIDUpdate(mock.Anything, mock.Anything).Maybe()
-	hubReader.EXPECT().ServicePairingDetailUpdate(mock.Anything, mock.Anything).Maybe()
-	hubReader.EXPECT().AllowWaitingForTrust(mock.Anything).Return(false).Maybe()
+	// Use specific type matchers to avoid race conditions with structs containing sync primitives
+	hubReader.EXPECT().RemoteSKIConnected(mock.AnythingOfType("api.ShipConnectionInterface")).Maybe()
+	hubReader.EXPECT().RemoteSKIDisconnected(mock.AnythingOfType("string")).Maybe()
+	hubReader.EXPECT().ServiceShipIDUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Maybe()
+	hubReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
+	hubReader.EXPECT().AllowWaitingForTrust(mock.AnythingOfType("string")).Return(false).Maybe()
 
 	// Additional expectations for timer-specific tests
 	mdns.EXPECT().Start(mock.Anything).Return(nil).Maybe()
@@ -229,7 +230,7 @@ func TestDoubleConnectionPreventionEdgeCases(t *testing.T) {
 		existingSKI := "existing-ski"
 		existingConn := mocks.NewShipConnectionInterface(t)
 		existingConn.EXPECT().RemoteSKI().Return(existingSKI).Maybe()
-		existingConn.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
+		existingConn.EXPECT().CloseConnection(mock.AnythingOfType("bool"), mock.AnythingOfType("int"), mock.AnythingOfType("string")).Maybe()
 
 		hub.muxCon.Lock()
 		hub.connections[existingSKI] = existingConn
