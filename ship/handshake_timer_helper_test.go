@@ -1,6 +1,7 @@
 package ship
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/enbility/ship-go/api"
@@ -40,6 +41,7 @@ func (n *noOpInfoProvider) AllowWaitingForTrust(ski string) bool {
 
 // noOpDataWriter is a minimal implementation for tests
 type noOpDataWriter struct {
+	mu     sync.Mutex
 	closed bool
 }
 
@@ -48,10 +50,14 @@ func (n *noOpDataWriter) InitDataProcessing(dataProcessing api.WebsocketDataRead
 }
 
 func (n *noOpDataWriter) CloseDataConnection(code int, reason string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.closed = true
 }
 
 func (n *noOpDataWriter) IsDataConnectionClosed() (bool, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	return n.closed, nil
 }
 
