@@ -128,3 +128,30 @@ func (s *InitServerSuite) Test_ServerWait_Timeout() {
 	assert.Equal(s.T(), model.SmeStateError, s.sut.getState())
 	assert.Nil(s.T(), s.lastMessage())
 }
+
+// Test for the error path in handshakeInit_cmiStateServerWait when WriteMessageToWebsocketConnection fails
+func (s *InitServerSuite) Test_ServerWait_WriteMessageError() {
+	s.sut.setState(model.CmiStateServerWait, nil)
+
+	// Clear existing mock expectations
+	s.mockWSWrite.ExpectedCalls = nil
+	s.mockWSWrite.Calls = nil
+
+	// Set up basic mocks without write expectation
+	s.mockWSWrite.EXPECT().InitDataProcessing(mock.Anything).Return().Maybe()
+	s.mockWSWrite.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
+	s.mockWSWrite.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Return().Maybe()
+
+	// Make WriteMessageToWebsocketConnection fail
+	s.mux.Lock()
+	s.wsReturnFailure = assert.AnError
+	s.mux.Unlock()
+
+	s.mockWSWrite.EXPECT().WriteMessageToWebsocketConnection(model.ShipInit).Return(assert.AnError).Once()
+
+	s.sut.handshakeInit_cmiStateServerWait(model.ShipInit)
+
+	// Verify state changed to error due to WriteMessageToWebsocketConnection failure
+	assert.Equal(s.T(), model.SmeStateError, s.sut.getState())
+	assert.Equal(s.T(), false, s.sut.handshakeTimerRunning)
+}

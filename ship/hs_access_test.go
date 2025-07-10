@@ -1,6 +1,7 @@
 package ship
 
 import (
+	"errors"
 	"sync"
 	"testing"
 
@@ -86,6 +87,29 @@ func (s *AccessSuite) Test_Init() {
 	assert.Equal(s.T(), true, s.sut.handshakeTimerRunning)
 	assert.Equal(s.T(), model.SmeAccessMethodsRequest, s.sut.getState())
 	assert.NotNil(s.T(), s.lastMessage())
+}
+
+func (s *AccessSuite) Test_Init_SendError() {
+	s.sut.setState(model.SmePinStateCheckOk, nil)
+	
+	// Clear the existing mock expectations first
+	s.mockWSWrite.ExpectedCalls = nil
+	s.mockWSWrite.Calls = nil
+	
+	// Mock the WebSocket writer to fail on write (which will cause sendShipModel to fail)
+	s.mockWSWrite.EXPECT().InitDataProcessing(mock.Anything).Return().Maybe()
+	s.mockWSWrite.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
+	s.mockWSWrite.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Return().Maybe()
+	
+	// Make WriteMessageToWebsocketConnection fail
+	expectedErr := errors.New("websocket write failed during init")
+	s.mockWSWrite.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(expectedErr).Once()
+	
+	s.sut.handleState(false, nil)
+	
+	// Verify state changed to error due to sendShipModel failure in handshakeAccessMethods_Init
+	assert.Equal(s.T(), model.SmeStateError, s.sut.getState())
+	assert.Equal(s.T(), false, s.sut.handshakeTimerRunning)
 }
 
 func (s *AccessSuite) Test_Request() {
@@ -262,4 +286,117 @@ func (s *AccessSuite) Test_AccessMethodsRequest_NoSpaces() {
 	assert.Equal(s.T(), false, s.sut.handshakeTimerRunning)
 	assert.Equal(s.T(), model.SmeAccessMethodsRequest, s.sut.getState())
 	assert.NotNil(s.T(), s.lastMessage())
+}
+
+// Direct tests for handshakeAccessMethods_Request function
+
+func (s *AccessSuite) Test_HandshakeAccessMethods_Request_DetectMessageTypeError() {
+	s.sut.setState(model.SmeAccessMethodsRequest, nil)
+
+	// Send invalid JSON that will fail detectAccessMethodsMessageType
+	invalidMessage := []byte{model.MsgTypeControl, 'i', 'n', 'v', 'a', 'l', 'i', 'd'}
+
+	s.sut.handshakeAccessMethods_Request(invalidMessage)
+
+	// Verify state changed to error
+	assert.Equal(s.T(), model.SmeStateError, s.sut.getState())
+}
+
+func (s *AccessSuite) Test_HandshakeAccessMethods_Request_RequestType_Success() {
+	s.sut.setState(model.SmeAccessMethodsRequest, nil)
+
+	// Create access methods request message
+	requestMsg := `{"accessMethodsRequest": {}}`
+	message := append([]byte{model.MsgTypeControl}, []byte(requestMsg)...)
+
+	s.sut.handshakeAccessMethods_Request(message)
+
+	// Verify state remains unchanged (waiting for response)
+	assert.Equal(s.T(), model.SmeAccessMethodsRequest, s.sut.getState())
+	// Verify response was sent
+	assert.NotNil(s.T(), s.lastMessage())
+}
+
+func (s *AccessSuite) Test_HandshakeAccessMethods_Request_RequestType_SendError() {
+	s.sut.setState(model.SmeAccessMethodsRequest, nil)
+
+	// Create access methods request message
+	requestMsg := `{"accessMethodsRequest": {}}`
+	message := append([]byte{model.MsgTypeControl}, []byte(requestMsg)...)
+
+	// Clear the existing mock expectations first
+	s.mockWSWrite.ExpectedCalls = nil
+	s.mockWSWrite.Calls = nil
+
+	// Mock the WebSocket writer to fail on write
+	s.mockWSWrite.EXPECT().InitDataProcessing(mock.Anything).Return().Maybe()
+	s.mockWSWrite.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
+	s.mockWSWrite.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Return().Maybe()
+
+	// Make WriteMessageToWebsocketConnection fail
+	expectedErr := errors.New("websocket write failed")
+	s.mockWSWrite.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(expectedErr).Once()
+
+	s.sut.handshakeAccessMethods_Request(message)
+
+	// Verify state changed to error due to sendShipModel failure
+	assert.Equal(s.T(), model.SmeStateError, s.sut.getState())
+}
+
+func (s *AccessSuite) Test_HandshakeAccessMethods_Request_MethodsType_UnmarshalError() {
+	s.sut.setState(model.SmeAccessMethodsRequest, nil)
+
+	// Create invalid access methods message that will fail unmarshal
+	methodsMsg := `{"accessMethods": "invalid"}`
+	message := append([]byte{model.MsgTypeControl}, []byte(methodsMsg)...)
+
+	s.sut.handshakeAccessMethods_Request(message)
+
+	// Verify state changed to error
+	assert.Equal(s.T(), model.SmeStateError, s.sut.getState())
+}
+
+func (s *AccessSuite) Test_HandshakeAccessMethods_Request_MethodsType_HandleResponseError() {
+	s.sut.setState(model.SmeAccessMethodsRequest, nil)
+
+	// Create access methods message with no ID (will fail validation)
+	methodsMsg := `{"accessMethods": {}}`
+	message := append([]byte{model.MsgTypeControl}, []byte(methodsMsg)...)
+
+	s.sut.handshakeAccessMethods_Request(message)
+
+	// Verify state changed to error
+	assert.Equal(s.T(), model.SmeStateError, s.sut.getState())
+}
+
+func (s *AccessSuite) Test_HandshakeAccessMethods_Request_MethodsType_Success() {
+	s.sut.setState(model.SmeAccessMethodsRequest, nil)
+	// Set the remote SHIP ID to match what we'll send
+	s.sut.remoteShipID = "RemoteShipID"
+
+	// Create valid access methods message that matches the expected remoteShipID
+	methodsMsg := `{"accessMethods": {"id": "RemoteShipID"}}`
+	message := append([]byte{model.MsgTypeControl}, []byte(methodsMsg)...)
+
+	// Mock approveHandshake expectations
+	mockReader := mocks.NewShipConnectionDataReaderInterface(s.T())
+	s.mockShipInfo.EXPECT().SetupRemoteDevice(mock.Anything, mock.Anything).Return(mockReader).Once()
+
+	s.sut.handshakeAccessMethods_Request(message)
+
+	// Verify state changed to complete
+	assert.Equal(s.T(), model.SmeStateComplete, s.sut.getState())
+}
+
+func (s *AccessSuite) Test_HandshakeAccessMethods_Request_UnknownMessageType() {
+	s.sut.setState(model.SmeAccessMethodsRequest, nil)
+
+	// Create message with unknown type
+	unknownMsg := `{"unknownType": {}}`
+	message := append([]byte{model.MsgTypeControl}, []byte(unknownMsg)...)
+
+	s.sut.handshakeAccessMethods_Request(message)
+
+	// Verify state changed to error
+	assert.Equal(s.T(), model.SmeStateError, s.sut.getState())
 }

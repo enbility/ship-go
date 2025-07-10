@@ -60,6 +60,7 @@ func (c *ShipConnection) handshakeProtocol_smeProtHStateServerListenProposal(mes
 
 	if err := c.sendShipModel(model.MsgTypeControl, protocolHandshake); err != nil {
 		c.endHandshakeWithError(err)
+		return
 	}
 
 	c.setHandshakeTimer(timeoutTimerTypeWaitForReady, cmiTimeout)

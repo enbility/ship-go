@@ -166,3 +166,79 @@ func (s *ProClientSuite) Test_Abort() {
 	timer := s.sut.getHandshakeTimerRunning()
 	assert.Equal(s.T(), false, timer)
 }
+
+// Test for sendShipModel error in handshakeProtocol_smeProtHStateClientInit
+func (s *ProClientSuite) Test_ClientInit_SendError() {
+	s.sut.setState(model.SmeProtHStateClientInit, nil)
+
+	// Clear existing mock expectations
+	s.mockWSWrite.ExpectedCalls = nil
+	s.mockWSWrite.Calls = nil
+
+	// Set up basic mocks without write expectation
+	s.mockWSWrite.EXPECT().InitDataProcessing(mock.Anything).Return().Maybe()
+	s.mockWSWrite.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
+	s.mockWSWrite.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Return().Maybe()
+
+	// Make WriteMessageToWebsocketConnection fail
+	s.mux.Lock()
+	s.wsReturnFailure = assert.AnError
+	s.mux.Unlock()
+
+	s.mockWSWrite.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(assert.AnError).Once()
+
+	s.sut.handshakeProtocol_smeProtHStateClientInit()
+
+	assert.Equal(s.T(), model.SmeStateError, s.sut.getState())
+}
+
+// Test for JSON unmarshal error in handshakeProtocol_smeProtHStateClientListenChoice
+func (s *ProClientSuite) Test_ListenChoice_JSONError() {
+	s.sut.setState(model.SmeProtHStateClientListenChoice, nil)
+
+	// Send invalid JSON that will cause unmarshal error
+	invalidMessage := []byte{model.MsgTypeControl, 0x00, 0x00, 0x00, 'i', 'n', 'v', 'a', 'l', 'i', 'd'}
+
+	s.sut.handleState(false, invalidMessage)
+
+	assert.Equal(s.T(), false, s.sut.handshakeTimerRunning)
+	assert.Equal(s.T(), model.SmeStateError, s.sut.getState())
+	assert.NotNil(s.T(), s.lastMessage())
+}
+
+// Test for sendShipModel error in handshakeProtocol_smeProtHStateClientListenChoice final send
+func (s *ProClientSuite) Test_ListenChoice_FinalSendError() {
+	s.sut.setState(model.SmeProtHStateClientListenChoice, nil)
+
+	// Clear existing mock expectations
+	s.mockWSWrite.ExpectedCalls = nil
+	s.mockWSWrite.Calls = nil
+
+	// Set up basic mocks without write expectation
+	s.mockWSWrite.EXPECT().InitDataProcessing(mock.Anything).Return().Maybe()
+	s.mockWSWrite.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
+	s.mockWSWrite.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Return().Maybe()
+
+	// Make WriteMessageToWebsocketConnection fail for the final send
+	// The function will process the message and then try to send its response, which should fail
+	s.mockWSWrite.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(assert.AnError).Once()
+
+	protMsg := model.MessageProtocolHandshake{
+		MessageProtocolHandshake: model.MessageProtocolHandshakeType{
+			HandshakeType: model.ProtocolHandshakeTypeTypeSelect,
+			Version:       model.Version{Major: 1, Minor: 0},
+			Formats: model.MessageProtocolFormatsType{
+				Format: []model.MessageProtocolFormatType{model.MessageProtocolFormatTypeUTF8},
+			},
+		},
+	}
+
+	msg, err := s.sut.shipMessage(model.MsgTypeControl, protMsg)
+	assert.Nil(s.T(), err)
+	assert.NotNil(s.T(), msg)
+
+	s.sut.handleState(false, msg)
+
+	assert.Equal(s.T(), false, s.sut.handshakeTimerRunning)
+	assert.Equal(s.T(), model.SmeStateError, s.sut.getState())
+}

@@ -69,7 +69,7 @@ func (c *ShipConnection) handleAccessMethodsResponse(accessMethods *model.Access
 
 	// If we already know the remote ID, verify it matches
 	if len(c.remoteShipID) > 0 && c.remoteShipID != remoteID {
-		return fmt.Errorf("SHIP ID mismatch for remote SKI %s: expected '%s', got '%s'", 
+		return fmt.Errorf("SHIP ID mismatch for remote SKI %s: expected '%s', got '%s'",
 			c.remoteSKI, c.remoteShipID, remoteID)
 	}
 
@@ -116,8 +116,5 @@ func (c *ShipConnection) handshakeAccessMethods_Request(message []byte) {
 		// Transition to approved state
 		c.setState(model.SmeStateApproved, nil)
 		c.approveHandshake()
-
-	default:
-		c.endHandshakeWithError(fmt.Errorf("access methods: unexpected message type: %s", msgType))
 	}
 }
