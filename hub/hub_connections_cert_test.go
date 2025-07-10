@@ -179,7 +179,7 @@ func TestConnectFoundServiceCertificateValidation(t *testing.T) {
 		err = hub.connectFoundService(service, host, port, "")
 
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "certificate SKI mismatch")
+		assert.Contains(t, err.Error(), "SKI mismatch")
 		t.Logf("Certificate has SKI: %s, service expects: %s", actualSKI, service.SKI())
 	})
 }

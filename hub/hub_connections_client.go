@@ -2,6 +2,7 @@ package hub
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -18,15 +19,16 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// connectFoundService establishes a connection to another EEBUS service
-//
-// returns error contains a reason for failing the connection or nil if no further tries should be processed
-func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port, path string) error {
-	if h.isSkiConnected(remoteService.SKI()) {
-		return nil
-	}
+// CertificateValidationResult represents the result of certificate validation
+type CertificateValidationResult struct {
+	Valid     bool
+	RemoteSKI string
+	Error     error
+}
 
-	// Check connection limit before initiating new connection
+// validateConnectionLimit checks if a new connection can be established
+// This is a pure function that's easy to test
+func (h *Hub) validateConnectionLimit() error {
 	h.muxCon.RLock()
 	currentConnections := len(h.connections)
 	maxConnections := h.maxConnections
@@ -36,10 +38,13 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 		logging.Log().Debug("connection limit reached, not initiating new connection", currentConnections, maxConnections)
 		return fmt.Errorf("connection limit reached (%d/%d)", currentConnections, maxConnections)
 	}
+	return nil
+}
 
-	logging.Log().Debugf("initiating connection to %s at %s:%s%s", remoteService.SKI(), host, port, path)
-
-	dialer := &websocket.Dialer{
+// createWebSocketDialer creates a configured WebSocket dialer
+// This is a pure function that's easy to test
+func (h *Hub) createWebSocketDialer() *websocket.Dialer {
+	return &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 5 * time.Second,
 		TLSClientConfig: &tls.Config{
@@ -51,55 +56,69 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 		},
 		Subprotocols: []string{api.ShipWebsocketSubProtocol},
 	}
+}
 
-	hostPort := net.JoinHostPort(host, port)
-	address := fmt.Sprintf("wss://%s%s", hostPort, path)
-	conn, resp, err := dialer.Dial(address, nil)
-	if err == nil {
-		defer resp.Body.Close()
-	} else {
-		address = fmt.Sprintf("wss://%s", hostPort)
-		conn, resp, err = dialer.Dial(address, nil)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-	}
-
-	tlsConn := conn.UnderlyingConn().(*tls.Conn)
-	remoteCerts := tlsConn.ConnectionState().PeerCertificates
-
+// validateRemoteCertificate validates the remote certificate and returns the SKI
+// This is a pure function that's easy to test
+func validateRemoteCertificate(remoteCerts []*x509.Certificate, expectedSKI string) CertificateValidationResult {
 	if len(remoteCerts) == 0 || remoteCerts[0].SubjectKeyId == nil {
-		// Close connection as we couldn't get the remote SKI
-		errorString := fmt.Sprintf("certificate validation failed for %s: no SKI in certificate", remoteService.SKI())
-		h.safeClose(conn, "certificate validation failed")
-		return errors.New(errorString)
+		return CertificateValidationResult{
+			Valid: false,
+			Error: fmt.Errorf("no SKI in certificate"),
+		}
 	}
 
 	if _, err := cert.SkiFromCertificate(remoteCerts[0]); err != nil {
-		// Close connection as the remote SKI can't be correct
-		errorString := fmt.Sprintf("certificate validation failed for %s: %s", remoteService.SKI(), err)
-		h.safeClose(conn, "certificate validation failed")
-		return errors.New(errorString)
+		return CertificateValidationResult{
+			Valid: false,
+			Error: fmt.Errorf("invalid SKI format: %w", err),
+		}
 	}
 
 	remoteSKI := fmt.Sprintf("%0x", remoteCerts[0].SubjectKeyId)
-
-	if remoteSKI != remoteService.SKI() {
-		errorString := fmt.Sprintf("certificate SKI mismatch: expected %s, got %s", remoteService.SKI(), remoteSKI)
-		h.safeClose(conn, "certificate validation failed")
-		return errors.New(errorString)
+	if remoteSKI != expectedSKI {
+		return CertificateValidationResult{
+			Valid: false,
+			Error: fmt.Errorf("SKI mismatch: expected %s, got %s", expectedSKI, remoteSKI),
+		}
 	}
 
 	// Log certificate expiration warnings (per SHIP spec 12.1.1)
 	// This does not affect the connection - we log but still allow communication
 	cert.LogCertificateExpiration(remoteCerts[0], remoteSKI)
 
-	if !h.keepThisConnection(conn, false, remoteService) {
-		errorString := fmt.Sprintf("closing connection to %s: ignoring this connection", remoteService.SKI())
-		return errors.New(errorString)
+	return CertificateValidationResult{
+		Valid:     true,
+		RemoteSKI: remoteSKI,
+	}
+}
+
+// establishWebSocketConnection creates and establishes a WebSocket connection
+// This is a focused function that handles the connection establishment details
+func (h *Hub) establishWebSocketConnection(host, port, path string) (*websocket.Conn, error) {
+	dialer := h.createWebSocketDialer()
+
+	hostPort := net.JoinHostPort(host, port)
+	address := fmt.Sprintf("wss://%s%s", hostPort, path)
+	conn, resp, err := dialer.Dial(address, nil)
+	if err == nil {
+		defer resp.Body.Close()
+		return conn, nil
 	}
 
+	// Try without path if the first attempt failed
+	address = fmt.Sprintf("wss://%s", hostPort)
+	conn, resp, err = dialer.Dial(address, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return conn, nil
+}
+
+// createShipConnection creates and initializes a SHIP connection
+// This is a focused function that handles SHIP connection setup
+func (h *Hub) createShipConnection(conn *websocket.Conn, remoteService *api.ServiceDetails) {
 	// Set read limit to prevent DoS attacks
 	conn.SetReadLimit(ws.MaxMessageSize)
 
@@ -109,49 +128,121 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 	shipConnection.Run()
 
 	h.registerConnection(shipConnection)
+}
+
+// connectFoundService establishes a connection to another EEBUS service
+//
+// returns error contains a reason for failing the connection or nil if no further tries should be processed
+func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port, path string) error {
+	if h.isSkiConnected(remoteService.SKI()) {
+		return nil
+	}
+
+	// Check connection limit before initiating new connection
+	if err := h.validateConnectionLimit(); err != nil {
+		return err
+	}
+
+	logging.Log().Debugf("initiating connection to %s at %s:%s%s", remoteService.SKI(), host, port, path)
+
+	// Establish WebSocket connection
+	conn, err := h.establishWebSocketConnection(host, port, path)
+	if err != nil {
+		return err
+	}
+
+	// Validate remote certificate
+	tlsConn := conn.UnderlyingConn().(*tls.Conn)
+	remoteCerts := tlsConn.ConnectionState().PeerCertificates
+	validationResult := validateRemoteCertificate(remoteCerts, remoteService.SKI())
+	if !validationResult.Valid {
+		errorString := fmt.Sprintf("certificate validation failed for %s: %s", remoteService.SKI(), validationResult.Error)
+		h.safeClose(conn, "certificate validation failed")
+		return errors.New(errorString)
+	}
+
+	// Check for double connections
+	if !h.keepThisConnection(conn, false, remoteService) {
+		errorString := fmt.Sprintf("closing connection to %s: ignoring this connection", remoteService.SKI())
+		return errors.New(errorString)
+	}
+
+	// Create and setup SHIP connection
+	h.createShipConnection(conn, remoteService)
 
 	return nil
 }
 
-// initateConnection attempts to establish a connection to a remote service
-// returns true if successful
-func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.MdnsEntry) bool {
-	var err error
-
+// shouldAttemptConnection checks if a connection attempt should be made
+// This is a pure function that's easy to test
+func (h *Hub) shouldAttemptConnection(remoteService *api.ServiceDetails) bool {
 	// connection attempt is not relevant if the device is no longer paired
 	// or it is not queued for pairing
 	pairingState := h.ServiceForSKI(remoteService.SKI()).ConnectionStateDetail().State()
-	if !h.IsRemoteServiceForSKIPaired(remoteService.SKI()) && pairingState != api.ConnectionStateQueued {
+	return h.IsRemoteServiceForSKIPaired(remoteService.SKI()) || pairingState == api.ConnectionStateQueued
+}
+
+// tryConnectionViaHost attempts connection using hostname
+// This is a focused function that handles hostname-based connection attempts
+func (h *Hub) tryConnectionViaHost(remoteService *api.ServiceDetails, entry *api.MdnsEntry) bool {
+	if len(entry.Host) == 0 {
 		return false
 	}
 
-	// try connection via hostname
-	if len(entry.Host) > 0 {
-		logging.Log().Debug("trying to connect to", remoteService.SKI(), "at", entry.Host)
-		if err = h.connectFoundService(remoteService, entry.Host, strconv.Itoa(entry.Port), entry.Path); err != nil {
-			logConnectionError(err, fmt.Sprintf("connection to %s at %s failed:", remoteService.SKI(), entry.Host))
-		} else {
-			return true
-		}
+	logging.Log().Debug("trying to connect to", remoteService.SKI(), "at", entry.Host)
+	if err := h.connectFoundService(remoteService, entry.Host, strconv.Itoa(entry.Port), entry.Path); err != nil {
+		logConnectionError(err, fmt.Sprintf("connection to %s at %s failed:", remoteService.SKI(), entry.Host))
+		return false
 	}
+	return true
+}
 
+// formatIPAddress formats an IP address for connection (handles IPv6 brackets)
+// This is a pure function that's easy to test
+func formatIPAddress(address net.IP) string {
+	if address.To4() == nil {
+		// IPv6
+		return "[" + address.String() + "]"
+	}
+	// IPv4
+	return address.String()
+}
+
+// tryConnectionViaAddresses attempts connection using IP addresses
+// This is a focused function that handles IP-based connection attempts
+func (h *Hub) tryConnectionViaAddresses(remoteService *api.ServiceDetails, entry *api.MdnsEntry) bool {
 	// try IPv4 addresses before IPv6 addresses
 	entry.Addresses = h.sortIPAddresses(entry.Addresses)
 
 	// try connecting via the provided IP addresses
 	for _, address := range entry.Addresses {
 		logging.Log().Debug("trying to connect to", remoteService.SKI(), "at", address)
-		// IPv4
-		addressValue := address.String()
-		if address.To4() == nil {
-			// IPv6
-			addressValue = "[" + address.String() + "]"
-		}
-		if err = h.connectFoundService(remoteService, addressValue, strconv.Itoa(entry.Port), entry.Path); err != nil {
+		addressValue := formatIPAddress(address)
+		if err := h.connectFoundService(remoteService, addressValue, strconv.Itoa(entry.Port), entry.Path); err != nil {
 			logConnectionError(err, fmt.Sprintf("connection to %s at %s failed:", remoteService.SKI(), addressValue))
 		} else {
 			return true
 		}
+	}
+	return false
+}
+
+// initateConnection attempts to establish a connection to a remote service
+// returns true if successful
+func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.MdnsEntry) bool {
+	// Check if connection attempt should be made
+	if !h.shouldAttemptConnection(remoteService) {
+		return false
+	}
+
+	// Try connection via hostname first
+	if h.tryConnectionViaHost(remoteService, entry) {
+		return true
+	}
+
+	// Try connection via IP addresses
+	if h.tryConnectionViaAddresses(remoteService, entry) {
+		return true
 	}
 
 	// no connection could be established via any of the provided addresses
