@@ -121,7 +121,7 @@ func (ui *ConsoleUserInterface) PromptForTrust(ski, brand, model, deviceType str
 	fmt.Printf("\nDo you want to trust this device? (yes/no): ")
 
 	var response string
-	fmt.Scanln(&response)
+	_, _ = fmt.Scanln(&response)
 
 	return response == "yes" || response == "y"
 }
@@ -177,7 +177,7 @@ func (r *ProductionHubReader) RemoteSKIConnected(ski string) {
 		device.LastConnection = time.Now()
 		device.ConnectionCount++
 		r.trustedDevices[ski] = device
-		r.saveTrustedDevices() // Persist state
+		_ = r.saveTrustedDevices() // Persist state
 	}
 
 	r.userInterface.NotifyConnectionStateChange(ski, api.ConnectionStateCompleted)
@@ -278,9 +278,10 @@ func (r *ProductionHubReader) AllowWaitingForTrust(ski string) bool {
 
 	// Get device info for user prompt (would come from discovery)
 	// In real implementation, you'd look this up from the discovery data
-	brand := "Unknown"
-	model := "Unknown"
-	deviceType := "Unknown"
+	const unknownValue = "Unknown"
+	brand := unknownValue
+	model := unknownValue
+	deviceType := unknownValue
 
 	// Prompt user for trust decision
 	trusted := r.userInterface.PromptForTrust(ski, brand, model, deviceType)
@@ -331,7 +332,7 @@ func (r *ProductionHubReader) addTrustedDevice(ski, brand, model, deviceType str
 	}
 
 	r.trustedDevices[ski] = device
-	r.saveTrustedDevices()
+	_ = r.saveTrustedDevices()
 
 	log.Printf("✅ Added trusted device: %s (%s %s)", ski, brand, model)
 }
@@ -452,19 +453,23 @@ func (r *ProductionHubReader) startMetricsReporting() {
 
 func (r *ProductionHubReader) reportMetrics() {
 	r.metrics.mutex.RLock()
-	metrics := *r.metrics // Copy for safe access
+	startTime := r.metrics.StartTime
+	connectionsActive := r.metrics.ConnectionsActive
+	connectionsTotal := r.metrics.ConnectionsTotal
+	connectionsFailed := r.metrics.ConnectionsFailed
+	handshakeCount := r.metrics.HandshakeCount
 	r.metrics.mutex.RUnlock()
 
 	log.Printf("📊 Metrics Report:")
-	log.Printf("  Uptime: %v", time.Since(metrics.StartTime))
+	log.Printf("  Uptime: %v", time.Since(startTime))
 	log.Printf("  Connections: active=%d, total=%d, failed=%d", 
-		metrics.ConnectionsActive, metrics.ConnectionsTotal, metrics.ConnectionsFailed)
-	log.Printf("  Handshakes: count=%d", metrics.HandshakeCount)
+		connectionsActive, connectionsTotal, connectionsFailed)
+	log.Printf("  Handshakes: count=%d", handshakeCount)
 	log.Printf("  Trusted devices: %d", len(r.trustedDevices))
 
-	if len(metrics.ErrorCounts) > 0 {
+	if len(r.metrics.ErrorCounts) > 0 {
 		log.Printf("  Error counts:")
-		for errorType, count := range metrics.ErrorCounts {
+		for errorType, count := range r.metrics.ErrorCounts {
 			log.Printf("    %s: %d", errorType, count)
 		}
 	}
@@ -562,7 +567,7 @@ func saveCertificate(cert tls.Certificate, certFile, keyFile string) error {
 	// Save certificate (this is a simplified implementation)
 	// In production, you'd use proper PEM encoding
 	certData := cert.Certificate[0]
-	if err := os.WriteFile(certFile, certData, 0644); err != nil {
+	if err := os.WriteFile(certFile, certData, 0600); err != nil {
 		return fmt.Errorf("failed to save certificate: %w", err)
 	}
 
@@ -596,7 +601,7 @@ func loadConfiguration(configFile string) (*Configuration, error) {
 
 	// Load from file if provided
 	if configFile != "" {
-		data, err := os.ReadFile(configFile)
+		data, err := os.ReadFile(configFile) // #nosec G304 - configFile comes from command line argument in example code
 		if err != nil {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
 		}

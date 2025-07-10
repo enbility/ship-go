@@ -33,6 +33,8 @@ const (
 	PairingModeWhitelist                 // Auto-approve whitelisted devices
 	PairingModeBlacklist                 // Auto-approve except blacklisted devices
 	PairingModeAutoFirst                 // Auto-approve first N devices, then manual
+	
+	whitelistCommand = "whitelist"
 )
 
 // DeviceWhitelist represents a list of trusted device identifiers
@@ -289,7 +291,7 @@ func (p *PairingHubReader) promptUserForApproval(ski string, service api.RemoteS
 		p.addToWhitelist(ski, service, false)
 		return true
 		
-	case "whitelist", "w":
+	case whitelistCommand, "w":
 		fmt.Printf("✅ Approved and added to whitelist: %s\n", ski)
 		p.addToWhitelist(ski, service, false)
 		return true
@@ -348,7 +350,7 @@ func (p *PairingHubReader) saveWhitelist() {
 	}
 
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(p.whitelistFile), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p.whitelistFile), 0750); err != nil {
 		log.Printf("Warning: Could not create directory: %v", err)
 		return
 	}
@@ -492,7 +494,7 @@ func (p *PairingHubReader) handleInteractiveCommands() {
 			case "manual":
 				p.mode = PairingModeManual
 				fmt.Println("✅ Pairing mode set to: Manual")
-			case "whitelist":
+			case whitelistCommand:
 				p.mode = PairingModeWhitelist
 				fmt.Println("✅ Pairing mode set to: Whitelist only")
 			case "blacklist":
@@ -533,7 +535,7 @@ func main() {
 		switch strings.ToLower(os.Args[1]) {
 		case "manual":
 			mode = PairingModeManual
-		case "whitelist":
+		case whitelistCommand:
 			mode = PairingModeWhitelist
 		case "blacklist":
 			mode = PairingModeBlacklist
