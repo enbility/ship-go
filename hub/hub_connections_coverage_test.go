@@ -25,6 +25,7 @@ func setupTestHubForTimer(t *testing.T) *Hub {
 	hubReader.EXPECT().AllowWaitingForTrust(mock.Anything).Return(false).Maybe()
 
 	// Additional expectations for timer-specific tests
+	mdns.EXPECT().Start(mock.Anything).Return(nil).Maybe()
 	mdns.EXPECT().AnnounceMdnsEntry().Return(nil).Maybe()
 	mdns.EXPECT().UnannounceMdnsEntry().Maybe()
 	mdns.EXPECT().RequestMdnsEntries().Maybe()
