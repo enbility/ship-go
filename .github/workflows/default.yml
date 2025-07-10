@@ -45,7 +45,7 @@ jobs:
 
       - name: Remove test utilities from coverage
         run: |
-          grep -v -E "/ship-go/(mocks/|internal/testing/)" coverage_temp.out > coverage.out || true
+          grep -v -E "/ship-go/(mocks/|internal/testing/|examples/)" coverage_temp.out > coverage.out || true
           echo "Coverage report filtered to exclude mocks and test utilities"
 
       - name: Send coverage
