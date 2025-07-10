@@ -109,8 +109,8 @@ func (c *ClientHubReader) VisibleRemoteServicesUpdated(services []api.RemoteServ
 			connectionStatus = "✅ Connected"
 		}
 		
-		fmt.Printf("%d. %s %s (%s)\n", i+1, service.Brand, service.Model, service.DeviceType)
-		fmt.Printf("   IP: %s:%d | SKI: %s\n", service.IPAddress, service.Port, service.Ski)
+		fmt.Printf("%d. %s %s (%s)\n", i+1, service.Brand, service.Model, service.Type)
+		fmt.Printf("   SKI: %s\n", service.Ski)
 		fmt.Printf("   Status: %s\n", connectionStatus)
 		fmt.Println()
 	}
@@ -128,7 +128,7 @@ func (c *ClientHubReader) ServiceShipIDUpdate(ski string, shipID string) {
 }
 
 func (c *ClientHubReader) ServicePairingDetailUpdate(ski string, detail *api.ConnectionStateDetail) {
-	log.Printf("🤝 Pairing update for %s: state=%d", ski, detail.State)
+	log.Printf("🤝 Pairing update for %s: state=%d", ski, detail.State())
 }
 
 func (c *ClientHubReader) AllowWaitingForTrust(ski string) bool {
@@ -139,7 +139,7 @@ func (c *ClientHubReader) AllowWaitingForTrust(ski string) bool {
 	if exists {
 		fmt.Printf("\n🔒 Device wants to connect: %s %s\n", service.Brand, service.Model)
 		fmt.Printf("   SKI: %s\n", ski)
-		fmt.Printf("   IP: %s\n", service.IPAddress)
+		fmt.Printf("   SKI: %s\n", ski)
 	} else {
 		fmt.Printf("\n🔒 Unknown device wants to connect: %s\n", ski)
 	}
@@ -205,8 +205,8 @@ func (c *ClientHubReader) listDevices() {
 			connectionStatus = "✅ Connected"
 		}
 		
-		fmt.Printf("%d. %s %s (%s)\n", i, service.Brand, service.Model, service.DeviceType)
-		fmt.Printf("   IP: %s:%d | SKI: %s\n", service.IPAddress, service.Port, ski)
+		fmt.Printf("%d. %s %s (%s)\n", i, service.Brand, service.Model, service.Type)
+		fmt.Printf("   SKI: %s\n", ski)
 		fmt.Printf("   Status: %s\n", connectionStatus)
 		fmt.Println()
 		i++
@@ -317,10 +317,7 @@ func (c *ClientHubReader) startUserInterface(h *hub.Hub) {
 			fmt.Printf("🔄 Connecting to %s %s...\n", service.Brand, service.Model)
 			
 			// Register the service and initiate connection
-			h.RegisterRemoteService(ski, service.ShipID)
-			if err := h.ConnectSKI(ski, true); err != nil {
-				fmt.Printf("❌ Failed to connect: %v\n", err)
-			}
+			h.RegisterRemoteSKI(ski, "")
 
 		case "disconnect", "disc":
 			if len(parts) < 2 {

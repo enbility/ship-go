@@ -229,7 +229,7 @@ func (r *ProductionHubReader) VisibleRemoteServicesUpdated(services []api.Remote
 	log.Printf("📡 Discovered %d devices", len(services))
 	
 	for _, service := range services {
-		log.Printf("  📱 %s: %s %s (%s)", service.Ski, service.Brand, service.Model, service.IPAddress)
+		log.Printf("  📱 %s: %s %s", service.Ski, service.Brand, service.Model)
 		
 		// Check if this is a previously trusted device
 		if _, trusted := r.trustedDevices[service.Ski]; trusted {
@@ -245,11 +245,11 @@ func (r *ProductionHubReader) ServiceShipIDUpdate(ski string, shipID string) {
 }
 
 func (r *ProductionHubReader) ServicePairingDetailUpdate(ski string, detail *api.ConnectionStateDetail) {
-	log.Printf("🤝 Pairing update for %s: state=%d", ski, detail.State)
+	log.Printf("🤝 Pairing update for %s: state=%d", ski, detail.State())
 	
 	// Track handshake timing
 	r.metrics.mutex.Lock()
-	if detail.State == 38 { // HandshakeStateCompleted
+	if detail.State() == api.ConnectionStateCompleted {
 		r.metrics.HandshakeCount++
 		// In a real implementation, track actual handshake duration
 	}
@@ -489,13 +489,13 @@ func loadOrCreateCertificate(config *Configuration) (tls.Certificate, string, er
 			if _, err := os.Stat(config.PrivateKeyFile); err == nil {
 				log.Printf("📂 Loading existing certificate from %s", config.CertificateFile)
 				
-				cert, err := tls.LoadX509KeyPair(config.CertificateFile, config.PrivateKeyFile)
+				tlsCert, err := tls.LoadX509KeyPair(config.CertificateFile, config.PrivateKeyFile)
 				if err != nil {
 					return tls.Certificate{}, "", fmt.Errorf("failed to load certificate: %w", err)
 				}
 
 				// Extract SKI
-				x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
+				x509Cert, err := x509.ParseCertificate(tlsCert.Certificate[0])
 				if err != nil {
 					return tls.Certificate{}, "", fmt.Errorf("failed to parse certificate: %w", err)
 				}
@@ -511,7 +511,7 @@ func loadOrCreateCertificate(config *Configuration) (tls.Certificate, string, er
 					log.Printf("⚠️  Certificate expires in %v - consider renewal", timeToExpiry)
 				}
 
-				return cert, ski, nil
+				return tlsCert, ski, nil
 			}
 		}
 	}
@@ -520,7 +520,7 @@ func loadOrCreateCertificate(config *Configuration) (tls.Certificate, string, er
 	log.Printf("🔐 Creating new certificate...")
 	
 	commonName := fmt.Sprintf("%s-%s", config.DeviceModel, config.DeviceSerial)
-	cert, err := cert.CreateCertificate(
+	tlsCert, err := cert.CreateCertificate(
 		config.DeviceModel,    // OrganizationalUnit
 		config.Organization,   // Organization
 		config.Country,        // Country
@@ -531,7 +531,7 @@ func loadOrCreateCertificate(config *Configuration) (tls.Certificate, string, er
 	}
 
 	// Extract SKI
-	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
+	x509Cert, err := x509.ParseCertificate(tlsCert.Certificate[0])
 	if err != nil {
 		return tls.Certificate{}, "", fmt.Errorf("failed to parse certificate: %w", err)
 	}
@@ -543,14 +543,14 @@ func loadOrCreateCertificate(config *Configuration) (tls.Certificate, string, er
 
 	// Save certificate for persistence
 	if config.CertificateFile != "" && config.PrivateKeyFile != "" {
-		if err := saveCertificate(cert, config.CertificateFile, config.PrivateKeyFile); err != nil {
+		if err := saveCertificate(tlsCert, config.CertificateFile, config.PrivateKeyFile); err != nil {
 			log.Printf("⚠️  Warning: Could not save certificate: %v", err)
 		} else {
 			log.Printf("💾 Certificate saved to %s", config.CertificateFile)
 		}
 	}
 
-	return cert, ski, nil
+	return tlsCert, ski, nil
 }
 
 func saveCertificate(cert tls.Certificate, certFile, keyFile string) error {

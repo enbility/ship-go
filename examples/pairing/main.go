@@ -48,7 +48,6 @@ type TrustedDevice struct {
 	Brand          string    `json:"brand"`
 	Model          string    `json:"model"`
 	DeviceType     string    `json:"device_type"`
-	IPAddress      string    `json:"ip_address"`
 	PairedAt       time.Time `json:"paired_at"`
 	LastSeen       time.Time `json:"last_seen"`
 	Notes          string    `json:"notes,omitempty"`
@@ -158,9 +157,8 @@ func (p *PairingHubReader) VisibleRemoteServicesUpdated(services []api.RemoteSer
 			trustStatus = "✅ Trusted"
 		}
 		
-		fmt.Printf("📱 %s %s (%s)\n", service.Brand, service.Model, service.DeviceType)
+		fmt.Printf("📱 %s %s (%s)\n", service.Brand, service.Model, service.Type)
 		fmt.Printf("   SKI: %s\n", service.Ski)
-		fmt.Printf("   IP: %s:%d\n", service.IPAddress, service.Port)
 		fmt.Printf("   Status: %s\n", trustStatus)
 		fmt.Println()
 	}
@@ -171,7 +169,7 @@ func (p *PairingHubReader) ServiceShipIDUpdate(ski string, shipID string) {
 }
 
 func (p *PairingHubReader) ServicePairingDetailUpdate(ski string, detail *api.ConnectionStateDetail) {
-	log.Printf("Pairing detail update for %s: state=%d", ski, detail.State)
+	log.Printf("Pairing detail update for %s: state=%d", ski, detail.State())
 }
 
 func (p *PairingHubReader) AllowWaitingForTrust(ski string) bool {
@@ -184,13 +182,12 @@ func (p *PairingHubReader) AllowWaitingForTrust(ski string) bool {
 			Ski:   ski,
 			Brand: "Unknown",
 			Model: "Unknown",
-			DeviceType: "Unknown",
+			Type: "Unknown",
 		}
 	}
 
 	fmt.Printf("\n🔒 Pairing Request from %s %s\n", service.Brand, service.Model)
 	fmt.Printf("   SKI: %s\n", ski)
-	fmt.Printf("   IP: %s\n", service.IPAddress)
 	fmt.Printf("   Mode: %s\n", p.getPairingModeString())
 
 	// Apply pairing strategy
@@ -389,7 +386,6 @@ func (p *PairingHubReader) addToWhitelist(ski string, service api.RemoteService,
 		if device.SKI == ski {
 			// Update existing device
 			p.whitelist.TrustedDevices[i].LastSeen = time.Now()
-			p.whitelist.TrustedDevices[i].IPAddress = service.IPAddress
 			p.saveWhitelist()
 			return
 		}
@@ -400,8 +396,7 @@ func (p *PairingHubReader) addToWhitelist(ski string, service api.RemoteService,
 		SKI:          ski,
 		Brand:        service.Brand,
 		Model:        service.Model,
-		DeviceType:   service.DeviceType,
-		IPAddress:    service.IPAddress,
+		DeviceType:   service.Type,
 		PairedAt:     time.Now(),
 		LastSeen:     time.Now(),
 		AutoApproved: autoApproved,
@@ -441,7 +436,6 @@ func (p *PairingHubReader) showWhitelist() {
 	for i, device := range p.whitelist.TrustedDevices {
 		fmt.Printf("%d. %s %s (%s)\n", i+1, device.Brand, device.Model, device.DeviceType)
 		fmt.Printf("   SKI: %s\n", device.SKI)
-		fmt.Printf("   IP: %s\n", device.IPAddress)
 		fmt.Printf("   Paired: %s\n", device.PairedAt.Format("2006-01-02 15:04:05"))
 		fmt.Printf("   Last seen: %s\n", device.LastSeen.Format("2006-01-02 15:04:05"))
 		if device.AutoApproved {
@@ -529,6 +523,9 @@ func main() {
 	fmt.Println("=======================")
 	fmt.Println("This example demonstrates different SHIP pairing strategies.")
 	fmt.Println()
+	
+	// Ensure tls import is used
+	_ = tls.Certificate{}
 
 	// Parse command line arguments for mode
 	mode := PairingModeManual
