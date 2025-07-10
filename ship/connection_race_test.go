@@ -41,11 +41,8 @@ func TestApprovePendingHandshake_RaceCondition(t *testing.T) {
 	mockDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(nil).Maybe()
 	mockDataWriter.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Maybe()
 	mockInfoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Maybe()
-	// Fix race: Use a matcher that doesn't reflect on connection internals
-	connectionMatcher := mock.MatchedBy(func(conn api.ShipConnectionInterface) bool {
-		return conn != nil
-	})
-	mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
+	// Fix race: Don't verify connection parameter to avoid reflection on sync primitives
+	mockInfoProvider.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Maybe()
 	// Add expectations for validation methods
 	mockInfoProvider.EXPECT().IsRemoteServiceForSKIPaired("remote-ski").Return(true).Maybe()
 	mockInfoProvider.EXPECT().AllowWaitingForTrust("remote-ski").Return(true).Maybe()
@@ -339,11 +336,8 @@ func TestHandshakeTimer_ConcurrentStartStop(t *testing.T) {
 	mockDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
 	mockDataWriter.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Maybe()
 	mockInfoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Maybe()
-	// Fix race: Use a matcher that doesn't reflect on connection internals
-	connectionMatcher := mock.MatchedBy(func(conn api.ShipConnectionInterface) bool {
-		return conn != nil
-	})
-	mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
+	// Fix race: Don't verify connection parameter to avoid reflection on sync primitives
+	mockInfoProvider.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Maybe()
 
 	conn := NewConnectionHandler(
 		mockInfoProvider,
@@ -397,11 +391,8 @@ func TestStopTimerSafe(t *testing.T) {
 	mockDataWriter.EXPECT().InitDataProcessing(mock.Anything).Maybe()
 	mockDataWriter.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Maybe()
 	mockInfoProvider.EXPECT().HandleShipHandshakeStateUpdate(mock.Anything, mock.Anything).Maybe()
-	// Fix race: Use a matcher that doesn't reflect on connection internals
-	connectionMatcher := mock.MatchedBy(func(conn api.ShipConnectionInterface) bool {
-		return conn != nil
-	})
-	mockInfoProvider.EXPECT().HandleConnectionClosed(connectionMatcher, mock.Anything).Maybe()
+	// Fix race: Don't verify connection parameter to avoid reflection on sync primitives
+	mockInfoProvider.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Maybe()
 	mockDataWriter.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(nil).Maybe()
 	mockDataWriter.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
 
