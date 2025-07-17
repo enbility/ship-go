@@ -189,7 +189,7 @@ func (h *Hub) tryConnectionViaHost(remoteService *api.ServiceDetails, entry *api
 		return false
 	}
 
-	logging.Log().Debug("trying to connect to", remoteService.SKI(), "at", entry.Host)
+	logging.Log().Debugf("trying to connect to %s at %s", remoteService.SKI(), entry.Host)
 	if err := h.connectFoundService(remoteService, entry.Host, strconv.Itoa(entry.Port), entry.Path); err != nil {
 		logConnectionError(err, fmt.Sprintf("connection to %s at %s failed:", remoteService.SKI(), entry.Host))
 		return false
@@ -216,7 +216,7 @@ func (h *Hub) tryConnectionViaAddresses(remoteService *api.ServiceDetails, entry
 
 	// try connecting via the provided IP addresses
 	for _, address := range entry.Addresses {
-		logging.Log().Debug("trying to connect to", remoteService.SKI(), "at", address)
+		logging.Log().Debugf("trying to connect to %s at %s", remoteService.SKI(), address)
 		addressValue := formatIPAddress(address)
 		if err := h.connectFoundService(remoteService, addressValue, strconv.Itoa(entry.Port), entry.Path); err != nil {
 			logConnectionError(err, fmt.Sprintf("connection to %s at %s failed:", remoteService.SKI(), addressValue))
