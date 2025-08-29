@@ -209,7 +209,7 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 		default:
 			return fmt.Errorf("invalid mDNS provider selection: %d", m.providerSelection)
 		}
-		
+
 		if err != nil {
 			return err
 		}
@@ -246,7 +246,7 @@ func (m *MdnsManager) Start(cb api.MdnsReportInterface) error {
 func (m *MdnsManager) Shutdown() {
 	m.shutdownOnce.Do(func() {
 		logging.Log().Debug("mdns: shutting down mDNS manager")
-		
+
 		// Safely unannounce the service
 		func() {
 			defer func() {
@@ -348,7 +348,7 @@ func (m *MdnsManager) UnannounceMdnsEntry() {
 	if !m.isServiceAnnounced() {
 		return
 	}
-	
+
 	if m.mdnsProvider == nil {
 		return
 	}
@@ -475,30 +475,30 @@ func (m *MdnsManager) copyMdnsEntries() map[string]*api.MdnsEntry {
 	return mdnsEntries
 }
 
-func (m *MdnsManager) mdnsEntry(ski string) (*api.MdnsEntry, bool) {
+func (m *MdnsManager) mdnsEntry(serviceName string) (*api.MdnsEntry, bool) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
-	entry, ok := m.entries[ski]
+	entry, ok := m.entries[serviceName]
 	return entry, ok
 }
 
-func (m *MdnsManager) setMdnsEntry(ski string, entry *api.MdnsEntry) {
+func (m *MdnsManager) setMdnsEntry(serviceName string, entry *api.MdnsEntry) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
-	m.entries[ski] = entry
+	m.entries[serviceName] = entry
 }
 
-func (m *MdnsManager) removeMdnsEntry(ski string) {
+func (m *MdnsManager) removeMdnsEntry(serviceName string) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
-	delete(m.entries, ski)
+	delete(m.entries, serviceName)
 }
 
 // process an mDNS entry and manage mDNS entries map
-func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool) {
+func (m *MdnsManager) processMdnsEntry(elements map[string]string, serviceName, host string, addresses []net.IP, port int, remove bool) {
 	// check for mandatory text elements
 	mapItems := []string{"txtvers", "id", "path", "ski", "register"}
 	for _, item := range mapItems {
@@ -524,9 +524,12 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		return
 	}
 
+	trueValue := "true"
+	falseValue := "false"
+
 	register := elements["register"]
 	// register has to be a boolean
-	if register != "true" && register != "false" {
+	if register != trueValue && register != falseValue {
 		logging.Log().Debug("mdns: txt - register value is not a text boolean", register)
 		return
 	}
@@ -573,19 +576,50 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 
 	updated := false
 
-	entry, exists := m.mdnsEntry(ski)
+	entry, exists := m.mdnsEntry(serviceName)
 
 	if remove && exists {
 		updated = true
 		// remove
 		// there will be a remove for each address with avahi, but we'll delete it right away
-		m.removeMdnsEntry(ski)
+		m.removeMdnsEntry(serviceName)
 
-		logging.Log().Debug("mdns: remove - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "serial:", serial, "categories:", categoriesStr, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
+		logging.Log().Debug("mdns: remove - ski:", ski, "serviceName:", serviceName, "brand:", brand, "model:", model, "typ:", deviceType, "serial:", serial, "categories:", categoriesStr, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
 	} else if exists {
-		// avahi sends an item for each network address, merge them
+		// Update existing entry with new metadata and merge addresses
 
-		// we assume only network addresses are added
+		// Update all metadata fields (they may have changed)
+		if entry.Brand != brand || entry.Type != deviceType || entry.Model != model ||
+			entry.Serial != serial || entry.Identifier != identifier ||
+			entry.Path != path || entry.Register != (register == trueValue) ||
+			entry.Host != host || entry.Port != port ||
+			len(entry.Categories) != len(categories) {
+			updated = true
+		}
+
+		// Check if categories changed
+		if !updated && len(entry.Categories) == len(categories) {
+			for i, cat := range entry.Categories {
+				if i >= len(categories) || cat != categories[i] {
+					updated = true
+					break
+				}
+			}
+		}
+
+		// Update metadata
+		entry.Identifier = identifier
+		entry.Path = path
+		entry.Register = register == trueValue
+		entry.Brand = brand
+		entry.Type = deviceType
+		entry.Model = model
+		entry.Serial = serial
+		entry.Categories = categories
+		entry.Host = host
+		entry.Port = port
+
+		// Merge addresses (avahi sends an item for each network address)
 		for _, address := range addresses {
 			// only add if it is not added yet
 			isNewElement := true
@@ -604,15 +638,15 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 		}
 
 		if updated {
-			m.setMdnsEntry(ski, entry)
+			m.setMdnsEntry(serviceName, entry)
 
-			logging.Log().Debug("mdns: update - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "serial:", serial, "categories:", categoriesStr, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
+			logging.Log().Debug("mdns: update - ski:", ski, "serviceName:", serviceName, "brand:", brand, "model:", model, "typ:", deviceType, "serial:", serial, "categories:", categoriesStr, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
 		}
 	} else if !exists && !remove {
 		updated = true
 		// new
 		newEntry := &api.MdnsEntry{
-			Name:       name,
+			Name:       serviceName,
 			Ski:        ski,
 			Identifier: identifier,
 			Path:       path,
@@ -626,9 +660,9 @@ func (m *MdnsManager) processMdnsEntry(elements map[string]string, name, host st
 			Port:       port,
 			Addresses:  addresses,
 		}
-		m.setMdnsEntry(ski, newEntry)
+		m.setMdnsEntry(serviceName, newEntry)
 
-		logging.Log().Debug("mdns: new - ski:", ski, "name:", name, "brand:", brand, "model:", model, "typ:", deviceType, "serial:", serial, "categories:", categoriesStr, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
+		logging.Log().Debug("mdns: new - ski:", ski, "serviceName:", serviceName, "brand:", brand, "model:", model, "typ:", deviceType, "serial:", serial, "categories:", categoriesStr, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
 	}
 
 	if m.report == nil || !updated {
@@ -688,7 +722,7 @@ func (m *MdnsManager) initializeAvahiProvider(ifaceIndexes []int32, autoReconnec
 	return nil
 }
 
-// initializeZeroconfProvider creates and starts a Zeroconf provider  
+// initializeZeroconfProvider creates and starts a Zeroconf provider
 func (m *MdnsManager) initializeZeroconfProvider(ifaces []net.Interface, autoReconnect bool) error {
 	if m.providerFactory.NewZeroconf == nil {
 		return fmt.Errorf("zeroconf provider factory function not available (interfaces: %d)", len(ifaces))
