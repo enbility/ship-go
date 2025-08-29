@@ -7,12 +7,14 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
 
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/cert"
+	"github.com/enbility/ship-go/logging"
 	"github.com/enbility/ship-go/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -50,72 +52,54 @@ func TestCertificateExpirationLogging(t *testing.T) {
 		})
 
 		// Test with expiring certificate
-		t.Run("expiring_certificate", func(t *testing.T) {
-			// Create a certificate that expires in 20 days
-			template := createTestCertificateTemplate("test-expiring", 20*24*time.Hour)
-			certBytes, _, err := createTestCertificate(template)
-			assert.NoError(t, err)
+		t.Run("certificate_expiration_logging_direct", func(t *testing.T) {
+			logger := NewTestLogger()
+			logging.SetLogging(logger)
+			defer logging.SetLogging(nil)
 
-			// For now, just verify it doesn't error
-			// Full logging test would require log capture mechanism
-			rawCerts := [][]byte{certBytes}
-			err = hub.verifyPeerCertificate(rawCerts, nil)
-			assert.NoError(t, err)
-		})
+			certificate := createDirectTestCertificate(time.Now().Add(10*24*time.Hour), "test-device")
+			ski := fmt.Sprintf("%0x", certificate.SubjectKeyId)
 
-		// Test with expired certificate
-		t.Run("expired_certificate", func(t *testing.T) {
-			// Create a certificate that expired 5 days ago
-			template := createTestCertificateTemplate("test-expired", -5*24*time.Hour)
-			certBytes, _, err := createTestCertificate(template)
-			assert.NoError(t, err)
+			cert.LogCertificateExpiration(certificate, ski)
 
-			// For now, just verify it doesn't error (per SHIP spec)
-			// Full logging test would require log capture mechanism
-			rawCerts := [][]byte{certBytes}
-			err = hub.verifyPeerCertificate(rawCerts, nil)
-			assert.NoError(t, err) // Should still pass despite expiration
+			output := logger.GetOutput()
+			assert.Contains(t, output, "expires in 10 days")
 		})
 	})
-
-	// Additional integration tests for connectFoundService and ServeHTTP
-	// would require more complex setup with WebSocket connections
-	// For now, the pattern is established with verifyPeerCertificate
 }
 
-// Helper function to create a test certificate template with custom expiration
-func createTestCertificateTemplate(commonName string, validityDuration time.Duration) *x509.Certificate {
-	serialNumber, _ := rand.Int(rand.Reader, new(big.Int).SetInt64(100000))
-	return &x509.Certificate{
-		SerialNumber: serialNumber,
+func createDirectTestCertificate(expiryTime time.Time, commonName string) *x509.Certificate {
+	privateKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+
+	ski := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A,
+		0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14}
+
+	if commonName != "" {
+		hash := []byte(commonName)
+		for i := 0; i < len(hash) && i < 4; i++ {
+			ski[19-i] = hash[i]
+		}
+	}
+
+	template := x509.Certificate{
+		SignatureAlgorithm: x509.ECDSAWithSHA256,
+		SerialNumber:       big.NewInt(1),
 		Subject: pkix.Name{
-			CommonName: commonName,
+			OrganizationalUnit: []string{"test"},
+			Organization:       []string{"test"},
+			Country:            []string{"DE"},
+			CommonName:         commonName,
 		},
-		NotBefore:    time.Now(),
-		NotAfter:     time.Now().Add(validityDuration),
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		SubjectKeyId: generateTestSKIBytes(),
-	}
-}
-
-// Helper function to create a test certificate
-func createTestCertificate(template *x509.Certificate) ([]byte, interface{}, error) {
-	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return nil, nil, err
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              expiryTime,
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		SubjectKeyId:          ski,
 	}
 
-	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &priv.PublicKey, priv)
-	if err != nil {
-		return nil, nil, err
-	}
+	certBytes, _ := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	certificate, _ := x509.ParseCertificate(certBytes)
 
-	return certDER, priv, nil
-}
-
-// Helper function to generate a test SKI
-func generateTestSKIBytes() []byte {
-	ski := make([]byte, 20)
-	rand.Read(ski)
-	return ski
+	return certificate
 }

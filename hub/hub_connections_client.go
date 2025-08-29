@@ -68,14 +68,14 @@ func validateRemoteCertificate(remoteCerts []*x509.Certificate, expectedSKI stri
 		}
 	}
 
-	if _, err := cert.SkiFromCertificate(remoteCerts[0]); err != nil {
+	remoteSKI, err := cert.SkiFromCertificate(remoteCerts[0])
+	if err != nil {
 		return CertificateValidationResult{
 			Valid: false,
 			Error: fmt.Errorf("invalid SKI format: %w", err),
 		}
 	}
 
-	remoteSKI := fmt.Sprintf("%0x", remoteCerts[0].SubjectKeyId)
 	if remoteSKI != expectedSKI {
 		return CertificateValidationResult{
 			Valid: false,
