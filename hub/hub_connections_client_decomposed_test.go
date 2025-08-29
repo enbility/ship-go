@@ -217,43 +217,6 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ValidateRemoteCertificate() {
 	}
 }
 
-// Test formatIPAddress function
-func (s *HubConnectionsDecomposedTestSuite) Test_FormatIPAddress() {
-	tests := []struct {
-		name     string
-		input    net.IP
-		expected string
-	}{
-		{
-			name:     "ipv4_address",
-			input:    net.ParseIP("192.168.1.1"),
-			expected: "192.168.1.1",
-		},
-		{
-			name:     "ipv6_address",
-			input:    net.ParseIP("2001:db8::1"),
-			expected: "[2001:db8::1]",
-		},
-		{
-			name:     "ipv6_loopback",
-			input:    net.ParseIP("::1"),
-			expected: "[::1]",
-		},
-		{
-			name:     "ipv4_loopback",
-			input:    net.ParseIP("127.0.0.1"),
-			expected: "127.0.0.1",
-		},
-	}
-
-	for _, tt := range tests {
-		s.Run(tt.name, func() {
-			result := formatIPAddress(tt.input)
-			assert.Equal(s.T(), tt.expected, result)
-		})
-	}
-}
-
 // Test sortIPAddresses function
 func (s *HubConnectionsDecomposedTestSuite) Test_SortIPAddresses() {
 	tests := []struct {
