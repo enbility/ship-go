@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/enbility/ship-go/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -33,6 +34,7 @@ func (z *ZeroconfSuite) AfterTest(suiteName, testName string) {
 type mDNSEntry struct {
 	elements   map[string]string
 	name, host string
+	service    string
 	addresses  []net.IP
 	port       int
 }
@@ -53,7 +55,7 @@ func (z *ZeroconfSuite) Test_Shutdown() {
 func (z *ZeroconfSuite) Test_ZeroConf() {
 	var addedEntries, removedEntries []mDNSEntry
 
-	cb := func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool) {
+	cb := func(elements map[string]string, name, host string, service string, addresses []net.IP, port int, remove bool) {
 		// we expect at least one entry
 		assert.NotEqual(z.T(), "", name)
 
@@ -61,6 +63,7 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 			elements:  elements,
 			name:      name,
 			host:      host,
+			service:   service,
 			addresses: addresses,
 			port:      port,
 		}
@@ -74,11 +77,15 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 		z.mux.Unlock()
 	}
 
-	boolV := z.sut.Start(false, cb)
+	boolV := z.sut.Start(api.PairingModeListener, false, cb)
 	assert.Equal(z.T(), true, boolV)
 
-	err := z.sut.Announce("dummytest", 4289, []string{"more=more"})
+	boolV = z.sut.Start(api.PairingModeListener, false, cb)
+	assert.Equal(z.T(), true, boolV)
+
+	instanceID, err := z.sut.AnnounceService(shipZeroConfServiceType, "dummytest", 4289, []string{"more=more"})
 	assert.Nil(z.T(), err)
+	assert.NotEmpty(z.T(), instanceID)
 
 	time.Sleep(time.Second * 2)
 
@@ -87,7 +94,7 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 	z.mux.Unlock()
 	assert.Equal(z.T(), true, found)
 
-	z.sut.Unannounce()
+	z.sut.UnannounceService(instanceID)
 
 	time.Sleep(time.Second * 2)
 
@@ -96,8 +103,9 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 	z.mux.Unlock()
 	assert.Equal(z.T(), true, found)
 
-	err = z.sut.Announce("test", 4289, []string{"test=test"})
+	instanceID2, err := z.sut.AnnounceService(shipZeroConfServiceType, "test", 4289, []string{"test=test"})
 	assert.Nil(z.T(), err)
+	assert.NotEmpty(z.T(), instanceID2)
 
 	time.Sleep(time.Second * 2)
 
@@ -106,7 +114,7 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 	z.mux.Unlock()
 	assert.Equal(z.T(), true, found)
 
-	z.sut.Unannounce()
+	z.sut.UnannounceService(instanceID2)
 
 	time.Sleep(time.Second * 2)
 
@@ -115,8 +123,82 @@ func (z *ZeroconfSuite) Test_ZeroConf() {
 	z.mux.Unlock()
 	assert.Equal(z.T(), true, found)
 
-	err = z.sut.Announce("", 4289, []string{"test=test"})
+	_, err = z.sut.AnnounceService(shipZeroConfServiceType, "", 4289, []string{"test=test"})
 	assert.NotNil(z.T(), err)
 
-	z.sut.Unannounce()
+	z.sut.UnannounceService("nonexistent")
+}
+
+func (z *ZeroconfSuite) Test_ZeroConf_Pairing() {
+	var addedEntries, removedEntries []mDNSEntry
+
+	cb := func(elements map[string]string, name, host string, service string, addresses []net.IP, port int, remove bool) {
+		// we expect at least one entry
+		assert.NotEqual(z.T(), "", name)
+
+		entry := mDNSEntry{
+			elements:  elements,
+			name:      name,
+			host:      host,
+			service:   service,
+			addresses: addresses,
+			port:      port,
+		}
+
+		z.mux.Lock()
+		if remove {
+			removedEntries = append(removedEntries, entry)
+		} else {
+			addedEntries = append(addedEntries, entry)
+		}
+		z.mux.Unlock()
+	}
+
+	boolV := z.sut.Start(api.PairingModeListener, false, cb)
+	assert.Equal(z.T(), true, boolV)
+
+	pairingInstanceID, err := z.sut.AnnounceService(shipPairingZeroConfServiceType, "dummytest", 4289, []string{"more=more"})
+	assert.Nil(z.T(), err)
+	assert.NotEmpty(z.T(), pairingInstanceID)
+
+	time.Sleep(time.Second * 2)
+
+	z.mux.Lock()
+	_, found := searchElement(addedEntries, "dummytest")
+	z.mux.Unlock()
+	assert.Equal(z.T(), true, found)
+
+	z.sut.UnannounceService(pairingInstanceID)
+
+	time.Sleep(time.Second * 2)
+
+	z.mux.Lock()
+	_, found = searchElement(removedEntries, "dummytest")
+	z.mux.Unlock()
+	assert.Equal(z.T(), true, found)
+
+	pairingInstanceID2, err := z.sut.AnnounceService(shipPairingZeroConfServiceType, "test", 4289, []string{"test=test"})
+	assert.Nil(z.T(), err)
+	assert.NotEmpty(z.T(), pairingInstanceID2)
+
+	time.Sleep(time.Second * 2)
+
+	z.mux.Lock()
+	_, found = searchElement(addedEntries, "test")
+	z.mux.Unlock()
+	assert.Equal(z.T(), true, found)
+
+	z.sut.UnannounceService(pairingInstanceID2)
+
+	time.Sleep(time.Second * 2)
+
+	z.mux.Lock()
+	_, found = searchElement(removedEntries, "test")
+	z.mux.Unlock()
+	assert.Equal(z.T(), true, found)
+
+	_, err = z.sut.AnnounceService(shipPairingZeroConfServiceType, "", 4289, []string{"test=test"})
+	assert.NotNil(z.T(), err)
+
+	z.sut.UnannounceService("nonexistent")
 }

@@ -36,65 +36,80 @@ func (_m *MdnsProviderInterface) EXPECT() *MdnsProviderInterface_Expecter {
 	return &MdnsProviderInterface_Expecter{mock: &_m.Mock}
 }
 
-// Announce provides a mock function for the type MdnsProviderInterface
-func (_mock *MdnsProviderInterface) Announce(serviceName string, port int, txt []string) error {
-	ret := _mock.Called(serviceName, port, txt)
+// AnnounceService provides a mock function for the type MdnsProviderInterface
+func (_mock *MdnsProviderInterface) AnnounceService(serviceType string, serviceName string, port int, txt []string) (string, error) {
+	ret := _mock.Called(serviceType, serviceName, port, txt)
 
 	if len(ret) == 0 {
-		panic("no return value specified for Announce")
+		panic("no return value specified for AnnounceService")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(string, int, []string) error); ok {
-		r0 = returnFunc(serviceName, port, txt)
-	} else {
-		r0 = ret.Error(0)
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(string, string, int, []string) (string, error)); ok {
+		return returnFunc(serviceType, serviceName, port, txt)
 	}
-	return r0
+	if returnFunc, ok := ret.Get(0).(func(string, string, int, []string) string); ok {
+		r0 = returnFunc(serviceType, serviceName, port, txt)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(string, string, int, []string) error); ok {
+		r1 = returnFunc(serviceType, serviceName, port, txt)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
-// MdnsProviderInterface_Announce_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Announce'
-type MdnsProviderInterface_Announce_Call struct {
+// MdnsProviderInterface_AnnounceService_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AnnounceService'
+type MdnsProviderInterface_AnnounceService_Call struct {
 	*mock.Call
 }
 
-// Announce is a helper method to define mock.On call
+// AnnounceService is a helper method to define mock.On call
+//   - serviceType string
 //   - serviceName string
 //   - port int
 //   - txt []string
-func (_e *MdnsProviderInterface_Expecter) Announce(serviceName interface{}, port interface{}, txt interface{}) *MdnsProviderInterface_Announce_Call {
-	return &MdnsProviderInterface_Announce_Call{Call: _e.mock.On("Announce", serviceName, port, txt)}
+func (_e *MdnsProviderInterface_Expecter) AnnounceService(serviceType interface{}, serviceName interface{}, port interface{}, txt interface{}) *MdnsProviderInterface_AnnounceService_Call {
+	return &MdnsProviderInterface_AnnounceService_Call{Call: _e.mock.On("AnnounceService", serviceType, serviceName, port, txt)}
 }
 
-func (_c *MdnsProviderInterface_Announce_Call) Run(run func(serviceName string, port int, txt []string)) *MdnsProviderInterface_Announce_Call {
+func (_c *MdnsProviderInterface_AnnounceService_Call) Run(run func(serviceType string, serviceName string, port int, txt []string)) *MdnsProviderInterface_AnnounceService_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 string
 		if args[0] != nil {
 			arg0 = args[0].(string)
 		}
-		var arg1 int
+		var arg1 string
 		if args[1] != nil {
-			arg1 = args[1].(int)
+			arg1 = args[1].(string)
 		}
-		var arg2 []string
+		var arg2 int
 		if args[2] != nil {
-			arg2 = args[2].([]string)
+			arg2 = args[2].(int)
+		}
+		var arg3 []string
+		if args[3] != nil {
+			arg3 = args[3].([]string)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
 }
 
-func (_c *MdnsProviderInterface_Announce_Call) Return(err error) *MdnsProviderInterface_Announce_Call {
-	_c.Call.Return(err)
+func (_c *MdnsProviderInterface_AnnounceService_Call) Return(s string, err error) *MdnsProviderInterface_AnnounceService_Call {
+	_c.Call.Return(s, err)
 	return _c
 }
 
-func (_c *MdnsProviderInterface_Announce_Call) RunAndReturn(run func(serviceName string, port int, txt []string) error) *MdnsProviderInterface_Announce_Call {
+func (_c *MdnsProviderInterface_AnnounceService_Call) RunAndReturn(run func(serviceType string, serviceName string, port int, txt []string) (string, error)) *MdnsProviderInterface_AnnounceService_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -133,16 +148,16 @@ func (_c *MdnsProviderInterface_Shutdown_Call) RunAndReturn(run func()) *MdnsPro
 }
 
 // Start provides a mock function for the type MdnsProviderInterface
-func (_mock *MdnsProviderInterface) Start(autoReconnect bool, cb api.MdnsResolveCB) bool {
-	ret := _mock.Called(autoReconnect, cb)
+func (_mock *MdnsProviderInterface) Start(pairingMode api.PairingMode, autoReconnect bool, cb api.MdnsResolveCB) bool {
+	ret := _mock.Called(pairingMode, autoReconnect, cb)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Start")
 	}
 
 	var r0 bool
-	if returnFunc, ok := ret.Get(0).(func(bool, api.MdnsResolveCB) bool); ok {
-		r0 = returnFunc(autoReconnect, cb)
+	if returnFunc, ok := ret.Get(0).(func(api.PairingMode, bool, api.MdnsResolveCB) bool); ok {
+		r0 = returnFunc(pairingMode, autoReconnect, cb)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
@@ -155,25 +170,31 @@ type MdnsProviderInterface_Start_Call struct {
 }
 
 // Start is a helper method to define mock.On call
+//   - pairingMode api.PairingMode
 //   - autoReconnect bool
 //   - cb api.MdnsResolveCB
-func (_e *MdnsProviderInterface_Expecter) Start(autoReconnect interface{}, cb interface{}) *MdnsProviderInterface_Start_Call {
-	return &MdnsProviderInterface_Start_Call{Call: _e.mock.On("Start", autoReconnect, cb)}
+func (_e *MdnsProviderInterface_Expecter) Start(pairingMode interface{}, autoReconnect interface{}, cb interface{}) *MdnsProviderInterface_Start_Call {
+	return &MdnsProviderInterface_Start_Call{Call: _e.mock.On("Start", pairingMode, autoReconnect, cb)}
 }
 
-func (_c *MdnsProviderInterface_Start_Call) Run(run func(autoReconnect bool, cb api.MdnsResolveCB)) *MdnsProviderInterface_Start_Call {
+func (_c *MdnsProviderInterface_Start_Call) Run(run func(pairingMode api.PairingMode, autoReconnect bool, cb api.MdnsResolveCB)) *MdnsProviderInterface_Start_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 bool
+		var arg0 api.PairingMode
 		if args[0] != nil {
-			arg0 = args[0].(bool)
+			arg0 = args[0].(api.PairingMode)
 		}
-		var arg1 api.MdnsResolveCB
+		var arg1 bool
 		if args[1] != nil {
-			arg1 = args[1].(api.MdnsResolveCB)
+			arg1 = args[1].(bool)
+		}
+		var arg2 api.MdnsResolveCB
+		if args[2] != nil {
+			arg2 = args[2].(api.MdnsResolveCB)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -184,40 +205,58 @@ func (_c *MdnsProviderInterface_Start_Call) Return(b bool) *MdnsProviderInterfac
 	return _c
 }
 
-func (_c *MdnsProviderInterface_Start_Call) RunAndReturn(run func(autoReconnect bool, cb api.MdnsResolveCB) bool) *MdnsProviderInterface_Start_Call {
+func (_c *MdnsProviderInterface_Start_Call) RunAndReturn(run func(pairingMode api.PairingMode, autoReconnect bool, cb api.MdnsResolveCB) bool) *MdnsProviderInterface_Start_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// Unannounce provides a mock function for the type MdnsProviderInterface
-func (_mock *MdnsProviderInterface) Unannounce() {
-	_mock.Called()
-	return
+// UnannounceService provides a mock function for the type MdnsProviderInterface
+func (_mock *MdnsProviderInterface) UnannounceService(instanceID string) error {
+	ret := _mock.Called(instanceID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UnannounceService")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(string) error); ok {
+		r0 = returnFunc(instanceID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
 }
 
-// MdnsProviderInterface_Unannounce_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Unannounce'
-type MdnsProviderInterface_Unannounce_Call struct {
+// MdnsProviderInterface_UnannounceService_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UnannounceService'
+type MdnsProviderInterface_UnannounceService_Call struct {
 	*mock.Call
 }
 
-// Unannounce is a helper method to define mock.On call
-func (_e *MdnsProviderInterface_Expecter) Unannounce() *MdnsProviderInterface_Unannounce_Call {
-	return &MdnsProviderInterface_Unannounce_Call{Call: _e.mock.On("Unannounce")}
+// UnannounceService is a helper method to define mock.On call
+//   - instanceID string
+func (_e *MdnsProviderInterface_Expecter) UnannounceService(instanceID interface{}) *MdnsProviderInterface_UnannounceService_Call {
+	return &MdnsProviderInterface_UnannounceService_Call{Call: _e.mock.On("UnannounceService", instanceID)}
 }
 
-func (_c *MdnsProviderInterface_Unannounce_Call) Run(run func()) *MdnsProviderInterface_Unannounce_Call {
+func (_c *MdnsProviderInterface_UnannounceService_Call) Run(run func(instanceID string)) *MdnsProviderInterface_UnannounceService_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
 
-func (_c *MdnsProviderInterface_Unannounce_Call) Return() *MdnsProviderInterface_Unannounce_Call {
-	_c.Call.Return()
+func (_c *MdnsProviderInterface_UnannounceService_Call) Return(err error) *MdnsProviderInterface_UnannounceService_Call {
+	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MdnsProviderInterface_Unannounce_Call) RunAndReturn(run func()) *MdnsProviderInterface_Unannounce_Call {
-	_c.Run(run)
+func (_c *MdnsProviderInterface_UnannounceService_Call) RunAndReturn(run func(instanceID string) error) *MdnsProviderInterface_UnannounceService_Call {
+	_c.Call.Return(run)
 	return _c
 }

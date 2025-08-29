@@ -18,3 +18,23 @@ const (
 	// Metering device (e.g., smart meter or sub-meter with its own communications technology)
 	DeviceCategoryTypeMetering DeviceCategoryType = 7
 )
+
+// PairingMode defines how the Hub should handle SHIP pairing
+type PairingMode int
+
+const (
+	// PairingModeOff - No automatic pairing (basic SHIP connections only)
+	PairingModeOff PairingMode = iota
+
+	// PairingModeListener - Hub automatically listens for incoming pairing requests
+	// Use this for devices that should be discoverable and accept pairing from other devices
+	PairingModeListener
+
+	// PairingModeAnnouncer - Hub automatically announces pairing to discovered devices
+	// Use this for devices that should initiate pairing with other devices
+	PairingModeAnnouncer
+
+	// PairingModeBoth - Support both announcing and listening for pairing requests
+	// Use this for devices that should both initiate and accept pairing
+	PairingModeBoth
+)

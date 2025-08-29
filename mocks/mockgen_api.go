@@ -53,18 +53,60 @@ func (mr *MockMdnsInterfaceMockRecorder) AnnounceMdnsEntry() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AnnounceMdnsEntry", reflect.TypeOf((*MockMdnsInterface)(nil).AnnounceMdnsEntry))
 }
 
-// QRCodeText mocks base method.
-func (m *MockMdnsInterface) QRCodeText() string {
+// DeviceBrand mocks base method.
+func (m *MockMdnsInterface) DeviceBrand() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QRCodeText")
+	ret := m.ctrl.Call(m, "DeviceBrand")
 	ret0, _ := ret[0].(string)
 	return ret0
 }
 
-// QRCodeText indicates an expected call of QRCodeText.
-func (mr *MockMdnsInterfaceMockRecorder) QRCodeText() *gomock.Call {
+// DeviceBrand indicates an expected call of DeviceBrand.
+func (mr *MockMdnsInterfaceMockRecorder) DeviceBrand() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QRCodeText", reflect.TypeOf((*MockMdnsInterface)(nil).QRCodeText))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeviceBrand", reflect.TypeOf((*MockMdnsInterface)(nil).DeviceBrand))
+}
+
+// DeviceCategories mocks base method.
+func (m *MockMdnsInterface) DeviceCategories() []api.DeviceCategoryType {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeviceCategories")
+	ret0, _ := ret[0].([]api.DeviceCategoryType)
+	return ret0
+}
+
+// DeviceCategories indicates an expected call of DeviceCategories.
+func (mr *MockMdnsInterfaceMockRecorder) DeviceCategories() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeviceCategories", reflect.TypeOf((*MockMdnsInterface)(nil).DeviceCategories))
+}
+
+// DeviceModel mocks base method.
+func (m *MockMdnsInterface) DeviceModel() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeviceModel")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// DeviceModel indicates an expected call of DeviceModel.
+func (mr *MockMdnsInterfaceMockRecorder) DeviceModel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeviceModel", reflect.TypeOf((*MockMdnsInterface)(nil).DeviceModel))
+}
+
+// DeviceSerial mocks base method.
+func (m *MockMdnsInterface) DeviceSerial() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeviceSerial")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// DeviceSerial indicates an expected call of DeviceSerial.
+func (mr *MockMdnsInterfaceMockRecorder) DeviceSerial() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeviceSerial", reflect.TypeOf((*MockMdnsInterface)(nil).DeviceSerial))
 }
 
 // RequestMdnsEntries mocks base method.
@@ -104,17 +146,17 @@ func (mr *MockMdnsInterfaceMockRecorder) Shutdown() *gomock.Call {
 }
 
 // Start mocks base method.
-func (m *MockMdnsInterface) Start(arg0 api.MdnsReportInterface) error {
+func (m *MockMdnsInterface) Start(arg0 api.PairingMode, arg1 api.MdnsReportInterface) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Start", arg0)
+	ret := m.ctrl.Call(m, "Start", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Start indicates an expected call of Start.
-func (mr *MockMdnsInterfaceMockRecorder) Start(arg0 any) *gomock.Call {
+func (mr *MockMdnsInterfaceMockRecorder) Start(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockMdnsInterface)(nil).Start), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockMdnsInterface)(nil).Start), arg0, arg1)
 }
 
 // UnannounceMdnsEntry mocks base method.

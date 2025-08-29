@@ -21,19 +21,19 @@ func TestHubConnectionsRegistrySuite(t *testing.T) {
 type HubConnectionsRegistrySuite struct {
 	suite.Suite
 
-	hubReader   *mocks.MockHubReaderInterface
-	mdnsService *mocks.MockMdnsInterface
+	hubReader      *mocks.MockHubReaderInterface
+	mdnsService    *mocks.MockMdnsInterface
 	shipConnection *mocks.ShipConnectionInterface
 	wsDataWriter   *mocks.WebsocketDataWriterInterface
-	remoteSki string
-	sut *Hub
+	remoteSki      string
+	sut            *Hub
 }
 
 func (s *HubConnectionsRegistrySuite) BeforeTest(suiteName, testName string) {
 	s.remoteSki = "remotetestski"
 
 	ctrl := gomock.NewController(s.T())
-	
+
 	s.hubReader = mocks.NewMockHubReaderInterface(ctrl)
 	s.hubReader.EXPECT().RemoteSKIConnected(gomock.Any()).Return().AnyTimes()
 	s.hubReader.EXPECT().RemoteSKIDisconnected(gomock.Any()).Return().AnyTimes()
@@ -88,7 +88,7 @@ func (s *HubConnectionsRegistrySuite) Test_IsRemoteSKIPaired() {
 	hub := NewHub(s.hubReader, s.mdnsService, 4567, tls.Certificate{}, localService)
 	assert.NotNil(s.T(), hub)
 
-	s.mdnsService.EXPECT().Start(gomock.Any()).Return(nil).Times(1)
+	s.mdnsService.EXPECT().Start(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	err := hub.Start()
 	assert.NoError(s.T(), err)
 

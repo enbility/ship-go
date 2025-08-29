@@ -83,7 +83,7 @@ func (s *HubSuite) Test_NewConnectionsHub() {
 	hub := NewHub(s.hubReader, s.mdnsService, 4567, tls.Certificate{}, localService)
 	assert.NotNil(s.T(), hub)
 
-	s.mdnsService.EXPECT().Start(gomock.Any()).Return(nil).Times(1)
+	s.mdnsService.EXPECT().Start(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 	err := hub.Start()
 	assert.NoError(s.T(), err)
@@ -119,8 +119,6 @@ func (s *HubSuite) Test_SetupRemoteDevice() {
 
 	assert.NotNil(s.T(), reader)
 }
-
-
 
 func (s *HubSuite) Test_checkHasStarted() {
 	checked := s.sut.checkHasStarted()
@@ -237,4 +235,3 @@ func (s *HubSuite) Test_ReportMdnsEntries() {
 
 	s.sut.ReportMdnsEntries(entries, true)
 }
-

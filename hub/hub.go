@@ -124,8 +124,10 @@ func (h *Hub) Start() error {
 		// Server is likely starting successfully
 	}
 
+	pairingMode := api.PairingModeOff
+
 	// start mDNS
-	if err := h.mdns.Start(h); err != nil {
+	if err := h.mdns.Start(pairingMode, h); err != nil {
 		// Shutdown the server if mDNS fails
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -180,7 +182,7 @@ func (h *Hub) Shutdown() {
 				conn.CloseConnection(false, 0, "hub shutdown")
 				close(done)
 			}()
-			
+
 			select {
 			case <-done:
 				logging.Log().Debug("connection closed:", ski)
@@ -189,14 +191,14 @@ func (h *Hub) Shutdown() {
 			}
 		}(ski, conn)
 	}
-	
+
 	// Wait up to 3 seconds for all connections to close
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
 		logging.Log().Debug("all connections closed successfully")

@@ -49,7 +49,7 @@ func TestHub_Start_ReturnsError_WhenMdnsFails(t *testing.T) {
 	mdnsService := mocks.NewMockMdnsInterface(ctrl)
 
 	mdnsError := errors.New("mDNS startup failed")
-	mdnsService.EXPECT().Start(gomock.Any()).Return(mdnsError)
+	mdnsService.EXPECT().Start(gomock.Any(), gomock.Any()).Return(mdnsError)
 
 	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
 	localService := api.NewServiceDetails("localSKI")
@@ -63,7 +63,7 @@ func TestHub_Start_ReturnsError_WhenMdnsFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "mDNS")
 	// Verify the underlying error is the one we provided
 	assert.ErrorIs(t, err, mdnsError, "Should wrap the mDNS error")
-	
+
 	// Verify WebSocket server was shut down
 	time.Sleep(200 * time.Millisecond)
 	// We can't check httpServer is nil as it's still set, but shutdown was called
@@ -76,7 +76,7 @@ func TestHub_Start_Success(t *testing.T) {
 
 	hubReader := mocks.NewMockHubReaderInterface(ctrl)
 	mdnsService := mocks.NewMockMdnsInterface(ctrl)
-	mdnsService.EXPECT().Start(gomock.Any()).Return(nil)
+	mdnsService.EXPECT().Start(gomock.Any(), gomock.Any()).Return(nil)
 
 	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
 	localService := api.NewServiceDetails("localSKI")
@@ -109,7 +109,7 @@ func TestHub_Shutdown_GracefulWithTimeout(t *testing.T) {
 	// Add mock connections
 	normalConn := mocks.NewShipConnectionInterface(t)
 	normalConn.EXPECT().RemoteSKI().Return("normal-ski").Maybe()
-	
+
 	slowConn := mocks.NewShipConnectionInterface(t)
 	slowConn.EXPECT().RemoteSKI().Return("slow-ski").Maybe()
 
@@ -167,7 +167,7 @@ func TestHub_Shutdown_TimeoutStuckConnections(t *testing.T) {
 	// Add a stuck connection
 	stuckConn := mocks.NewShipConnectionInterface(t)
 	stuckConn.EXPECT().RemoteSKI().Return("stuck-ski").Maybe()
-	
+
 	// This connection never completes closing
 	closeStarted := make(chan bool, 1)
 	stuckConn.EXPECT().CloseConnection(false, 0, mock.Anything).Run(func(safe bool, code int, reason string) {
@@ -179,7 +179,7 @@ func TestHub_Shutdown_TimeoutStuckConnections(t *testing.T) {
 	hub.connections["stuck-ski"] = stuckConn
 
 	start := time.Now()
-	
+
 	// Run shutdown in goroutine so we can check it completes
 	done := make(chan bool)
 	go func() {
@@ -214,18 +214,18 @@ func TestHub_HTTPServerShutdown_WithContext(t *testing.T) {
 
 	hubReader := mocks.NewMockHubReaderInterface(ctrl)
 	mdnsService := mocks.NewMockMdnsInterface(ctrl)
-	mdnsService.EXPECT().Start(gomock.Any()).Return(nil)
+	mdnsService.EXPECT().Start(gomock.Any(), gomock.Any()).Return(nil)
 	mdnsService.EXPECT().Shutdown()
 
 	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
 	localService := api.NewServiceDetails("localSKI")
 
 	hub := NewHub(hubReader, mdnsService, 0, certificate, localService)
-	
+
 	// Start the hub
 	err := hub.Start()
 	assert.NoError(t, err)
-	
+
 	// Wait for server to be ready
 	time.Sleep(100 * time.Millisecond)
 

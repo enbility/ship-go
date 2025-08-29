@@ -80,12 +80,12 @@ func (_c *MdnsInterface_AnnounceMdnsEntry_Call) RunAndReturn(run func() error) *
 	return _c
 }
 
-// QRCodeText provides a mock function for the type MdnsInterface
-func (_mock *MdnsInterface) QRCodeText() string {
+// DeviceBrand provides a mock function for the type MdnsInterface
+func (_mock *MdnsInterface) DeviceBrand() string {
 	ret := _mock.Called()
 
 	if len(ret) == 0 {
-		panic("no return value specified for QRCodeText")
+		panic("no return value specified for DeviceBrand")
 	}
 
 	var r0 string
@@ -97,29 +97,163 @@ func (_mock *MdnsInterface) QRCodeText() string {
 	return r0
 }
 
-// MdnsInterface_QRCodeText_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'QRCodeText'
-type MdnsInterface_QRCodeText_Call struct {
+// MdnsInterface_DeviceBrand_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeviceBrand'
+type MdnsInterface_DeviceBrand_Call struct {
 	*mock.Call
 }
 
-// QRCodeText is a helper method to define mock.On call
-func (_e *MdnsInterface_Expecter) QRCodeText() *MdnsInterface_QRCodeText_Call {
-	return &MdnsInterface_QRCodeText_Call{Call: _e.mock.On("QRCodeText")}
+// DeviceBrand is a helper method to define mock.On call
+func (_e *MdnsInterface_Expecter) DeviceBrand() *MdnsInterface_DeviceBrand_Call {
+	return &MdnsInterface_DeviceBrand_Call{Call: _e.mock.On("DeviceBrand")}
 }
 
-func (_c *MdnsInterface_QRCodeText_Call) Run(run func()) *MdnsInterface_QRCodeText_Call {
+func (_c *MdnsInterface_DeviceBrand_Call) Run(run func()) *MdnsInterface_DeviceBrand_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		run()
 	})
 	return _c
 }
 
-func (_c *MdnsInterface_QRCodeText_Call) Return(s string) *MdnsInterface_QRCodeText_Call {
+func (_c *MdnsInterface_DeviceBrand_Call) Return(s string) *MdnsInterface_DeviceBrand_Call {
 	_c.Call.Return(s)
 	return _c
 }
 
-func (_c *MdnsInterface_QRCodeText_Call) RunAndReturn(run func() string) *MdnsInterface_QRCodeText_Call {
+func (_c *MdnsInterface_DeviceBrand_Call) RunAndReturn(run func() string) *MdnsInterface_DeviceBrand_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeviceCategories provides a mock function for the type MdnsInterface
+func (_mock *MdnsInterface) DeviceCategories() []api.DeviceCategoryType {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeviceCategories")
+	}
+
+	var r0 []api.DeviceCategoryType
+	if returnFunc, ok := ret.Get(0).(func() []api.DeviceCategoryType); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]api.DeviceCategoryType)
+		}
+	}
+	return r0
+}
+
+// MdnsInterface_DeviceCategories_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeviceCategories'
+type MdnsInterface_DeviceCategories_Call struct {
+	*mock.Call
+}
+
+// DeviceCategories is a helper method to define mock.On call
+func (_e *MdnsInterface_Expecter) DeviceCategories() *MdnsInterface_DeviceCategories_Call {
+	return &MdnsInterface_DeviceCategories_Call{Call: _e.mock.On("DeviceCategories")}
+}
+
+func (_c *MdnsInterface_DeviceCategories_Call) Run(run func()) *MdnsInterface_DeviceCategories_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MdnsInterface_DeviceCategories_Call) Return(deviceCategoryTypes []api.DeviceCategoryType) *MdnsInterface_DeviceCategories_Call {
+	_c.Call.Return(deviceCategoryTypes)
+	return _c
+}
+
+func (_c *MdnsInterface_DeviceCategories_Call) RunAndReturn(run func() []api.DeviceCategoryType) *MdnsInterface_DeviceCategories_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeviceModel provides a mock function for the type MdnsInterface
+func (_mock *MdnsInterface) DeviceModel() string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeviceModel")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// MdnsInterface_DeviceModel_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeviceModel'
+type MdnsInterface_DeviceModel_Call struct {
+	*mock.Call
+}
+
+// DeviceModel is a helper method to define mock.On call
+func (_e *MdnsInterface_Expecter) DeviceModel() *MdnsInterface_DeviceModel_Call {
+	return &MdnsInterface_DeviceModel_Call{Call: _e.mock.On("DeviceModel")}
+}
+
+func (_c *MdnsInterface_DeviceModel_Call) Run(run func()) *MdnsInterface_DeviceModel_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MdnsInterface_DeviceModel_Call) Return(s string) *MdnsInterface_DeviceModel_Call {
+	_c.Call.Return(s)
+	return _c
+}
+
+func (_c *MdnsInterface_DeviceModel_Call) RunAndReturn(run func() string) *MdnsInterface_DeviceModel_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeviceSerial provides a mock function for the type MdnsInterface
+func (_mock *MdnsInterface) DeviceSerial() string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeviceSerial")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// MdnsInterface_DeviceSerial_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeviceSerial'
+type MdnsInterface_DeviceSerial_Call struct {
+	*mock.Call
+}
+
+// DeviceSerial is a helper method to define mock.On call
+func (_e *MdnsInterface_Expecter) DeviceSerial() *MdnsInterface_DeviceSerial_Call {
+	return &MdnsInterface_DeviceSerial_Call{Call: _e.mock.On("DeviceSerial")}
+}
+
+func (_c *MdnsInterface_DeviceSerial_Call) Run(run func()) *MdnsInterface_DeviceSerial_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MdnsInterface_DeviceSerial_Call) Return(s string) *MdnsInterface_DeviceSerial_Call {
+	_c.Call.Return(s)
+	return _c
+}
+
+func (_c *MdnsInterface_DeviceSerial_Call) RunAndReturn(run func() string) *MdnsInterface_DeviceSerial_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -231,16 +365,16 @@ func (_c *MdnsInterface_Shutdown_Call) RunAndReturn(run func()) *MdnsInterface_S
 }
 
 // Start provides a mock function for the type MdnsInterface
-func (_mock *MdnsInterface) Start(cb api.MdnsReportInterface) error {
-	ret := _mock.Called(cb)
+func (_mock *MdnsInterface) Start(pairingMode api.PairingMode, cb api.MdnsReportInterface) error {
+	ret := _mock.Called(pairingMode, cb)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Start")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(api.MdnsReportInterface) error); ok {
-		r0 = returnFunc(cb)
+	if returnFunc, ok := ret.Get(0).(func(api.PairingMode, api.MdnsReportInterface) error); ok {
+		r0 = returnFunc(pairingMode, cb)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -253,19 +387,25 @@ type MdnsInterface_Start_Call struct {
 }
 
 // Start is a helper method to define mock.On call
+//   - pairingMode api.PairingMode
 //   - cb api.MdnsReportInterface
-func (_e *MdnsInterface_Expecter) Start(cb interface{}) *MdnsInterface_Start_Call {
-	return &MdnsInterface_Start_Call{Call: _e.mock.On("Start", cb)}
+func (_e *MdnsInterface_Expecter) Start(pairingMode interface{}, cb interface{}) *MdnsInterface_Start_Call {
+	return &MdnsInterface_Start_Call{Call: _e.mock.On("Start", pairingMode, cb)}
 }
 
-func (_c *MdnsInterface_Start_Call) Run(run func(cb api.MdnsReportInterface)) *MdnsInterface_Start_Call {
+func (_c *MdnsInterface_Start_Call) Run(run func(pairingMode api.PairingMode, cb api.MdnsReportInterface)) *MdnsInterface_Start_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 api.MdnsReportInterface
+		var arg0 api.PairingMode
 		if args[0] != nil {
-			arg0 = args[0].(api.MdnsReportInterface)
+			arg0 = args[0].(api.PairingMode)
+		}
+		var arg1 api.MdnsReportInterface
+		if args[1] != nil {
+			arg1 = args[1].(api.MdnsReportInterface)
 		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -276,7 +416,7 @@ func (_c *MdnsInterface_Start_Call) Return(err error) *MdnsInterface_Start_Call 
 	return _c
 }
 
-func (_c *MdnsInterface_Start_Call) RunAndReturn(run func(cb api.MdnsReportInterface) error) *MdnsInterface_Start_Call {
+func (_c *MdnsInterface_Start_Call) RunAndReturn(run func(pairingMode api.PairingMode, cb api.MdnsReportInterface) error) *MdnsInterface_Start_Call {
 	_c.Call.Return(run)
 	return _c
 }

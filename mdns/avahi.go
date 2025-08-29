@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -21,18 +22,27 @@ type mdnsServiceData struct {
 	Txt []string
 }
 
+// instanceData holds service instance information for cleanup
+type instanceData struct {
+	ServiceType string
+	ServiceName string
+	Port        int
+	Txt         []string
+}
+
 type AvahiProvider struct {
 	ifaceIndexes []int32
 
-	avServer     avahi.ServerInterface
-	avEntryGroup avahi.EntryGroupInterface
-	avBrowser    avahi.ServiceBrowserInterface
+	avServer         avahi.ServerInterface
+	avBrowser        avahi.ServiceBrowserInterface // For _ship._tcp browsing
+	avPairingBrowser avahi.ServiceBrowserInterface // For _shippairing._tcp browsing
 
 	autoReconnect   bool
 	manualShutdown  bool
 	setupSuccessful bool
 	listenerRunning bool
 
+	pairingMode     api.PairingMode // The pairing mode
 	mdnsServiceData *mdnsServiceData
 
 	resolveCB api.MdnsResolveCB
@@ -43,9 +53,17 @@ type AvahiProvider struct {
 	shutdownChan                      chan struct{}
 	addServiceChan, removeServiceChan chan avahi.Service
 
+	// Multiple EntryGroup support for dual services
+	serviceGroups map[string]avahi.EntryGroupInterface // service type -> EntryGroup
+	serviceStates map[string]*mdnsServiceData          // service type -> service data
+
+	// Instance management for the new interface
+	instanceCounter  int
+	serviceInstances map[string]*instanceData // instanceID -> service data
+
 	mux   sync.Mutex
 	muxEl sync.RWMutex // used for serviceElements
-	
+
 	// Prevent multiple reconnection goroutines
 	reconnectInProgress bool
 	reconnectMux        sync.Mutex
@@ -53,19 +71,26 @@ type AvahiProvider struct {
 
 func NewAvahiProvider(ifaceIndexes []int32) *AvahiProvider {
 	return &AvahiProvider{
-		avServer:        avahi.ServerNew(),
-		setupSuccessful: false,
-		ifaceIndexes:    ifaceIndexes,
-		serviceElements: make(map[string]map[string]string),
+		avServer:         avahi.ServerNew(),
+		setupSuccessful:  false,
+		ifaceIndexes:     ifaceIndexes,
+		serviceElements:  make(map[string]map[string]string),
+		serviceGroups:    make(map[string]avahi.EntryGroupInterface), // Critical fix
+		serviceStates:    make(map[string]*mdnsServiceData),          // Critical fix
+		instanceCounter:  0,
+		serviceInstances: make(map[string]*instanceData),
 	}
 }
 
+// AvahiProvider implements the standard MdnsProviderInterface
+// For multi-service support, wrap with MultiServiceAdapter
 var _ api.MdnsProviderInterface = (*AvahiProvider)(nil)
 
-func (a *AvahiProvider) Start(autoReconnect bool, cb api.MdnsResolveCB) bool {
+func (a *AvahiProvider) Start(pairingMode api.PairingMode, autoReconnect bool, cb api.MdnsResolveCB) bool {
 	a.mux.Lock()
 	defer a.mux.Unlock()
 
+	a.pairingMode = pairingMode
 	a.autoReconnect = autoReconnect
 	a.resolveCB = cb
 	a.manualShutdown = false
@@ -93,13 +118,25 @@ func (a *AvahiProvider) Start(autoReconnect bool, cb api.MdnsResolveCB) bool {
 	}
 
 	// instead of limiting search on specific allowed interfaces, we allow all and filter the results
+	// Browse for _ship._tcp services
 	avBrowser, err := a.avServer.ServiceBrowserNew(a.addServiceChan, a.removeServiceChan, avahi.InterfaceUnspec, avahi.ProtoUnspec, shipZeroConfServiceType, shipZeroConfDomain, 0)
 	if err != nil || avBrowser == nil {
 		a.avServer.Shutdown()
 		return false
 	}
-
 	a.avBrowser = avBrowser
+
+	if pairingMode == api.PairingModeListener || pairingMode == api.PairingModeBoth {
+		// Also browse for _shippairing._tcp services
+		avPairingBrowser, err := a.avServer.ServiceBrowserNew(a.addServiceChan, a.removeServiceChan, avahi.InterfaceUnspec, avahi.ProtoUnspec, shipPairingZeroConfServiceType, shipZeroConfDomain, 0)
+		if err != nil || avPairingBrowser == nil {
+			// If pairing browser fails, log but don't fail completely
+			logging.Log().Debug("mdns: avahi - failed to create pairing browser, pairing discovery disabled", err)
+			// Continue without pairing support
+		} else {
+			a.avPairingBrowser = avPairingBrowser
+		}
+	}
 
 	// autoReconnect is only called with false if the systems does not know if
 	// avahi should be used in the first place.
@@ -136,6 +173,11 @@ func (a *AvahiProvider) Shutdown() {
 			a.shutdownChan <- struct{}{}
 		}
 	}
+	// Also free the pairing browser if it exists
+	if a.avPairingBrowser != nil {
+		a.avServer.ServiceBrowserFree(a.avPairingBrowser)
+		a.avPairingBrowser = nil
+	}
 	a.listenerRunning = false
 	if a.shutdownChan != nil {
 		close(a.shutdownChan)
@@ -156,79 +198,31 @@ func (a *AvahiProvider) Shutdown() {
 		a.reconnectMux.Lock()
 		inProgress := a.reconnectInProgress
 		a.reconnectMux.Unlock()
-		
+
 		if !inProgress {
 			break
 		}
-		
+
 		logging.Log().Debug("mdns: avahi - waiting for reconnection goroutine to stop")
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Unannounce the service
-	a.Unannounce()
+	// Unannounce all service instances
+	a.mux.Lock()
+	instancesToRemove := make([]string, 0, len(a.serviceInstances))
+	for instanceID := range a.serviceInstances {
+		instancesToRemove = append(instancesToRemove, instanceID)
+	}
+	a.mux.Unlock()
+
+	for _, instanceID := range instancesToRemove {
+		_ = a.UnannounceService(instanceID)
+	}
 
 	a.mux.Lock()
 	defer a.mux.Unlock()
 
 	a.avServer.Shutdown()
-	a.avEntryGroup = nil
-}
-
-func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) error {
-	a.mux.Lock()
-	defer a.mux.Unlock()
-
-	// store the data for reconnection
-	a.mdnsServiceData = &mdnsServiceData{
-		Name: serviceName,
-		Port: port,
-		Txt:  txt,
-	}
-
-	logging.Log().Debug("mdns: using avahi")
-
-	var btxt [][]byte
-	for _, t := range txt {
-		btxt = append(btxt, []byte(t))
-	}
-
-	entryGroup, err := a.avServer.EntryGroupNew()
-	if err != nil {
-		return err
-	}
-
-	for _, iface := range a.ifaceIndexes {
-		// conversion is safe, as port values are always positive
-		err = entryGroup.AddService(iface, avahi.ProtoUnspec, 0, serviceName, shipZeroConfServiceType, shipZeroConfDomain, "", uint16(port), btxt) // #nosec G115
-		if err != nil {
-			return err
-		}
-	}
-
-	err = entryGroup.Commit()
-	if err != nil {
-		return err
-	}
-
-	a.avEntryGroup = entryGroup
-
-	return nil
-}
-
-func (a *AvahiProvider) Unannounce() {
-	a.mux.Lock()
-	defer a.mux.Unlock()
-
-	// clean up the reconnection data
-	a.mdnsServiceData = nil
-
-	if a.avEntryGroup == nil {
-		return
-	}
-
-	a.avServer.EntryGroupFree(a.avEntryGroup)
-	a.avEntryGroup = nil
 }
 
 func (a *AvahiProvider) avahiCallback(event avahi.Event) {
@@ -248,6 +242,11 @@ func (a *AvahiProvider) avahiCallback(event avahi.Event) {
 	if a.mdnsServiceData != nil {
 		serviceData = a.mdnsServiceData
 	}
+
+	// Clear serviceGroups as they are now invalid after disconnection
+	// but keep serviceStates for restoration
+	a.serviceGroups = make(map[string]avahi.EntryGroupInterface)
+
 	a.mux.Unlock()
 
 	// Prevent multiple reconnection goroutines
@@ -274,7 +273,7 @@ func (a *AvahiProvider) attemptReconnect(cb api.MdnsResolveCB, serviceData *mdns
 	}()
 
 	baseDelay := time.Second
-	maxDelay := 30 * time.Second  // Maximum 30 seconds between attempts
+	maxDelay := 30 * time.Second // Maximum 30 seconds between attempts
 	currentDelay := baseDelay
 	attempt := 0
 
@@ -290,9 +289,9 @@ func (a *AvahiProvider) attemptReconnect(cb api.MdnsResolveCB, serviceData *mdns
 		time.Sleep(currentDelay)
 		attempt++
 
-		logging.Log().Debugf("mdns: avahi - reconnection attempt %d (delay: %v)", attempt, currentDelay)
+		logging.Log().Tracef("mdns: avahi - reconnection attempt %d (delay: %v)", attempt, currentDelay)
 
-		if !a.Start(true, cb) {
+		if !a.Start(a.pairingMode, true, cb) {
 			// Exponential backoff with jitter
 			currentDelay = currentDelay * 2
 			// Add jitter (±10%)
@@ -307,9 +306,27 @@ func (a *AvahiProvider) attemptReconnect(cb api.MdnsResolveCB, serviceData *mdns
 
 		logging.Log().Debug("mdns: avahi - reconnected successfully")
 
+		// Restore all services from serviceStates
+		a.mux.Lock()
+		statesToRestore := make(map[string]*mdnsServiceData)
+		for serviceType, serviceState := range a.serviceStates {
+			statesToRestore[serviceType] = serviceState
+		}
+		a.mux.Unlock()
+
+		for serviceType, serviceState := range statesToRestore {
+			if _, err := a.AnnounceService(serviceType, serviceState.Name, serviceState.Port, serviceState.Txt); err != nil {
+				logging.Log().Debugf("mdns: avahi - error re-announcing %s service: %v", serviceType, err)
+			}
+		}
+
+		// Legacy compatibility: also restore from serviceData if available and not already restored
 		if serviceData != nil {
-			if err := a.Announce(serviceData.Name, serviceData.Port, serviceData.Txt); err != nil {
-				logging.Log().Debug("mdns: avahi - error re-announcing service:", err)
+			// Only restore legacy serviceData if it wasn't already restored from serviceStates
+			if _, alreadyRestored := statesToRestore[shipZeroConfServiceType]; !alreadyRestored {
+				if _, err := a.AnnounceService(shipZeroConfServiceType, serviceData.Name, serviceData.Port, serviceData.Txt); err != nil {
+					logging.Log().Debug("mdns: avahi - error re-announcing legacy service:", err)
+				}
 			}
 		}
 
@@ -376,7 +393,7 @@ func (a *AvahiProvider) processRemovedService(service avahi.Service, cb api.Mdns
 	elements := a.serviceElements[getServiceUniqueKey(service)]
 	a.muxEl.RUnlock()
 
-	cb(elements, service.Name, service.Host, nil, -1, true)
+	cb(elements, service.Name, service.Host, service.Type, nil, -1, true)
 
 	return nil
 }
@@ -402,7 +419,7 @@ func (a *AvahiProvider) processAddedService(service avahi.Service, cb api.MdnsRe
 	a.serviceElements[getServiceUniqueKey(service)] = elements
 	a.muxEl.Unlock()
 
-	cb(elements, service.Name, service.Host, []net.IP{address}, int(service.Port), false)
+	cb(elements, service.Name, service.Host, service.Type, []net.IP{address}, int(service.Port), false)
 
 	return nil
 }
@@ -410,4 +427,124 @@ func (a *AvahiProvider) processAddedService(service avahi.Service, cb api.MdnsRe
 // Create a unique key for a ship service
 func getServiceUniqueKey(service avahi.Service) string {
 	return fmt.Sprintf("%s-%s-%s-%d-%d", service.Name, service.Type, service.Domain, service.Protocol, service.Interface)
+}
+
+/* Enhanced Provider Interface Implementation - TDD Stubs */
+
+// AnnounceService announces a specific service type and returns an instance ID
+func (a *AvahiProvider) AnnounceService(serviceType, serviceName string, port int, txt []string) (string, error) {
+	// Use existing announcement logic but with configurable service type
+	// This extends the current Announce() method to support different service types
+
+	a.mux.Lock()
+	defer a.mux.Unlock()
+
+	if a.avServer == nil {
+		return "", api.ErrServiceNotStarted
+	}
+
+	// Create or get EntryGroup for this service type
+	entryGroup, exists := a.serviceGroups[serviceType]
+	if !exists {
+		var err error
+		entryGroup, err = a.avServer.EntryGroupNew()
+		if err != nil {
+			return "", fmt.Errorf("failed to create entry group for %s: %w", serviceType, err)
+		}
+		a.serviceGroups[serviceType] = entryGroup
+	}
+
+	// Convert TXT records to Avahi format ([][]byte)
+	btxt := make([][]byte, len(txt))
+	for i, t := range txt {
+		btxt[i] = []byte(t)
+	}
+
+	// Add service to the dedicated EntryGroup
+	// Note: For _shippairing._tcp, we use the same port as the SHIP server since pairing connects to the same WebSocket endpoint
+	for _, iface := range a.ifaceIndexes {
+		err := entryGroup.AddService(iface, avahi.ProtoUnspec, 0, serviceName, serviceType, shipZeroConfDomain, "", uint16(port), btxt) // #nosec G115
+		if err != nil {
+			// If we just created this EntryGroup and AddService failed, don't store it
+			if !exists {
+				a.avServer.EntryGroupFree(entryGroup)
+				delete(a.serviceGroups, serviceType)
+			}
+			return "", fmt.Errorf("failed to add %s service: %w", serviceType, err)
+		}
+	}
+
+	// Commit the EntryGroup
+	if err := entryGroup.Commit(); err != nil {
+		// If we just created this EntryGroup and commit failed, don't store it
+		if !exists {
+			a.avServer.EntryGroupFree(entryGroup)
+			delete(a.serviceGroups, serviceType)
+		}
+		return "", fmt.Errorf("failed to commit %s service: %w", serviceType, err)
+	}
+
+	// Generate unique instance ID
+	a.instanceCounter++
+	instanceID := strconv.Itoa(a.instanceCounter)
+
+	// Store service data only after successful commit
+	a.serviceStates[serviceType] = &mdnsServiceData{
+		Name: serviceName,
+		Port: port,
+		Txt:  txt,
+	}
+
+	// Store instance mapping for cleanup
+	a.serviceInstances[instanceID] = &instanceData{
+		ServiceType: serviceType,
+		ServiceName: serviceName,
+		Port:        port,
+		Txt:         txt,
+	}
+
+	// For _ship._tcp, also store legacy reconnection data for compatibility
+	if serviceType == shipZeroConfServiceType {
+		a.mdnsServiceData = &mdnsServiceData{
+			Name: serviceName,
+			Port: port,
+			Txt:  txt,
+		}
+	}
+
+	return instanceID, nil
+}
+
+// UnannounceService removes a service instance by its instance ID
+func (a *AvahiProvider) UnannounceService(instanceID string) error {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+
+	// Look up instance data
+	instanceData, exists := a.serviceInstances[instanceID]
+	if !exists {
+		return api.ErrPairingNotActive
+	}
+
+	serviceType := instanceData.ServiceType
+
+	// Check if EntryGroup exists for this service type
+	entryGroup, groupExists := a.serviceGroups[serviceType]
+	if groupExists {
+		a.avServer.EntryGroupFree(entryGroup)
+
+		// Clean up service state
+		delete(a.serviceStates, serviceType)
+		delete(a.serviceGroups, serviceType)
+
+		// For _ship._tcp, also clean up legacy reconnection data
+		if serviceType == shipZeroConfServiceType {
+			a.mdnsServiceData = nil
+		}
+	}
+
+	// Clean up instance mapping
+	delete(a.serviceInstances, instanceID)
+
+	return nil
 }

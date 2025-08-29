@@ -8,6 +8,7 @@ import (
 
 	"github.com/enbility/go-avahi"
 	mocks "github.com/enbility/go-avahi/mocks"
+	"github.com/enbility/ship-go/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -42,21 +43,21 @@ func (a *AvahiSuite) BeforeTest(suiteName, testName string) {
 func (a *AvahiSuite) AfterTest(suiteName, testName string) {
 }
 
-func processMdnsEntry(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool) {
+func processMdnsEntry(elements map[string]string, name, host, service string, addresses []net.IP, port int, remove bool) {
 }
 
 func (a *AvahiSuite) Test_Avahi() {
 	someError := errors.New("some error")
 
 	a.avahiMock.EXPECT().Setup(mock.Anything).Return(someError).Once()
-	success := a.sut.Start(false, nil)
+	success := a.sut.Start(api.PairingModeListener, false, nil)
 	assert.False(a.T(), success)
 
 	a.avahiMock.EXPECT().Setup(mock.Anything).Return(nil).Once()
 	a.avahiMock.EXPECT().Start().Return().Once()
 	a.avahiMock.EXPECT().GetAPIVersion().Return(0, someError).Once()
 	a.avahiMock.EXPECT().Shutdown().Return().Once()
-	success = a.sut.Start(false, nil)
+	success = a.sut.Start(api.PairingModeListener, false, nil)
 	assert.False(a.T(), success)
 
 	a.avahiMock.EXPECT().Setup(mock.Anything).Return(nil).Once()
@@ -69,29 +70,37 @@ func (a *AvahiSuite) Test_Avahi() {
 		shipZeroConfServiceType, shipZeroConfDomain,
 		uint32(0)).Return(nil, someError).Once()
 	a.avahiMock.EXPECT().Shutdown().Return().Once()
-	success = a.sut.Start(false, nil)
+	success = a.sut.Start(api.PairingModeListener, false, nil)
 	assert.False(a.T(), success)
 
 	a.avahiMock.EXPECT().Setup(mock.Anything).Return(nil).Once()
 	a.avahiMock.EXPECT().Start().Return().Once()
 	a.avahiMock.EXPECT().GetAPIVersion().Return(0, nil).Once()
+	// Expect two service browsers - one for _ship._tcp and one for _shippairing._tcp
 	a.avahiMock.EXPECT().ServiceBrowserNew(
 		mock.AnythingOfType("chan avahi.Service"),
 		mock.AnythingOfType("chan avahi.Service"),
 		int32(-1), int32(-1),
 		shipZeroConfServiceType, shipZeroConfDomain,
 		uint32(0)).Return(a.serviceBrowserMock, nil).Once()
-	success = a.sut.Start(false, nil)
+	a.avahiMock.EXPECT().ServiceBrowserNew(
+		mock.AnythingOfType("chan avahi.Service"),
+		mock.AnythingOfType("chan avahi.Service"),
+		int32(-1), int32(-1),
+		shipPairingZeroConfServiceType, shipZeroConfDomain,
+		uint32(0)).Return(a.serviceBrowserMock, nil).Once()
+	success = a.sut.Start(api.PairingModeListener, false, nil)
 	assert.True(a.T(), success)
 
 	a.avahiMock.EXPECT().EntryGroupNew().Return(a.entryGroupMock, nil).Once()
 	a.avahiMock.EXPECT().EntryGroupFree(a.entryGroupMock).Return().Once()
 	a.entryGroupMock.EXPECT().AddService(mock.Anything, mock.Anything, mock.Anything, "dummytest", shipZeroConfServiceType, shipZeroConfDomain, "", mock.Anything, mock.Anything).Return(nil).Once()
 	a.entryGroupMock.EXPECT().Commit().Return(nil).Once()
-	err := a.sut.Announce("dummytest", 4289, []string{"more=more"})
+	instanceID, err := a.sut.AnnounceService(shipZeroConfServiceType, "dummytest", 4289, []string{"more=more"})
 	assert.Nil(a.T(), err)
+	assert.NotEmpty(a.T(), instanceID)
 
-	a.sut.Unannounce()
+	a.sut.UnannounceService(instanceID)
 
 	testService := avahi.Service{
 		Interface: 0,
@@ -169,7 +178,8 @@ func (a *AvahiSuite) Test_Avahi() {
 	assert.NotNil(a.T(), err)
 
 	a.avahiMock.EXPECT().Shutdown().Return().Once()
-	a.avahiMock.EXPECT().ServiceBrowserFree(a.serviceBrowserMock).Return().Once()
+	// Two ServiceBrowserFree calls - one for each browser
+	a.avahiMock.EXPECT().ServiceBrowserFree(a.serviceBrowserMock).Return().Times(2)
 	a.sut.Shutdown()
 }
 
@@ -182,56 +192,101 @@ func (a *AvahiSuite) Test_Announce() {
 	a.sut.avServer = a.avahiMock
 
 	a.avahiMock.EXPECT().EntryGroupNew().Return(nil, someError).Once()
-	err := a.sut.Announce("dummytest", 4289, []string{"more=more"})
+	_, err := a.sut.AnnounceService(shipZeroConfServiceType, "dummytest", 4289, []string{"more=more"})
 	assert.NotNil(a.T(), err)
 
 	a.avahiMock.EXPECT().EntryGroupNew().Return(a.entryGroupMock, nil).Once()
 	a.entryGroupMock.EXPECT().AddService(mock.Anything, mock.Anything, mock.Anything, "dummytest", shipZeroConfServiceType, shipZeroConfDomain, "", mock.Anything, mock.Anything).Return(someError).Once()
-	err = a.sut.Announce("dummytest", 4289, []string{"more=more"})
+	a.avahiMock.EXPECT().EntryGroupFree(a.entryGroupMock).Return().Once() // Cleanup after AddService failure
+	_, err = a.sut.AnnounceService(shipZeroConfServiceType, "dummytest", 4289, []string{"more=more"})
 	assert.NotNil(a.T(), err)
 
 	a.avahiMock.EXPECT().EntryGroupNew().Return(a.entryGroupMock, nil).Once()
 	a.entryGroupMock.EXPECT().AddService(mock.Anything, mock.Anything, mock.Anything, "dummytest", shipZeroConfServiceType, shipZeroConfDomain, "", mock.Anything, mock.Anything).Return(nil).Once()
 	a.entryGroupMock.EXPECT().Commit().Return(someError).Once()
-	err = a.sut.Announce("dummytest", 4289, []string{"more=more"})
+	a.avahiMock.EXPECT().EntryGroupFree(a.entryGroupMock).Return().Once() // Cleanup after Commit failure
+	_, err = a.sut.AnnounceService(shipZeroConfServiceType, "dummytest", 4289, []string{"more=more"})
 	assert.NotNil(a.T(), err)
 
 	a.entryGroupMock.EXPECT().AddService(mock.Anything, mock.Anything, mock.Anything, "dummytest", shipZeroConfServiceType, shipZeroConfDomain, "", mock.Anything, mock.Anything).Return(nil).Once()
 	a.entryGroupMock.EXPECT().Commit().Return(nil).Once()
 	a.avahiMock.EXPECT().EntryGroupNew().Return(a.entryGroupMock, nil).Once()
-	err = a.sut.Announce("dummytest", 4289, []string{"more=more"})
+	instanceID2, err := a.sut.AnnounceService(shipZeroConfServiceType, "dummytest", 4289, []string{"more=more"})
 	assert.Nil(a.T(), err)
+	assert.NotEmpty(a.T(), instanceID2)
 
 	a.avahiMock.EXPECT().EntryGroupFree(a.entryGroupMock).Return().Once()
-	a.sut.Unannounce()
+	a.sut.UnannounceService(instanceID2)
 
-	a.sut.avEntryGroup = nil
-	a.sut.Unannounce()
+	// Test calling UnannounceService on non-existent service
+	a.sut.UnannounceService("nonexistent")
+}
+
+func (a *AvahiSuite) Test_Announce_Pairing() {
+	someError := errors.New("some error")
+	a.sut.avServer = a.avahiMock
+
+	a.avahiMock.EXPECT().EntryGroupNew().Return(nil, someError).Once()
+	_, err := a.sut.AnnounceService(shipPairingZeroConfServiceType, "dummytest", 4289, []string{"more=more"})
+	assert.NotNil(a.T(), err)
+
+	a.avahiMock.EXPECT().EntryGroupNew().Return(a.entryGroupMock, nil).Once()
+	a.entryGroupMock.EXPECT().AddService(mock.Anything, mock.Anything, mock.Anything, "dummytest", shipPairingZeroConfServiceType, shipZeroConfDomain, "", mock.Anything, mock.Anything).Return(someError).Once()
+	a.avahiMock.EXPECT().EntryGroupFree(a.entryGroupMock).Return().Once() // Cleanup after AddService failure
+	_, err = a.sut.AnnounceService(shipPairingZeroConfServiceType, "dummytest", 4289, []string{"more=more"})
+	assert.NotNil(a.T(), err)
+
+	a.avahiMock.EXPECT().EntryGroupNew().Return(a.entryGroupMock, nil).Once()
+	a.entryGroupMock.EXPECT().AddService(mock.Anything, mock.Anything, mock.Anything, "dummytest", shipPairingZeroConfServiceType, shipZeroConfDomain, "", mock.Anything, mock.Anything).Return(nil).Once()
+	a.entryGroupMock.EXPECT().Commit().Return(someError).Once()
+	a.avahiMock.EXPECT().EntryGroupFree(a.entryGroupMock).Return().Once() // Cleanup after Commit failure
+	_, err = a.sut.AnnounceService(shipPairingZeroConfServiceType, "dummytest", 4289, []string{"more=more"})
+	assert.NotNil(a.T(), err)
+
+	a.entryGroupMock.EXPECT().AddService(mock.Anything, mock.Anything, mock.Anything, "dummytest", shipPairingZeroConfServiceType, shipZeroConfDomain, "", mock.Anything, mock.Anything).Return(nil).Once()
+	a.entryGroupMock.EXPECT().Commit().Return(nil).Once()
+	a.avahiMock.EXPECT().EntryGroupNew().Return(a.entryGroupMock, nil).Once()
+	pairingInstanceID, err := a.sut.AnnounceService(shipPairingZeroConfServiceType, "dummytest", 4289, []string{"more=more"})
+	assert.Nil(a.T(), err)
+	assert.NotEmpty(a.T(), pairingInstanceID)
+
+	a.avahiMock.EXPECT().EntryGroupFree(a.entryGroupMock).Return().Once()
+	a.sut.UnannounceService(pairingInstanceID)
+
+	// Test calling UnannounceService on non-existent service
+	a.sut.UnannounceService("nonexistent")
 }
 
 func (a *AvahiSuite) Test_Avahi_Reconnect() {
 	// As we do not have an Avahi server running for automated testing
 	// these tests are very limited
-	cb := func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool) {
+	cb := func(elements map[string]string, name, host, service string, addresses []net.IP, port int, remove bool) {
 		assert.NotEqual(a.T(), "", name)
 	}
 
 	a.avahiMock.EXPECT().Setup(mock.Anything).Return(nil).Once()
 	a.avahiMock.EXPECT().Start().Return().Once()
 	a.avahiMock.EXPECT().GetAPIVersion().Return(0, nil).Once()
+	// Expect two service browsers - one for _ship._tcp and one for _shippairing._tcp
 	a.avahiMock.EXPECT().ServiceBrowserNew(
 		mock.AnythingOfType("chan avahi.Service"),
 		mock.AnythingOfType("chan avahi.Service"),
 		int32(-1), int32(-1),
 		shipZeroConfServiceType, shipZeroConfDomain,
 		uint32(0)).Return(a.serviceBrowserMock, nil).Once()
-	available := a.sut.Start(true, cb)
+	a.avahiMock.EXPECT().ServiceBrowserNew(
+		mock.AnythingOfType("chan avahi.Service"),
+		mock.AnythingOfType("chan avahi.Service"),
+		int32(-1), int32(-1),
+		shipPairingZeroConfServiceType, shipZeroConfDomain,
+		uint32(0)).Return(a.serviceBrowserMock, nil).Once()
+	available := a.sut.Start(api.PairingModeListener, true, cb)
 	assert.True(a.T(), available)
 
 	a.avahiMock.EXPECT().EntryGroupNew().Return(a.entryGroupMock, nil).Once()
 	a.entryGroupMock.EXPECT().AddService(mock.Anything, mock.Anything, mock.Anything, "dummytest", shipZeroConfServiceType, shipZeroConfDomain, "", mock.Anything, mock.Anything).Return(nil).Once()
 	a.entryGroupMock.EXPECT().Commit().Return(nil).Once()
-	err := a.sut.Announce("dummytest", 4289, []string{"more=more"})
+	_, err := a.sut.AnnounceService(shipZeroConfServiceType, "dummytest", 4289, []string{"more=more"})
 	assert.Nil(a.T(), err)
 
 	// a.avahiMock.EXPECT().Shutdown().Return().Once()
@@ -239,11 +294,18 @@ func (a *AvahiSuite) Test_Avahi_Reconnect() {
 	a.avahiMock.EXPECT().Setup(mock.Anything).Return(nil).Once()
 	a.avahiMock.EXPECT().Start().Return().Once()
 	a.avahiMock.EXPECT().GetAPIVersion().Return(0, nil).Once()
+	// Expect two service browsers on reconnect
 	a.avahiMock.EXPECT().ServiceBrowserNew(
 		mock.AnythingOfType("chan avahi.Service"),
 		mock.AnythingOfType("chan avahi.Service"),
 		int32(-1), int32(-1),
 		shipZeroConfServiceType, shipZeroConfDomain,
+		uint32(0)).Return(a.serviceBrowserMock, nil).Once()
+	a.avahiMock.EXPECT().ServiceBrowserNew(
+		mock.AnythingOfType("chan avahi.Service"),
+		mock.AnythingOfType("chan avahi.Service"),
+		int32(-1), int32(-1),
+		shipPairingZeroConfServiceType, shipZeroConfDomain,
 		uint32(0)).Return(a.serviceBrowserMock, nil).Once()
 	a.avahiMock.EXPECT().EntryGroupNew().Return(a.entryGroupMock, nil).Once()
 	a.entryGroupMock.EXPECT().AddService(mock.Anything, mock.Anything, mock.Anything, "dummytest", shipZeroConfServiceType, shipZeroConfDomain, "", mock.Anything, mock.Anything).Return(nil).Once()
@@ -259,26 +321,35 @@ func (a *AvahiSuite) Test_Avahi_Reconnect() {
 
 	a.avahiMock.EXPECT().EntryGroupFree(a.entryGroupMock).Return().Once()
 	a.avahiMock.EXPECT().Shutdown().Return().Once()
-	a.avahiMock.EXPECT().ServiceBrowserFree(a.serviceBrowserMock).Return().Once()
+	// Two ServiceBrowserFree calls - one for each browser
+	a.avahiMock.EXPECT().ServiceBrowserFree(a.serviceBrowserMock).Return().Times(2)
 	a.sut.Shutdown()
 
 	a.avahiMock.EXPECT().Setup(mock.Anything).Return(nil).Once()
 	a.avahiMock.EXPECT().Start().Return().Once()
 	a.avahiMock.EXPECT().GetAPIVersion().Return(0, nil).Once()
+	// Expect two service browsers after shutdown and restart
 	a.avahiMock.EXPECT().ServiceBrowserNew(
 		mock.AnythingOfType("chan avahi.Service"),
 		mock.AnythingOfType("chan avahi.Service"),
 		int32(-1), int32(-1),
 		shipZeroConfServiceType, shipZeroConfDomain,
 		uint32(0)).Return(a.serviceBrowserMock, nil).Once()
-	available = a.sut.Start(true, cb)
+	a.avahiMock.EXPECT().ServiceBrowserNew(
+		mock.AnythingOfType("chan avahi.Service"),
+		mock.AnythingOfType("chan avahi.Service"),
+		int32(-1), int32(-1),
+		shipPairingZeroConfServiceType, shipZeroConfDomain,
+		uint32(0)).Return(a.serviceBrowserMock, nil).Once()
+	available = a.sut.Start(api.PairingModeListener, true, cb)
 	assert.True(a.T(), available)
 	a.sut.mux.Lock()
 	assert.NotNil(a.T(), a.sut.avServer)
 	a.sut.mux.Unlock()
 
 	a.avahiMock.EXPECT().Shutdown().Return().Once()
-	a.avahiMock.EXPECT().ServiceBrowserFree(a.serviceBrowserMock).Return().Once()
+	// Two ServiceBrowserFree calls - one for each browser
+	a.avahiMock.EXPECT().ServiceBrowserFree(a.serviceBrowserMock).Return().Times(2)
 	a.sut.Shutdown()
 
 	a.avahiMock.EXPECT().Shutdown().Return().Once()
@@ -288,20 +359,27 @@ func (a *AvahiSuite) Test_Avahi_Reconnect() {
 func (a *AvahiSuite) Test_chanListener() {
 	// As we do not have an Avahi server running for automated testing
 	// these tests are very limited
-	cb := func(elements map[string]string, name, host string, addresses []net.IP, port int, remove bool) {
+	cb := func(elements map[string]string, name, host, service string, addresses []net.IP, port int, remove bool) {
 		assert.NotEqual(a.T(), "", name)
 	}
 
 	a.avahiMock.EXPECT().Setup(mock.Anything).Return(nil).Once()
 	a.avahiMock.EXPECT().Start().Return().Once()
 	a.avahiMock.EXPECT().GetAPIVersion().Return(0, nil).Once()
+	// Expect two service browsers - one for _ship._tcp and one for _shippairing._tcp
 	a.avahiMock.EXPECT().ServiceBrowserNew(
 		mock.AnythingOfType("chan avahi.Service"),
 		mock.AnythingOfType("chan avahi.Service"),
 		int32(-1), int32(-1),
 		shipZeroConfServiceType, shipZeroConfDomain,
 		uint32(0)).Return(a.serviceBrowserMock, nil).Once()
-	available := a.sut.Start(true, cb)
+	a.avahiMock.EXPECT().ServiceBrowserNew(
+		mock.AnythingOfType("chan avahi.Service"),
+		mock.AnythingOfType("chan avahi.Service"),
+		int32(-1), int32(-1),
+		shipPairingZeroConfServiceType, shipZeroConfDomain,
+		uint32(0)).Return(a.serviceBrowserMock, nil).Once()
+	available := a.sut.Start(api.PairingModeListener, true, cb)
 	assert.True(a.T(), available)
 
 	time.Sleep(time.Second * 1)
@@ -331,6 +409,7 @@ func (a *AvahiSuite) Test_chanListener() {
 	time.Sleep(time.Second * 1)
 
 	a.avahiMock.EXPECT().Shutdown().Return().Once()
-	a.avahiMock.EXPECT().ServiceBrowserFree(a.serviceBrowserMock).Return().Once()
+	// Two ServiceBrowserFree calls - one for each browser
+	a.avahiMock.EXPECT().ServiceBrowserFree(a.serviceBrowserMock).Return().Times(2)
 	a.sut.Shutdown()
 }
