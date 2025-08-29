@@ -197,17 +197,6 @@ func (h *Hub) tryConnectionViaHost(remoteService *api.ServiceDetails, entry *api
 	return true
 }
 
-// formatIPAddress formats an IP address for connection (handles IPv6 brackets)
-// This is a pure function that's easy to test
-func formatIPAddress(address net.IP) string {
-	if address.To4() == nil {
-		// IPv6
-		return "[" + address.String() + "]"
-	}
-	// IPv4
-	return address.String()
-}
-
 // tryConnectionViaAddresses attempts connection using IP addresses
 // This is a focused function that handles IP-based connection attempts
 func (h *Hub) tryConnectionViaAddresses(remoteService *api.ServiceDetails, entry *api.MdnsEntry) bool {
@@ -217,7 +206,7 @@ func (h *Hub) tryConnectionViaAddresses(remoteService *api.ServiceDetails, entry
 	// try connecting via the provided IP addresses
 	for _, address := range entry.Addresses {
 		logging.Log().Debugf("trying to connect to %s at %s", remoteService.SKI(), address)
-		addressValue := formatIPAddress(address)
+		addressValue := address.String()
 		if err := h.connectFoundService(remoteService, addressValue, strconv.Itoa(entry.Port), entry.Path); err != nil {
 			logConnectionError(err, fmt.Sprintf("connection to %s at %s failed:", remoteService.SKI(), addressValue))
 		} else {
