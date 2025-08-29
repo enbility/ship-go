@@ -67,7 +67,7 @@ func (s *MdnsSuite) Test_LongStrings() {
 
 	err := s.sut.Start(s.mdnsSearch)
 	assert.Nil(s.T(), err)
-	
+
 	// Verify string truncation works
 	assert.Equal(s.T(), "brandbrandbrandbrandbrandbrandbr", s.sut.deviceBrand)
 	assert.Equal(s.T(), "modelmodelmodelmodelmodelmodelmo", s.sut.deviceModel)
@@ -112,7 +112,7 @@ func (s *MdnsSuite) Test_AvahiOnly() {
 
 	err := s.sut.Start(s.mdnsSearch)
 	assert.Nil(s.T(), err)
-	
+
 	// Verify the provider selection is correct
 	assert.Equal(s.T(), MdnsProviderSelectionAvahiOnly, s.sut.providerSelection)
 }
@@ -191,6 +191,7 @@ func (s *MdnsSuite) Test_Shutdown_NoStart() {
 
 func (s *MdnsSuite) Test_MdnsEntry() {
 	testSki := "test"
+	testService := "mdns_service"
 
 	entries := s.sut.mdnsEntries()
 	assert.Equal(s.T(), 0, len(entries))
@@ -199,18 +200,18 @@ func (s *MdnsSuite) Test_MdnsEntry() {
 		Ski: testSki,
 	}
 
-	s.sut.setMdnsEntry(testSki, entry)
+	s.sut.setMdnsEntry(testService, entry)
 	entries = s.sut.mdnsEntries()
 	assert.Equal(s.T(), 1, len(entries))
 
-	theEntry, ok := s.sut.mdnsEntry(testSki)
+	theEntry, ok := s.sut.mdnsEntry(testService)
 	assert.Equal(s.T(), true, ok)
 	assert.NotNil(s.T(), theEntry)
 
 	copyEntries := s.sut.copyMdnsEntries()
 	assert.Equal(s.T(), 1, len(copyEntries))
 
-	s.sut.removeMdnsEntry(testSki)
+	s.sut.removeMdnsEntry(testService)
 	entries = s.sut.mdnsEntries()
 	assert.Equal(s.T(), 0, len(entries))
 	assert.Equal(s.T(), 1, len(copyEntries))
@@ -218,11 +219,12 @@ func (s *MdnsSuite) Test_MdnsEntry() {
 
 func (s *MdnsSuite) Test_MdnsEntries() {
 	testSki := "test"
+	testService := "mdns_service"
 
 	entry := &api.MdnsEntry{
 		Ski: testSki,
 	}
-	s.sut.setMdnsEntry(testSki, entry)
+	s.sut.setMdnsEntry(testService, entry)
 	entries := s.sut.mdnsEntries()
 	assert.Equal(s.T(), 1, len(entries))
 
@@ -302,12 +304,12 @@ func (s *MdnsSuite) Test_SetTestProvider() {
 	mockProvider := s.mdnsProvider
 	mockProvider.On("Announce", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockProvider.On("Unannounce").Return()
-	
+
 	s.sut.SetTestProvider(mockProvider)
-	
+
 	err := s.sut.Start(s.mdnsSearch)
 	assert.Nil(s.T(), err)
-	
+
 	// Verify the injected provider is used
 	assert.Equal(s.T(), mockProvider, s.sut.testProvider)
 	assert.Equal(s.T(), mockProvider, s.sut.mdnsProvider)
@@ -323,7 +325,7 @@ func (s *MdnsSuite) Test_ProviderSelection() {
 		{"AvahiOnly", MdnsProviderSelectionAvahiOnly},
 		{"ZeroconfOnly", MdnsProviderSelectionGoZeroConfOnly},
 	}
-	
+
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
 			manager := NewMDNS("test", "brand", "model", "type", "serial",
@@ -337,45 +339,45 @@ func (s *MdnsSuite) Test_ProviderSelection() {
 func (s *MdnsSuite) Test_ProviderFallback_AvahiToZeroconf() {
 	// Test automatic fallback from Avahi to Zeroconf when Avahi fails
 	s.sut.Shutdown()
-	
+
 	// Create manager with MdnsProviderSelectionAll
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAll)
-	
+
 	// Create mock providers
 	failingAvahi := mocks.NewMdnsProviderInterface(s.T())
 	successfulZeroconf := mocks.NewMdnsProviderInterface(s.T())
-	
+
 	// Setup mock expectations
 	failingAvahi.On("Start", false, mock.Anything).Return(false)
 	failingAvahi.On("Shutdown").Return()
-	
+
 	successfulZeroconf.On("Start", false, mock.Anything).Return(true)
 	successfulZeroconf.On("Announce", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	successfulZeroconf.On("Unannounce").Return()
 	successfulZeroconf.On("Shutdown").Return()
-	
+
 	// Set custom provider factory
 	factory := &ProviderFactory{
 		NewAvahi:    func([]int32) api.MdnsProviderInterface { return failingAvahi },
 		NewZeroconf: func([]net.Interface) api.MdnsProviderInterface { return successfulZeroconf },
 	}
 	s.sut.SetProviderFactory(factory)
-	
+
 	// Start should succeed with fallback to Zeroconf
 	err := s.sut.Start(s.mdnsSearch)
 	assert.Nil(s.T(), err)
-	
+
 	// Verify Zeroconf provider is used
 	assert.Equal(s.T(), successfulZeroconf, s.sut.mdnsProvider)
-	
+
 	// Verify Avahi was attempted first and shutdown
 	failingAvahi.AssertCalled(s.T(), "Start", false, mock.Anything)
 	failingAvahi.AssertCalled(s.T(), "Shutdown")
-	
+
 	// Verify Zeroconf was used as fallback
 	successfulZeroconf.AssertCalled(s.T(), "Start", false, mock.Anything)
 }
@@ -383,37 +385,37 @@ func (s *MdnsSuite) Test_ProviderFallback_AvahiToZeroconf() {
 func (s *MdnsSuite) Test_ProviderFallback_BothFail() {
 	// Test error when both Avahi and Zeroconf fail
 	s.sut.Shutdown()
-	
+
 	// Create manager with MdnsProviderSelectionAll
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAll)
-	
+
 	// Create failing mock providers
 	failingAvahi := mocks.NewMdnsProviderInterface(s.T())
 	failingZeroconf := mocks.NewMdnsProviderInterface(s.T())
-	
+
 	// Setup mock expectations
 	failingAvahi.On("Start", false, mock.Anything).Return(false)
 	failingAvahi.On("Shutdown").Return()
-	
+
 	failingZeroconf.On("Start", false, mock.Anything).Return(false)
 	failingZeroconf.On("Shutdown").Return()
-	
+
 	// Set custom provider factory
 	factory := &ProviderFactory{
 		NewAvahi:    func([]int32) api.MdnsProviderInterface { return failingAvahi },
 		NewZeroconf: func([]net.Interface) api.MdnsProviderInterface { return failingZeroconf },
 	}
 	s.sut.SetProviderFactory(factory)
-	
+
 	// Start should fail with appropriate error
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
 	assert.Equal(s.T(), "no mDNS provider available - both Avahi and Zeroconf failed to initialize (interfaces: 0)", err.Error())
-	
+
 	// Verify both providers were attempted
 	failingAvahi.AssertCalled(s.T(), "Start", false, mock.Anything)
 	failingAvahi.AssertCalled(s.T(), "Shutdown")
@@ -423,34 +425,34 @@ func (s *MdnsSuite) Test_ProviderFallback_BothFail() {
 func (s *MdnsSuite) Test_ProviderAvahiOnly_Success() {
 	// Test AvahiOnly selection with successful provider
 	s.sut.Shutdown()
-	
+
 	// Create manager with MdnsProviderSelectionAvahiOnly
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAvahiOnly)
-	
+
 	// Create successful mock provider
 	successfulAvahi := mocks.NewMdnsProviderInterface(s.T())
-	
+
 	// Setup mock expectations
 	successfulAvahi.On("Start", true, mock.Anything).Return(true)
 	successfulAvahi.On("Announce", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	successfulAvahi.On("Unannounce").Return()
 	successfulAvahi.On("Shutdown").Return()
-	
+
 	// Set custom provider factory
 	factory := &ProviderFactory{
 		NewAvahi:    func([]int32) api.MdnsProviderInterface { return successfulAvahi },
 		NewZeroconf: func([]net.Interface) api.MdnsProviderInterface { return nil }, // Should not be called
 	}
 	s.sut.SetProviderFactory(factory)
-	
+
 	// Start should succeed
 	err := s.sut.Start(s.mdnsSearch)
 	assert.Nil(s.T(), err)
-	
+
 	// Verify Avahi provider is used
 	assert.Equal(s.T(), successfulAvahi, s.sut.mdnsProvider)
 	successfulAvahi.AssertCalled(s.T(), "Start", true, mock.Anything)
@@ -459,34 +461,34 @@ func (s *MdnsSuite) Test_ProviderAvahiOnly_Success() {
 func (s *MdnsSuite) Test_ProviderZeroconfOnly_Success() {
 	// Test ZeroconfOnly selection with successful provider
 	s.sut.Shutdown()
-	
+
 	// Create manager with MdnsProviderSelectionGoZeroConfOnly
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionGoZeroConfOnly)
-	
+
 	// Create successful mock provider
 	successfulZeroconf := mocks.NewMdnsProviderInterface(s.T())
-	
+
 	// Setup mock expectations
 	successfulZeroconf.On("Start", true, mock.Anything).Return(true)
 	successfulZeroconf.On("Announce", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	successfulZeroconf.On("Unannounce").Return()
 	successfulZeroconf.On("Shutdown").Return()
-	
+
 	// Set custom provider factory
 	factory := &ProviderFactory{
 		NewAvahi:    func([]int32) api.MdnsProviderInterface { return nil }, // Should not be called
 		NewZeroconf: func([]net.Interface) api.MdnsProviderInterface { return successfulZeroconf },
 	}
 	s.sut.SetProviderFactory(factory)
-	
+
 	// Start should succeed
 	err := s.sut.Start(s.mdnsSearch)
 	assert.Nil(s.T(), err)
-	
+
 	// Verify Zeroconf provider is used
 	assert.Equal(s.T(), successfulZeroconf, s.sut.mdnsProvider)
 	successfulZeroconf.AssertCalled(s.T(), "Start", true, mock.Anything)
@@ -495,14 +497,14 @@ func (s *MdnsSuite) Test_ProviderZeroconfOnly_Success() {
 func (s *MdnsSuite) Test_Start_InterfaceResolutionError() {
 	// Test error handling when interface resolution fails
 	s.sut.Shutdown()
-	
+
 	// Create manager with invalid interface name
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, []string{"nonexistentinterface"}, MdnsProviderSelectionAll)
-	
+
 	// Start should fail due to invalid interface
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
@@ -512,31 +514,31 @@ func (s *MdnsSuite) Test_Start_InterfaceResolutionError() {
 func (s *MdnsSuite) Test_Start_AnnouncementFailure() {
 	// Test error handling when announcement fails during startup
 	s.sut.Shutdown()
-	
+
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAll)
-	
+
 	// Create provider that starts successfully but fails to announce
 	successfulProvider := mocks.NewMdnsProviderInterface(s.T())
 	successfulProvider.On("Start", false, mock.Anything).Return(true)
 	successfulProvider.On("Announce", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("announcement failed"))
 	successfulProvider.On("Shutdown").Return()
-	
+
 	// Set custom provider factory
 	factory := &ProviderFactory{
 		NewAvahi:    func([]int32) api.MdnsProviderInterface { return successfulProvider },
 		NewZeroconf: func([]net.Interface) api.MdnsProviderInterface { return nil },
 	}
 	s.sut.SetProviderFactory(factory)
-	
+
 	// Start should fail due to announcement failure
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
 	assert.Equal(s.T(), "announcement failed", err.Error())
-	
+
 	// Verify provider was started but announcement failed
 	successfulProvider.AssertCalled(s.T(), "Start", false, mock.Anything)
 	successfulProvider.AssertCalled(s.T(), "Announce", mock.Anything, mock.Anything, mock.Anything)
@@ -545,30 +547,30 @@ func (s *MdnsSuite) Test_Start_AnnouncementFailure() {
 func (s *MdnsSuite) Test_ProviderAvahiOnly_Failure() {
 	// Test AvahiOnly selection when provider fails to start
 	s.sut.Shutdown()
-	
+
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAvahiOnly)
-	
+
 	// Create failing provider
 	failingAvahi := mocks.NewMdnsProviderInterface(s.T())
 	failingAvahi.On("Start", true, mock.Anything).Return(false)
 	failingAvahi.On("Shutdown").Return()
-	
+
 	// Set custom provider factory
 	factory := &ProviderFactory{
 		NewAvahi:    func([]int32) api.MdnsProviderInterface { return failingAvahi },
 		NewZeroconf: func([]net.Interface) api.MdnsProviderInterface { return nil },
 	}
 	s.sut.SetProviderFactory(factory)
-	
+
 	// Start should fail because provider fails to start
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
 	assert.Equal(s.T(), "avahi provider failed to start (interfaces: 1, autoReconnect: true)", err.Error())
-	
+
 	// Verify Avahi was attempted
 	failingAvahi.AssertCalled(s.T(), "Start", true, mock.Anything)
 }
@@ -576,30 +578,30 @@ func (s *MdnsSuite) Test_ProviderAvahiOnly_Failure() {
 func (s *MdnsSuite) Test_ProviderZeroconfOnly_Failure() {
 	// Test ZeroconfOnly selection when provider fails to start
 	s.sut.Shutdown()
-	
+
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionGoZeroConfOnly)
-	
+
 	// Create failing provider
 	failingZeroconf := mocks.NewMdnsProviderInterface(s.T())
 	failingZeroconf.On("Start", true, mock.Anything).Return(false)
 	failingZeroconf.On("Shutdown").Return()
-	
+
 	// Set custom provider factory
 	factory := &ProviderFactory{
 		NewAvahi:    func([]int32) api.MdnsProviderInterface { return nil },
 		NewZeroconf: func([]net.Interface) api.MdnsProviderInterface { return failingZeroconf },
 	}
 	s.sut.SetProviderFactory(factory)
-	
+
 	// Start should fail because provider fails to start
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
 	assert.Equal(s.T(), "zeroconf provider failed to start (interfaces: 0, autoReconnect: true)", err.Error())
-	
+
 	// Verify Zeroconf was attempted
 	failingZeroconf.AssertCalled(s.T(), "Start", true, mock.Anything)
 }
@@ -607,16 +609,16 @@ func (s *MdnsSuite) Test_ProviderZeroconfOnly_Failure() {
 func (s *MdnsSuite) Test_Start_NilProviderFactory() {
 	// Test error handling when provider factory is nil
 	s.sut.Shutdown()
-	
+
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAll)
-	
+
 	// Set factory to nil
 	s.sut.SetProviderFactory(nil)
-	
+
 	// Start should fail with appropriate error
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
@@ -626,16 +628,16 @@ func (s *MdnsSuite) Test_Start_NilProviderFactory() {
 func (s *MdnsSuite) Test_Start_InvalidProviderSelection() {
 	// Test error handling for invalid provider selection
 	s.sut.Shutdown()
-	
+
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAll)
-	
+
 	// Set invalid provider selection
 	s.sut.providerSelection = MdnsProviderSelection(999)
-	
+
 	// Start should fail with appropriate error
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
@@ -645,20 +647,20 @@ func (s *MdnsSuite) Test_Start_InvalidProviderSelection() {
 func (s *MdnsSuite) Test_Start_NilProviderCreation() {
 	// Test error handling when provider factory returns nil
 	s.sut.Shutdown()
-	
+
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAvahiOnly)
-	
+
 	// Set factory that returns nil
 	factory := &ProviderFactory{
 		NewAvahi:    func([]int32) api.MdnsProviderInterface { return nil },
 		NewZeroconf: func([]net.Interface) api.MdnsProviderInterface { return nil },
 	}
 	s.sut.SetProviderFactory(factory)
-	
+
 	// Start should fail with appropriate error
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
@@ -668,20 +670,20 @@ func (s *MdnsSuite) Test_Start_NilProviderCreation() {
 func (s *MdnsSuite) Test_Start_NilFactoryFunction() {
 	// Test error handling when factory function is nil
 	s.sut.Shutdown()
-	
+
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAvahiOnly)
-	
+
 	// Set factory with nil function
 	factory := &ProviderFactory{
 		NewAvahi:    nil,
 		NewZeroconf: func([]net.Interface) api.MdnsProviderInterface { return nil },
 	}
 	s.sut.SetProviderFactory(factory)
-	
+
 	// Start should fail with appropriate error
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
@@ -691,29 +693,29 @@ func (s *MdnsSuite) Test_Start_NilFactoryFunction() {
 func (s *MdnsSuite) Test_ImprovedFallbackErrorMessages() {
 	// Test that improved error messages are returned with fallback
 	s.sut.Shutdown()
-	
+
 	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAll)
-	
+
 	// Create failing providers
 	failingAvahi := mocks.NewMdnsProviderInterface(s.T())
 	failingZeroconf := mocks.NewMdnsProviderInterface(s.T())
-	
+
 	failingAvahi.On("Start", false, mock.Anything).Return(false)
 	failingAvahi.On("Shutdown").Return()
-	
+
 	failingZeroconf.On("Start", false, mock.Anything).Return(false)
 	failingZeroconf.On("Shutdown").Return()
-	
+
 	factory := &ProviderFactory{
 		NewAvahi:    func([]int32) api.MdnsProviderInterface { return failingAvahi },
 		NewZeroconf: func([]net.Interface) api.MdnsProviderInterface { return failingZeroconf },
 	}
 	s.sut.SetProviderFactory(factory)
-	
+
 	// Start should fail with improved error message
 	err := s.sut.Start(s.mdnsSearch)
 	assert.NotNil(s.T(), err)
@@ -724,7 +726,7 @@ func (s *MdnsSuite) Test_AnnounceMdnsEntry_ValidationErrors() {
 	// Test validation errors in AnnounceMdnsEntry
 	validProvider := mocks.NewMdnsProviderInterface(s.T())
 	validProvider.On("Shutdown").Return()
-	
+
 	// Test empty identifier
 	s.sut.Shutdown()
 	s.sut = NewMDNS("", "brand", "model", "EnergyManagementSystem",
@@ -733,11 +735,11 @@ func (s *MdnsSuite) Test_AnnounceMdnsEntry_ValidationErrors() {
 		"", "serviceName",
 		4729, nil, MdnsProviderSelectionAll)
 	s.sut.mdnsProvider = validProvider // Set provider directly to bypass provider check
-	
+
 	err := s.sut.AnnounceMdnsEntry()
 	assert.NotNil(s.T(), err)
 	assert.Contains(s.T(), err.Error(), "service identifier is empty")
-	
+
 	// Test empty SKI
 	s.sut = NewMDNS("", "brand", "model", "EnergyManagementSystem",
 		"12345",
@@ -745,11 +747,11 @@ func (s *MdnsSuite) Test_AnnounceMdnsEntry_ValidationErrors() {
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAll)
 	s.sut.mdnsProvider = validProvider
-	
+
 	err = s.sut.AnnounceMdnsEntry()
 	assert.NotNil(s.T(), err)
 	assert.Contains(s.T(), err.Error(), "SKI is empty")
-	
+
 	// Test empty service name
 	s.sut = NewMDNS("testski", "brand", "model", "EnergyManagementSystem",
 		"12345",
@@ -757,11 +759,11 @@ func (s *MdnsSuite) Test_AnnounceMdnsEntry_ValidationErrors() {
 		"shipid", "",
 		4729, nil, MdnsProviderSelectionAll)
 	s.sut.mdnsProvider = validProvider
-	
+
 	err = s.sut.AnnounceMdnsEntry()
 	assert.NotNil(s.T(), err)
 	assert.Contains(s.T(), err.Error(), "service name is empty")
-	
+
 	// Test invalid port
 	s.sut = NewMDNS("testski", "brand", "model", "EnergyManagementSystem",
 		"12345",
@@ -769,7 +771,7 @@ func (s *MdnsSuite) Test_AnnounceMdnsEntry_ValidationErrors() {
 		"shipid", "serviceName",
 		0, nil, MdnsProviderSelectionAll)
 	s.sut.mdnsProvider = validProvider
-	
+
 	err = s.sut.AnnounceMdnsEntry()
 	assert.NotNil(s.T(), err)
 	assert.Contains(s.T(), err.Error(), "invalid port")
@@ -778,14 +780,14 @@ func (s *MdnsSuite) Test_AnnounceMdnsEntry_ValidationErrors() {
 func (s *MdnsSuite) Test_AnnounceMdnsEntry_NoProvider() {
 	// Test announcement when no provider is available
 	s.sut.Shutdown()
-	
+
 	s.sut = NewMDNS("testski", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAll)
 	// Don't set any provider
-	
+
 	err := s.sut.AnnounceMdnsEntry()
 	assert.NotNil(s.T(), err)
 	assert.Equal(s.T(), "cannot announce mDNS entry: no provider available (selection: 0)", err.Error())
@@ -800,24 +802,24 @@ func (s *MdnsSuite) Test_Shutdown_DefensiveProgramming() {
 	validProvider.On("Shutdown").Maybe().Run(func(args mock.Arguments) {
 		panic("test panic in shutdown")
 	})
-	
+
 	manager := NewMDNS("testski", "brand", "model", "EnergyManagementSystem",
 		"12345",
 		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
 		"shipid", "serviceName",
 		4729, nil, MdnsProviderSelectionAll)
 	manager.SetTestProvider(validProvider)
-	
+
 	// Set service as announced directly for testing
 	manager.muxAnnounced.Lock()
 	manager.isAnnounced = true
 	manager.muxAnnounced.Unlock()
-	
+
 	// Shutdown should not panic even if provider methods panic
 	assert.NotPanics(s.T(), func() {
 		manager.Shutdown()
 	})
-	
+
 	// Verify provider is cleaned up (defensive shutdown succeeded)
 	assert.Nil(s.T(), manager.mdnsProvider)
 }

@@ -14,17 +14,17 @@ var _ api.MdnsReportInterface = (*Hub)(nil)
 func (h *Hub) ReportMdnsEntries(entries map[string]*api.MdnsEntry, newEntries bool) {
 	var mdnsEntries []*api.MdnsEntry
 
-	for ski, entry := range entries {
+	for _, entry := range entries {
 		mdnsEntries = append(mdnsEntries, entry)
 
 		// check if this ski is already connected
-		if h.isSkiConnected(ski) {
+		if h.isSkiConnected(entry.Ski) {
 			continue
 		}
 
 		// Check if the remote service is paired or queued for connection
-		service := h.ServiceForSKI(ski)
-		if !h.IsRemoteServiceForSKIPaired(ski) &&
+		service := h.ServiceForSKI(entry.Ski)
+		if !h.IsRemoteServiceForSKIPaired(entry.Ski) &&
 			service.ConnectionStateDetail().State() != api.ConnectionStateQueued {
 			continue
 		}
@@ -38,7 +38,7 @@ func (h *Hub) ReportMdnsEntries(entries map[string]*api.MdnsEntry, newEntries bo
 			}
 		}
 
-		h.coordinateConnectionInitations(ski, entry)
+		h.coordinateConnectionInitations(entry.Ski, entry)
 	}
 
 	sort.Slice(mdnsEntries, func(i, j int) bool {
