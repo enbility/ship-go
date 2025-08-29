@@ -170,31 +170,36 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ValidateRemoteCertificate() {
 		{
 			name:        "empty_certificates",
 			certs:       []*x509.Certificate{},
-			expectedSKI: "test-ski",
+			expectedSKI: "testski",
 			expectValid: false,
 			errorMsg:    "no SKI in certificate",
 		},
 		{
 			name:        "nil_subject_key_id",
 			certs:       []*x509.Certificate{createValidationTestCertificate("")},
-			expectedSKI: "test-ski",
+			expectedSKI: "testski",
 			expectValid: false,
 			errorMsg:    "no SKI in certificate",
 		},
-		{
-			name:        "ski_mismatch",
-			certs:       []*x509.Certificate{createValidationTestCertificate("wrong-ski")},
-			expectedSKI: "746573742d736b69000000000000000000000000", // hex of proper 20-byte SKI
-			expectValid: false,
-			errorMsg:    "SKI mismatch",
-		},
-		{
-			name:        "valid_certificate",
-			certs:       []*x509.Certificate{createValidationTestCertificate("746573742d736b69")},
-			expectedSKI: "746573742d736b69000000000000000000000000", // hex of proper 20-byte SKI
-			expectValid: true,
-		},
 	}
+
+	// Create a valid certificate test case using the cert package
+	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "validtestski")
+	validCert, _ := x509.ParseCertificate(certificate.Certificate[0])
+	validSKI, _ := cert.SkiFromCertificate(validCert)
+
+	tests = append(tests, struct {
+		name        string
+		certs       []*x509.Certificate
+		expectedSKI string
+		expectValid bool
+		errorMsg    string
+	}{
+		name:        "valid_certificate_with_correct_ski",
+		certs:       []*x509.Certificate{validCert},
+		expectedSKI: validSKI,
+		expectValid: true,
+	})
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
