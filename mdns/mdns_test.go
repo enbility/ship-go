@@ -1089,43 +1089,9 @@ func (s *MdnsSuite) Test_UnannouncePairingService_NilProvider() {
 	assert.Equal(s.T(), api.ErrPairingNotActive, err)
 }
 
-func (s *MdnsSuite) Test_UnannouncePairingService_InvalidInstanceID() {
-	// Test when instanceID is invalid/non-numeric - should return error
-	// First announce a service to set up a pairing instance
-	validProvider := mocks.NewMdnsProviderInterface(s.T())
-	validProvider.EXPECT().AnnounceService(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("1", nil)
-	validProvider.EXPECT().Shutdown().Return()
-
-	s.sut.SetMdnsProvider(validProvider)
-
-	// Announce a service to get an instance in the map
-	validTxtRecord := &api.ShipPairingTXT{
-		TxtVers:    "1",
-		ParType:    "fpSha256",
-		ForId:      "forDeviceId",
-		ForPar:     "forDeviceFingerprint",
-		TrustId:    "trustDeviceId",
-		TrustPar:   "trustDeviceFingerprint",
-		TrustCurve: "secp256r1",
-		Type:       "addCu",
-		TrustNonce: "0123456789abcdef0123456789abcdef",
-		Alg:        "hmacSha256",
-		Digest:     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-	}
-	instanceID, err := s.sut.AnnouncePairingService(validTxtRecord)
-	assert.Nil(s.T(), err)
-	assert.NotEmpty(s.T(), instanceID)
-
-	// Manually add a non-numeric instance ID to the map to test the validation path
-	s.sut.pairingInstancesMux.Lock()
-	s.sut.pairingInstances["invalid_non_numeric"] = validTxtRecord
-	s.sut.pairingInstancesMux.Unlock()
-
-	// Now test with invalid instance ID - this should pass the "exists" check but fail numeric validation
-	err = s.sut.UnannouncePairingService("invalid_non_numeric")
-	assert.NotNil(s.T(), err)
-	assert.Contains(s.T(), err.Error(), "invalid instance ID")
-}
+// Test_UnannouncePairingService_InvalidInstanceID - REMOVED
+// This test is no longer relevant since the implementation now uses provider instance IDs
+// which can be any string (not just numeric), so there's no "invalid instance ID" validation.
 
 func (s *MdnsSuite) Test_UnannouncePairingService_InstanceNotFound() {
 	// Test when instanceID is not found - should return error
@@ -1195,6 +1161,9 @@ func (s *MdnsSuite) Test_Start_RestartAnnouncementFailure() {
 
 	// Replace the provider with failing one - this simulates provider failure after initial success
 	s.sut.mdnsProvider = failingProvider
+	
+	// Reset announced state so the second Start() call will attempt to announce again
+	s.sut.setIsServiceAnnounce(false)
 
 	// Call Start again - this should trigger the restart path (isStarted=true) and fail on announcement
 	err = s.sut.Start(api.PairingModeBoth, s.mdnsSearch)
@@ -1371,5 +1340,6 @@ func (s *MdnsSuite) Test_DeviceGetters() {
 	assert.Equal(s.T(), "brand", s.sut.DeviceBrand())
 	assert.Equal(s.T(), "model", s.sut.DeviceModel())
 	assert.Equal(s.T(), "12345", s.sut.DeviceSerial())
+	assert.Equal(s.T(), "EnergyManagementSystem", s.sut.DeviceType())
 	assert.Equal(s.T(), []api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem}, s.sut.DeviceCategories())
 }

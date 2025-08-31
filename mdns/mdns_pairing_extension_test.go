@@ -105,10 +105,10 @@ func (suite *MdnsPairingExtensionTestSuite) TestUnannouncePairingService() {
 	}
 
 	// Set up mock expectations for announce then unannounce
-	// AnnouncePairingService returns simple instanceID ("1") but calls AnnounceService with full service name
+	// AnnouncePairingService calls AnnounceService and returns the provider's instance ID
 	suite.mockProvider.EXPECT().AnnounceService("_shippairing._tcp", "v1.0-pairing#1", 4712, mock.AnythingOfType("[]string")).Return("provider-instance-id", nil).Once()
-	// UnannouncePairingService takes simple instanceID but calls UnannounceService with reconstructed full service name
-	suite.mockProvider.EXPECT().UnannounceService("v1.0-pairing#1").Return(nil).Once()
+	// UnannouncePairingService takes provider's instance ID and passes it directly to UnannounceService
+	suite.mockProvider.EXPECT().UnannounceService("provider-instance-id").Return(nil).Once()
 
 	// Announce to get instance ID
 	instanceID, err := suite.sut.AnnouncePairingService(txtRecord)
@@ -205,8 +205,8 @@ func (suite *MdnsPairingExtensionTestSuite) TestDualServiceState() {
 	// Test 3: State independence - pairing service state should be true after announcement
 	assert.True(suite.T(), suite.sut.IsPairingServiceAnnounced(), "Pairing service should be announced after successful call")
 
-	// Test 4: Remove pairing service independently - UnannounceService expects full service name
-	suite.mockProvider.EXPECT().UnannounceService("v1.0-pairing#1").Return(nil).Once()
+	// Test 4: Remove pairing service independently - UnannounceService expects provider instance ID
+	suite.mockProvider.EXPECT().UnannounceService("1").Return(nil).Once()
 	err = suite.sut.UnannouncePairingService(pairingInstanceID)
 	assert.NoError(suite.T(), err, "Should remove pairing service independently")
 }
@@ -261,9 +261,9 @@ func (suite *MdnsPairingExtensionTestSuite) TestProviderDelegation() {
 	assert.NoError(suite.T(), err, "AnnouncePairingService should delegate correctly")
 	assert.NotEmpty(suite.T(), delegationInstanceID, "Should return non-empty instance ID")
 
-	// Test 2: UnannouncePairingService calls provider.UnannounceService(reconstructed service name)
-	// UnannouncePairingService takes instanceID "1" but calls provider with full service name "v1.0-pairing#1"
-	suite.mockProvider.EXPECT().UnannounceService("v1.0-pairing#1").Return(nil).Once()
+	// Test 2: UnannouncePairingService calls provider.UnannounceService with provider's instance ID
+	// UnannouncePairingService takes provider instanceID "1" and passes it directly to provider
+	suite.mockProvider.EXPECT().UnannounceService("1").Return(nil).Once()
 
 	err = suite.sut.UnannouncePairingService(delegationInstanceID)
 	assert.NoError(suite.T(), err, "UnannouncePairingService should delegate correctly")

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ type HubConnectionsDecomposedTestSuite struct {
 
 func (s *HubConnectionsDecomposedTestSuite) SetupTest() {
 	s.localSKI = "test-local-ski"
-	s.localService = api.NewServiceDetails(s.localSKI)
+	s.localService = api.NewServiceDetails(s.localSKI, "", "")
 
 	cert, err := cert.CreateCertificate("test", "test", "DE", "test")
 	require.NoError(s.T(), err)
@@ -40,7 +41,8 @@ func (s *HubConnectionsDecomposedTestSuite) SetupTest() {
 	s.mockMdns = mocks.NewMdnsInterface(s.T())
 	s.mockReader = mocks.NewHubReaderInterface(s.T())
 
-	s.hub = NewHub(s.mockReader, s.mockMdns, 0, cert, s.localService)
+	s.hub, err = newTestHub(s.mockReader, s.mockMdns, 0, cert, s.localService, nil)
+	assert.NoError(s.T(), err)
 }
 
 func TestHubConnectionsDecomposedTestSuite(t *testing.T) {
@@ -158,61 +160,307 @@ func createValidationTestCertificate(skiHex string) *x509.Certificate {
 	return cert
 }
 
-// Test validateRemoteCertificate function
+// Test validateRemoteCertificate function - comprehensive coverage
 func (s *HubConnectionsDecomposedTestSuite) Test_ValidateRemoteCertificate() {
+	// Create valid certificates for testing
+	validCertificate, err := cert.CreateCertificate("unit", "org", "DE", "validtestski")
+	require.NoError(s.T(), err)
+	validCert, err := x509.ParseCertificate(validCertificate.Certificate[0])
+	require.NoError(s.T(), err)
+	validSKI, err := cert.SkiFromCertificate(validCert)
+	require.NoError(s.T(), err)
+	validFingerprint, err := cert.FingerprintFromCertificate(validCert)
+	require.NoError(s.T(), err)
+
+	// Create another valid certificate for mismatch tests
+	otherCertificate, err := cert.CreateCertificate("other", "org", "DE", "othertestski")
+	require.NoError(s.T(), err)
+	otherCert, err := x509.ParseCertificate(otherCertificate.Certificate[0])
+	require.NoError(s.T(), err)
+	otherSKI, err := cert.SkiFromCertificate(otherCert)
+	require.NoError(s.T(), err)
+	otherFingerprint, err := cert.FingerprintFromCertificate(otherCert)
+	require.NoError(s.T(), err)
+
 	tests := []struct {
-		name        string
-		certs       []*x509.Certificate
-		expectedSKI string
-		expectValid bool
-		errorMsg    string
+		name                string
+		certs               []*x509.Certificate
+		expectedSKI         string
+		expectedFingerprint string
+		expectValid         bool
+		errorMsg            string
+		expectedReturnSKI   string
+		expectedReturnFP    string
 	}{
+		// Nil/Empty certificate chain tests (3 cases)
 		{
-			name:        "empty_certificates",
-			certs:       []*x509.Certificate{},
-			expectedSKI: "testski",
-			expectValid: false,
-			errorMsg:    "no SKI in certificate",
+			name:                "empty_certificates",
+			certs:               []*x509.Certificate{},
+			expectedSKI:         "testski",
+			expectedFingerprint: "",
+			expectValid:         false,
+			errorMsg:            "no SKI in certificate",
 		},
 		{
-			name:        "nil_subject_key_id",
-			certs:       []*x509.Certificate{createValidationTestCertificate("")},
-			expectedSKI: "testski",
-			expectValid: false,
-			errorMsg:    "no SKI in certificate",
+			name:                "nil_certificates",
+			certs:               nil,
+			expectedSKI:         "testski",
+			expectedFingerprint: "",
+			expectValid:         false,
+			errorMsg:            "no SKI in certificate",
+		},
+		{
+			name:                "nil_subject_key_id",
+			certs:               []*x509.Certificate{createValidationTestCertificate("")},
+			expectedSKI:         "testski",
+			expectedFingerprint: "",
+			expectValid:         false,
+			errorMsg:            "no SKI in certificate",
+		},
+
+		// Valid certificate scenarios (4 cases)
+		{
+			name:                "valid_certificate_no_expectations",
+			certs:               []*x509.Certificate{validCert},
+			expectedSKI:         "",
+			expectedFingerprint: "",
+			expectValid:         true,
+			expectedReturnSKI:   validSKI,
+			expectedReturnFP:    validFingerprint,
+		},
+		{
+			name:                "valid_certificate_with_correct_ski",
+			certs:               []*x509.Certificate{validCert},
+			expectedSKI:         validSKI,
+			expectedFingerprint: "",
+			expectValid:         true,
+			expectedReturnSKI:   validSKI,
+			expectedReturnFP:    validFingerprint,
+		},
+		{
+			name:                "valid_certificate_with_correct_fingerprint",
+			certs:               []*x509.Certificate{validCert},
+			expectedSKI:         "",
+			expectedFingerprint: validFingerprint,
+			expectValid:         true,
+			expectedReturnSKI:   validSKI,
+			expectedReturnFP:    validFingerprint,
+		},
+		{
+			name:                "valid_certificate_with_both_ski_and_fingerprint",
+			certs:               []*x509.Certificate{validCert},
+			expectedSKI:         validSKI,
+			expectedFingerprint: validFingerprint,
+			expectValid:         true,
+			expectedReturnSKI:   validSKI,
+			expectedReturnFP:    validFingerprint,
+		},
+
+		// SKI mismatch tests (2 cases)
+		{
+			name:                "ski_mismatch",
+			certs:               []*x509.Certificate{validCert},
+			expectedSKI:         "wrong-ski",
+			expectedFingerprint: "",
+			expectValid:         false,
+			errorMsg:            "SKI mismatch",
+		},
+		{
+			name:                "ski_mismatch_with_correct_fingerprint",
+			certs:               []*x509.Certificate{validCert},
+			expectedSKI:         otherSKI,
+			expectedFingerprint: validFingerprint,
+			expectValid:         false,
+			errorMsg:            "SKI mismatch",
+		},
+
+		// Fingerprint mismatch tests (2 cases)
+		{
+			name:                "fingerprint_mismatch",
+			certs:               []*x509.Certificate{validCert},
+			expectedSKI:         "",
+			expectedFingerprint: "wrong-fingerprint",
+			expectValid:         false,
+			errorMsg:            "fingerprint mismatch",
+		},
+		{
+			name:                "fingerprint_mismatch_with_correct_ski",
+			certs:               []*x509.Certificate{validCert},
+			expectedSKI:         validSKI,
+			expectedFingerprint: otherFingerprint,
+			expectValid:         false,
+			errorMsg:            "fingerprint mismatch",
+		},
+
+		// Multiple certificates - only first is checked (1 case)
+		{
+			name:                "multiple_certificates_first_valid",
+			certs:               []*x509.Certificate{validCert, otherCert},
+			expectedSKI:         validSKI,
+			expectedFingerprint: validFingerprint,
+			expectValid:         true,
+			expectedReturnSKI:   validSKI,
+			expectedReturnFP:    validFingerprint,
+		},
+
+		// Edge case - empty expectations match anything (1 case)
+		{
+			name:                "empty_expectations_always_match",
+			certs:               []*x509.Certificate{otherCert},
+			expectedSKI:         "",
+			expectedFingerprint: "",
+			expectValid:         true,
+			expectedReturnSKI:   otherSKI,
+			expectedReturnFP:    otherFingerprint,
 		},
 	}
 
-	// Create a valid certificate test case using the cert package
-	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "validtestski")
-	validCert, _ := x509.ParseCertificate(certificate.Certificate[0])
-	validSKI, _ := cert.SkiFromCertificate(validCert)
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			result := validateRemoteCertificate(tt.certs, tt.expectedSKI, tt.expectedFingerprint)
 
-	tests = append(tests, struct {
+			assert.Equal(s.T(), tt.expectValid, result.Valid, "Valid field mismatch")
+
+			if tt.expectValid {
+				assert.NoError(s.T(), result.Error, "Should not have error for valid result")
+				assert.Equal(s.T(), tt.expectedReturnSKI, result.RemoteSKI, "Returned SKI mismatch")
+				assert.Equal(s.T(), tt.expectedReturnFP, result.RemoteFingerprint, "Returned fingerprint mismatch")
+			} else {
+				assert.Error(s.T(), result.Error, "Should have error for invalid result")
+				assert.Contains(s.T(), result.Error.Error(), tt.errorMsg, "Error message mismatch")
+				assert.Empty(s.T(), result.RemoteSKI, "SKI should be empty on error")
+				assert.Empty(s.T(), result.RemoteFingerprint, "Fingerprint should be empty on error")
+			}
+		})
+	}
+}
+
+// Test validateRemoteCertificate - additional edge cases and error conditions
+func (s *HubConnectionsDecomposedTestSuite) Test_ValidateRemoteCertificate_ErrorConditions() {
+	// Create malformed certificate scenarios that would cause parsing errors
+	tests := []struct {
 		name        string
-		certs       []*x509.Certificate
+		setupCert   func() *x509.Certificate
 		expectedSKI string
 		expectValid bool
 		errorMsg    string
 	}{
-		name:        "valid_certificate_with_correct_ski",
-		certs:       []*x509.Certificate{validCert},
-		expectedSKI: validSKI,
-		expectValid: true,
-	})
+		{
+			name: "certificate_with_malformed_ski_bytes",
+			setupCert: func() *x509.Certificate {
+				// Create certificate with invalid SKI format (too short)
+				cert := createValidationTestCertificate("valid")
+				// Manually set an invalid SKI that would cause cert.SkiFromCertificate to fail
+				cert.SubjectKeyId = []byte{0x01, 0x02} // Too short for proper SKI
+				return cert
+			},
+			expectedSKI: "test-ski",
+			expectValid: false,
+			errorMsg:    "invalid SKI format",
+		},
+		{
+			name: "certificate_with_valid_but_wrong_ski_format_fails",
+			setupCert: func() *x509.Certificate {
+				// The createValidationTestCertificate with "valid" parameter creates a certificate
+				// with a malformed SKI that causes cert.SkiFromCertificate to fail
+				return createValidationTestCertificate("valid")
+			},
+			expectedSKI: "",
+			expectValid: false, // This actually fails due to SKI format validation
+			errorMsg:    "invalid SKI format",
+		},
+	}
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			result := validateRemoteCertificate(tt.certs, tt.expectedSKI)
+			cert := tt.setupCert()
+			result := validateRemoteCertificate([]*x509.Certificate{cert}, tt.expectedSKI, "")
 
-			assert.Equal(s.T(), tt.expectValid, result.Valid)
-			if tt.expectValid {
-				assert.NoError(s.T(), result.Error)
-				assert.Equal(s.T(), tt.expectedSKI, result.RemoteSKI)
-			} else {
-				assert.Error(s.T(), result.Error)
-				assert.Contains(s.T(), result.Error.Error(), tt.errorMsg)
+			assert.Equal(s.T(), tt.expectValid, result.Valid, "Valid field mismatch")
+			if !tt.expectValid && tt.errorMsg != "" {
+				assert.Error(s.T(), result.Error, "Should have error for invalid result")
+				assert.Contains(s.T(), result.Error.Error(), tt.errorMsg, "Error message mismatch")
+			} else if tt.expectValid {
+				assert.NoError(s.T(), result.Error, "Should not have error for valid result")
 			}
+		})
+	}
+}
+
+// Test validateRemoteCertificate - comprehensive boundary conditions
+func (s *HubConnectionsDecomposedTestSuite) Test_ValidateRemoteCertificate_BoundaryConditions() {
+	// Create valid certificate for boundary testing
+	validCertificate, err := cert.CreateCertificate("boundary", "test", "DE", "boundaryski")
+	require.NoError(s.T(), err)
+	validCert, err := x509.ParseCertificate(validCertificate.Certificate[0])
+	require.NoError(s.T(), err)
+	validSKI, err := cert.SkiFromCertificate(validCert)
+	require.NoError(s.T(), err)
+	validFingerprint, err := cert.FingerprintFromCertificate(validCert)
+	require.NoError(s.T(), err)
+
+	tests := []struct {
+		name                string
+		certs               []*x509.Certificate
+		expectedSKI         string
+		expectedFingerprint string
+		expectValid         bool
+		description         string
+	}{
+		{
+			name:                "case_sensitive_ski_mismatch",
+			certs:               []*x509.Certificate{validCert},
+			expectedSKI:         strings.ToUpper(validSKI), // Different case
+			expectedFingerprint: "",
+			expectValid:         false,
+			description:         "SKI comparison should be case sensitive",
+		},
+		{
+			name:                "case_sensitive_fingerprint_mismatch",
+			certs:               []*x509.Certificate{validCert},
+			expectedSKI:         "",
+			expectedFingerprint: strings.ToLower(validFingerprint), // Different case (lowercase when expecting uppercase)
+			expectValid:         false,
+			description:         "Fingerprint comparison should be case sensitive",
+		},
+		{
+			name:                "whitespace_in_ski",
+			certs:               []*x509.Certificate{validCert},
+			expectedSKI:         " " + validSKI + " ", // With whitespace
+			expectedFingerprint: "",
+			expectValid:         false,
+			description:         "Whitespace should cause mismatch",
+		},
+		{
+			name:                "whitespace_in_fingerprint",
+			certs:               []*x509.Certificate{validCert},
+			expectedSKI:         "",
+			expectedFingerprint: " " + validFingerprint + " ", // With whitespace
+			expectValid:         false,
+			description:         "Whitespace should cause mismatch",
+		},
+		{
+			name:                "exact_match_required",
+			certs:               []*x509.Certificate{validCert},
+			expectedSKI:         validSKI[:len(validSKI)-1], // Truncated
+			expectedFingerprint: "",
+			expectValid:         false,
+			description:         "Partial matches should fail",
+		},
+		{
+			name:                "multiple_certs_only_first_checked",
+			certs:               []*x509.Certificate{validCert, createValidationTestCertificate("other")},
+			expectedSKI:         validSKI,
+			expectedFingerprint: validFingerprint,
+			expectValid:         true,
+			description:         "Only first certificate should be validated",
+		},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			result := validateRemoteCertificate(tt.certs, tt.expectedSKI, tt.expectedFingerprint)
+			assert.Equal(s.T(), tt.expectValid, result.Valid, tt.description)
 		})
 	}
 }
@@ -297,9 +545,11 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ShouldAttemptConnection() {
 		{
 			name: "paired_service",
 			setupService: func() *api.ServiceDetails {
-				// Use ServiceForSKI which handles normalization and creation
-				service := s.hub.ServiceForSKI("pairedski") // normalized version
+				// Use ServiceForIdentifier which handles normalization and creation
+				service := api.NewServiceDetails("pairedski", "", "")
 				service.SetTrusted(true)
+				success := s.hub.AddService(service)
+				assert.True(s.T(), success)
 				return service
 			},
 			expectAttempt: true,
@@ -307,9 +557,11 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ShouldAttemptConnection() {
 		{
 			name: "queued_service",
 			setupService: func() *api.ServiceDetails {
-				// Use ServiceForSKI which handles normalization and creation
-				service := s.hub.ServiceForSKI("queuedski") // normalized version
+				// Use ServiceForIdentifier which handles normalization and creation
+				service := api.NewServiceDetails("queuedski", "", "")
 				service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
+				success := s.hub.AddService(service)
+				assert.True(s.T(), success)
 				return service
 			},
 			expectAttempt: true,
@@ -317,10 +569,12 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ShouldAttemptConnection() {
 		{
 			name: "unpaired_unqueued_service",
 			setupService: func() *api.ServiceDetails {
-				// Use ServiceForSKI which handles normalization and creation
-				service := s.hub.ServiceForSKI("unpairedski") // normalized version
+				// Use ServiceForIdentifier which handles normalization and creation
+				service := api.NewServiceDetails("unpairedski", "", "")
 				service.SetTrusted(false)
 				service.ConnectionStateDetail().SetState(api.ConnectionStateNone)
+				success := s.hub.AddService(service)
+				assert.True(s.T(), success)
 				return service
 			},
 			expectAttempt: false,

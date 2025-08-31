@@ -1,5 +1,6 @@
 package api
 
+// RemoteService represents a SHIP service announced via mDNS
 type RemoteService struct {
 	Name       string               `json:"name"`
 	Ski        string               `json:"ski"`

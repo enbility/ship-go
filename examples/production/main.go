@@ -43,56 +43,56 @@ type Configuration struct {
 	Country      string `json:"country"`
 
 	// Network configuration
-	Port            int      `json:"port"`
-	MaxConnections  int      `json:"max_connections"`
+	Port              int      `json:"port"`
+	MaxConnections    int      `json:"max_connections"`
 	NetworkInterfaces []string `json:"network_interfaces,omitempty"`
 
 	// Security settings
-	AutoAcceptPairing bool `json:"auto_accept_pairing"` // Should be false in production
+	AutoAcceptPairing  bool   `json:"auto_accept_pairing"` // Should be false in production
 	TrustedDevicesFile string `json:"trusted_devices_file"`
 
 	// Operational settings
-	CertificateFile    string `json:"certificate_file"`
-	PrivateKeyFile     string `json:"private_key_file"`
-	StateFile          string `json:"state_file"`
-	LogLevel           string `json:"log_level"`
-	MetricsEnabled     bool   `json:"metrics_enabled"`
+	CertificateFile string `json:"certificate_file"`
+	PrivateKeyFile  string `json:"private_key_file"`
+	StateFile       string `json:"state_file"`
+	LogLevel        string `json:"log_level"`
+	MetricsEnabled  bool   `json:"metrics_enabled"`
 }
 
 // ProductionHubReader implements a production-grade HubReaderInterface
 type ProductionHubReader struct {
-	config           *Configuration
-	trustedDevices   map[string]TrustedDevice
-	devicesMutex     sync.RWMutex
-	connectionTimes  map[string]time.Time
-	metrics          *Metrics
-	userInterface    UserInterface
-	shutdown         chan struct{}
+	config          *Configuration
+	trustedDevices  map[string]TrustedDevice
+	devicesMutex    sync.RWMutex
+	connectionTimes map[string]time.Time
+	metrics         *Metrics
+	userInterface   UserInterface
+	shutdown        chan struct{}
 }
 
 // TrustedDevice represents a paired and trusted device
 type TrustedDevice struct {
-	SKI            string    `json:"ski"`
-	Brand          string    `json:"brand"`
-	Model          string    `json:"model"`
-	DeviceType     string    `json:"device_type"`
-	PairedAt       time.Time `json:"paired_at"`
-	LastConnection time.Time `json:"last_connection"`
-	ConnectionCount int      `json:"connection_count"`
+	SKI             string    `json:"ski"`
+	Brand           string    `json:"brand"`
+	Model           string    `json:"model"`
+	DeviceType      string    `json:"device_type"`
+	PairedAt        time.Time `json:"paired_at"`
+	LastConnection  time.Time `json:"last_connection"`
+	ConnectionCount int       `json:"connection_count"`
 }
 
 // Metrics tracks operational statistics
 type Metrics struct {
-	StartTime           time.Time         `json:"start_time"`
-	ConnectionsTotal    int64             `json:"connections_total"`
-	ConnectionsActive   int               `json:"connections_active"`
-	ConnectionsFailed   int64             `json:"connections_failed"`
-	HandshakeTimeTotal  time.Duration     `json:"handshake_time_total"`
-	HandshakeCount      int64             `json:"handshake_count"`
-	LastHealthCheck     time.Time         `json:"last_health_check"`
-	TrustedDeviceCount  int               `json:"trusted_device_count"`
-	ErrorCounts         map[string]int64  `json:"error_counts"`
-	mutex               sync.RWMutex
+	StartTime          time.Time        `json:"start_time"`
+	ConnectionsTotal   int64            `json:"connections_total"`
+	ConnectionsActive  int              `json:"connections_active"`
+	ConnectionsFailed  int64            `json:"connections_failed"`
+	HandshakeTimeTotal time.Duration    `json:"handshake_time_total"`
+	HandshakeCount     int64            `json:"handshake_count"`
+	LastHealthCheck    time.Time        `json:"last_health_check"`
+	TrustedDeviceCount int              `json:"trusted_device_count"`
+	ErrorCounts        map[string]int64 `json:"error_counts"`
+	mutex              sync.RWMutex
 }
 
 // UserInterface abstracts user interaction for pairing decisions
@@ -141,8 +141,8 @@ func NewProductionHubReader(config *Configuration) (*ProductionHubReader, error)
 		trustedDevices:  make(map[string]TrustedDevice),
 		connectionTimes: make(map[string]time.Time),
 		metrics: &Metrics{
-			StartTime:    time.Now(),
-			ErrorCounts:  make(map[string]int64),
+			StartTime:   time.Now(),
+			ErrorCounts: make(map[string]int64),
 		},
 		userInterface: &ConsoleUserInterface{autoAccept: config.AutoAcceptPairing},
 		shutdown:      make(chan struct{}),
@@ -219,7 +219,7 @@ func (r *ProductionHubReader) SetupRemoteDevice(
 	writer api.ShipConnectionDataWriterInterface,
 ) api.ShipConnectionDataReaderInterface {
 	log.Printf("🔧 Setting up SPINE layer for device: %s", ski)
-	
+
 	// In a real implementation, return your SPINE message handler here
 	// For this example, we return nil (connection works but no SPINE data exchange)
 	return nil
@@ -227,10 +227,10 @@ func (r *ProductionHubReader) SetupRemoteDevice(
 
 func (r *ProductionHubReader) VisibleRemoteServicesUpdated(services []api.RemoteService) {
 	log.Printf("📡 Discovered %d devices", len(services))
-	
+
 	for _, service := range services {
 		log.Printf("  📱 %s: %s %s", service.Ski, service.Brand, service.Model)
-		
+
 		// Check if this is a previously trusted device
 		if _, trusted := r.trustedDevices[service.Ski]; trusted {
 			log.Printf("    ✅ Previously trusted device")
@@ -246,7 +246,7 @@ func (r *ProductionHubReader) ServiceShipIDUpdate(ski string, shipID string) {
 
 func (r *ProductionHubReader) ServicePairingDetailUpdate(ski string, detail *api.ConnectionStateDetail) {
 	log.Printf("🤝 Pairing update for %s: state=%d", ski, detail.State())
-	
+
 	// Track handshake timing
 	r.metrics.mutex.Lock()
 	if detail.State() == api.ConnectionStateCompleted {
@@ -322,12 +322,12 @@ func (r *ProductionHubReader) addTrustedDevice(ski, brand, model, deviceType str
 	defer r.devicesMutex.Unlock()
 
 	device := TrustedDevice{
-		SKI:            ski,
-		Brand:          brand,
-		Model:          model,
-		DeviceType:     deviceType,
-		PairedAt:       time.Now(),
-		LastConnection: time.Time{},
+		SKI:             ski,
+		Brand:           brand,
+		Model:           model,
+		DeviceType:      deviceType,
+		PairedAt:        time.Now(),
+		LastConnection:  time.Time{},
 		ConnectionCount: 0,
 	}
 
@@ -462,7 +462,7 @@ func (r *ProductionHubReader) reportMetrics() {
 
 	log.Printf("📊 Metrics Report:")
 	log.Printf("  Uptime: %v", time.Since(startTime))
-	log.Printf("  Connections: active=%d, total=%d, failed=%d", 
+	log.Printf("  Connections: active=%d, total=%d, failed=%d",
 		connectionsActive, connectionsTotal, connectionsFailed)
 	log.Printf("  Handshakes: count=%d", handshakeCount)
 	log.Printf("  Trusted devices: %d", len(r.trustedDevices))
@@ -478,7 +478,7 @@ func (r *ProductionHubReader) reportMetrics() {
 func (r *ProductionHubReader) Shutdown() {
 	log.Printf("🛑 Shutting down production hub reader...")
 	close(r.shutdown)
-	
+
 	// Save final state
 	if err := r.saveTrustedDevices(); err != nil {
 		log.Printf("⚠️  Failed to save trusted devices on shutdown: %v", err)
@@ -493,7 +493,7 @@ func loadOrCreateCertificate(config *Configuration) (tls.Certificate, string, er
 		if _, err := os.Stat(config.CertificateFile); err == nil {
 			if _, err := os.Stat(config.PrivateKeyFile); err == nil {
 				log.Printf("📂 Loading existing certificate from %s", config.CertificateFile)
-				
+
 				tlsCert, err := tls.LoadX509KeyPair(config.CertificateFile, config.PrivateKeyFile)
 				if err != nil {
 					return tls.Certificate{}, "", fmt.Errorf("failed to load certificate: %w", err)
@@ -523,13 +523,13 @@ func loadOrCreateCertificate(config *Configuration) (tls.Certificate, string, er
 
 	// Create new certificate
 	log.Printf("🔐 Creating new certificate...")
-	
+
 	commonName := fmt.Sprintf("%s-%s", config.DeviceModel, config.DeviceSerial)
 	tlsCert, err := cert.CreateCertificate(
-		config.DeviceModel,    // OrganizationalUnit
-		config.Organization,   // Organization
-		config.Country,        // Country
-		commonName,           // CommonName
+		config.DeviceModel,  // OrganizationalUnit
+		config.Organization, // Organization
+		config.Country,      // Country
+		commonName,          // CommonName
 	)
 	if err != nil {
 		return tls.Certificate{}, "", fmt.Errorf("failed to create certificate: %w", err)
@@ -657,7 +657,7 @@ func main() {
 	fmt.Printf("📜 Device SKI: %s\n", ski)
 
 	// Create service details
-	serviceDetails := api.NewServiceDetails(ski)
+	serviceDetails := api.NewServiceDetails(ski, "", "")
 
 	// Create mDNS manager
 	deviceCategories := []api.DeviceCategoryType{} // Configure as needed
@@ -675,8 +675,11 @@ func main() {
 		mdns.MdnsProviderSelectionAll,
 	)
 
-	// Create hub
-	h := hub.NewHub(hubReader, mdnsManager, config.Port, certificate, serviceDetails)
+	// Create hub (no pairing configuration = no history provider needed)
+	h, err := hub.NewHub(hubReader, mdnsManager, config.Port, certificate, serviceDetails, nil, nil)
+	if err != nil {
+		log.Fatal("Failed to create hub:", err)
+	}
 
 	// Configure production settings
 	h.SetMaxConnections(config.MaxConnections)

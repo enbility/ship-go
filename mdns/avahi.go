@@ -53,9 +53,9 @@ type AvahiProvider struct {
 	shutdownChan                      chan struct{}
 	addServiceChan, removeServiceChan chan avahi.Service
 
-	// Multiple EntryGroup support for dual services
-	serviceGroups map[string]avahi.EntryGroupInterface // service type -> EntryGroup
-	serviceStates map[string]*mdnsServiceData          // service type -> service data
+	// One EntryGroup per service instance - fixes architectural flaw
+	instanceEntryGroups map[string]avahi.EntryGroupInterface // instanceID -> dedicated EntryGroup
+	instanceStates      map[string]*mdnsServiceData          // instanceID -> service data
 
 	// Instance management for the new interface
 	instanceCounter  int
@@ -74,11 +74,11 @@ func NewAvahiProvider(ifaceIndexes []int32) *AvahiProvider {
 		avServer:         avahi.ServerNew(),
 		setupSuccessful:  false,
 		ifaceIndexes:     ifaceIndexes,
-		serviceElements:  make(map[string]map[string]string),
-		serviceGroups:    make(map[string]avahi.EntryGroupInterface), // Critical fix
-		serviceStates:    make(map[string]*mdnsServiceData),          // Critical fix
-		instanceCounter:  0,
-		serviceInstances: make(map[string]*instanceData),
+		serviceElements:     make(map[string]map[string]string),
+		instanceEntryGroups: make(map[string]avahi.EntryGroupInterface), // One per instance
+		instanceStates:      make(map[string]*mdnsServiceData),          // One per instance
+		instanceCounter:     0,
+		serviceInstances:    make(map[string]*instanceData),
 	}
 }
 
@@ -243,9 +243,9 @@ func (a *AvahiProvider) avahiCallback(event avahi.Event) {
 		serviceData = a.mdnsServiceData
 	}
 
-	// Clear serviceGroups as they are now invalid after disconnection
-	// but keep serviceStates for restoration
-	a.serviceGroups = make(map[string]avahi.EntryGroupInterface)
+	// Clear instanceEntryGroups as they are now invalid after disconnection
+	// but keep instanceStates for restoration
+	a.instanceEntryGroups = make(map[string]avahi.EntryGroupInterface)
 
 	a.mux.Unlock()
 
@@ -309,14 +309,16 @@ func (a *AvahiProvider) attemptReconnect(cb api.MdnsResolveCB, serviceData *mdns
 		// Restore all services from serviceStates
 		a.mux.Lock()
 		statesToRestore := make(map[string]*mdnsServiceData)
-		for serviceType, serviceState := range a.serviceStates {
-			statesToRestore[serviceType] = serviceState
+		for instanceID, serviceState := range a.instanceStates {
+			statesToRestore[instanceID] = serviceState
 		}
 		a.mux.Unlock()
 
-		for serviceType, serviceState := range statesToRestore {
+		for _, serviceState := range statesToRestore {
+			// Get service type from the service name pattern - this is a best effort recovery
+			serviceType := "_shippairing._tcp" // Default for pairing services
 			if _, err := a.AnnounceService(serviceType, serviceState.Name, serviceState.Port, serviceState.Txt); err != nil {
-				logging.Log().Debugf("mdns: avahi - error re-announcing %s service: %v", serviceType, err)
+				logging.Log().Debugf("mdns: avahi - error re-announcing service %s: %v", serviceState.Name, err)
 			}
 		}
 
@@ -443,16 +445,16 @@ func (a *AvahiProvider) AnnounceService(serviceType, serviceName string, port in
 		return "", api.ErrServiceNotStarted
 	}
 
-	// Create or get EntryGroup for this service type
-	entryGroup, exists := a.serviceGroups[serviceType]
-	if !exists {
-		var err error
-		entryGroup, err = a.avServer.EntryGroupNew()
-		if err != nil {
-			return "", fmt.Errorf("failed to create entry group for %s: %w", serviceType, err)
-		}
-		a.serviceGroups[serviceType] = entryGroup
+	// Generate unique instance ID first
+	a.instanceCounter++
+	instanceID := strconv.Itoa(a.instanceCounter)
+
+	// Create dedicated EntryGroup for this instance - no sharing
+	entryGroup, err := a.avServer.EntryGroupNew()
+	if err != nil {
+		return "", fmt.Errorf("failed to create entry group for instance %s: %w", instanceID, err)
 	}
+	a.instanceEntryGroups[instanceID] = entryGroup
 
 	// Convert TXT records to Avahi format ([][]byte)
 	btxt := make([][]byte, len(txt))
@@ -465,31 +467,23 @@ func (a *AvahiProvider) AnnounceService(serviceType, serviceName string, port in
 	for _, iface := range a.ifaceIndexes {
 		err := entryGroup.AddService(iface, avahi.ProtoUnspec, 0, serviceName, serviceType, shipZeroConfDomain, "", uint16(port), btxt) // #nosec G115
 		if err != nil {
-			// If we just created this EntryGroup and AddService failed, don't store it
-			if !exists {
-				a.avServer.EntryGroupFree(entryGroup)
-				delete(a.serviceGroups, serviceType)
-			}
+			// Clean up the EntryGroup we just created since AddService failed
+			a.avServer.EntryGroupFree(entryGroup)
+			delete(a.instanceEntryGroups, instanceID)
 			return "", fmt.Errorf("failed to add %s service: %w", serviceType, err)
 		}
 	}
 
 	// Commit the EntryGroup
 	if err := entryGroup.Commit(); err != nil {
-		// If we just created this EntryGroup and commit failed, don't store it
-		if !exists {
-			a.avServer.EntryGroupFree(entryGroup)
-			delete(a.serviceGroups, serviceType)
-		}
+		// Clean up the EntryGroup we just created since Commit failed
+		a.avServer.EntryGroupFree(entryGroup)
+		delete(a.instanceEntryGroups, instanceID)
 		return "", fmt.Errorf("failed to commit %s service: %w", serviceType, err)
 	}
 
-	// Generate unique instance ID
-	a.instanceCounter++
-	instanceID := strconv.Itoa(a.instanceCounter)
-
-	// Store service data only after successful commit
-	a.serviceStates[serviceType] = &mdnsServiceData{
+	// Store service data for this instance only after successful commit
+	a.instanceStates[instanceID] = &mdnsServiceData{
 		Name: serviceName,
 		Port: port,
 		Txt:  txt,
@@ -521,27 +515,19 @@ func (a *AvahiProvider) UnannounceService(instanceID string) error {
 	defer a.mux.Unlock()
 
 	// Look up instance data
-	instanceData, exists := a.serviceInstances[instanceID]
+	_, exists := a.serviceInstances[instanceID]
 	if !exists {
 		return api.ErrPairingNotActive
 	}
 
-	serviceType := instanceData.ServiceType
-
-	// Check if EntryGroup exists for this service type
-	entryGroup, groupExists := a.serviceGroups[serviceType]
-	if groupExists {
+	// Shutdown the dedicated EntryGroup for this instance
+	if entryGroup, entryExists := a.instanceEntryGroups[instanceID]; entryExists {
 		a.avServer.EntryGroupFree(entryGroup)
-
-		// Clean up service state
-		delete(a.serviceStates, serviceType)
-		delete(a.serviceGroups, serviceType)
-
-		// For _ship._tcp, also clean up legacy reconnection data
-		if serviceType == shipZeroConfServiceType {
-			a.mdnsServiceData = nil
-		}
+		delete(a.instanceEntryGroups, instanceID)
 	}
+
+	// Clean up instance state
+	delete(a.instanceStates, instanceID)
 
 	// Clean up instance mapping
 	delete(a.serviceInstances, instanceID)

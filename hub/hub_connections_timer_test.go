@@ -21,19 +21,19 @@ func TestHubConnectionsTimerSuite(t *testing.T) {
 type HubConnectionsTimerSuite struct {
 	suite.Suite
 
-	hubReader   *mocks.MockHubReaderInterface
-	mdnsService *mocks.MockMdnsInterface
+	hubReader      *mocks.MockHubReaderInterface
+	mdnsService    *mocks.MockMdnsInterface
 	shipConnection *mocks.ShipConnectionInterface
 	wsDataWriter   *mocks.WebsocketDataWriterInterface
-	remoteSki string
-	sut *Hub
+	remoteSki      string
+	sut            *Hub
 }
 
 func (s *HubConnectionsTimerSuite) BeforeTest(suiteName, testName string) {
 	s.remoteSki = "remotetestski"
 
 	ctrl := gomock.NewController(s.T())
-	
+
 	s.hubReader = mocks.NewMockHubReaderInterface(ctrl)
 	s.hubReader.EXPECT().RemoteSKIConnected(gomock.Any()).Return().AnyTimes()
 	s.hubReader.EXPECT().RemoteSKIDisconnected(gomock.Any()).Return().AnyTimes()
@@ -56,9 +56,11 @@ func (s *HubConnectionsTimerSuite) BeforeTest(suiteName, testName string) {
 	s.shipConnection.EXPECT().DataHandler().Return(s.wsDataWriter).Maybe()
 	s.shipConnection.EXPECT().ShipHandshakeState().Return(model.SmeStateComplete, nil).Maybe()
 
-	localService := api.NewServiceDetails("localSKI")
+	localService := api.NewServiceDetails("localSKI", "", "")
 	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
-	s.sut = NewHub(s.hubReader, s.mdnsService, 4567, certificate, localService)
+	var err error
+	s.sut, err = newTestHub(s.hubReader, s.mdnsService, 4567, certificate, localService, nil)
+	assert.NoError(s.T(), err)
 }
 
 func (s *HubConnectionsTimerSuite) AfterTest(suiteName, testName string) {

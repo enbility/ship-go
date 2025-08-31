@@ -48,12 +48,12 @@ func (c *ClientHubReader) RemoteSKIConnected(ski string) {
 	c.servicesMutex.Unlock()
 
 	if service, exists := c.discoveredServices[ski]; exists {
-		fmt.Printf("🎉 Connected to %s %s (SKI: %s)\n", 
+		fmt.Printf("🎉 Connected to %s %s (SKI: %s)\n",
 			service.Brand, service.Model, ski)
 	} else {
 		fmt.Printf("🎉 Connected to device: %s\n", ski)
 	}
-	
+
 	log.Printf("✅ Device connected: %s", ski)
 }
 
@@ -71,7 +71,7 @@ func (c *ClientHubReader) RemoteSKIDisconnected(ski string) {
 	} else {
 		fmt.Printf("👋 Disconnected from device: %s\n", ski)
 	}
-	
+
 	log.Printf("❌ Device disconnected: %s", ski)
 }
 
@@ -80,14 +80,14 @@ func (c *ClientHubReader) SetupRemoteDevice(
 	writer api.ShipConnectionDataWriterInterface,
 ) api.ShipConnectionDataReaderInterface {
 	log.Printf("🔧 Setting up SPINE layer for device: %s", ski)
-	
+
 	// In a real client implementation, you would:
 	// 1. Create a SPINE device model for this device
 	// 2. Return a SPINE message reader/handler
 	// 3. Start exchanging SPINE messages
-	
+
 	fmt.Printf("💡 SPINE layer ready for %s - you can now exchange data\n", ski)
-	
+
 	// For this example, we return nil (connection works but no data exchange)
 	return nil
 }
@@ -98,23 +98,23 @@ func (c *ClientHubReader) VisibleRemoteServicesUpdated(services []api.RemoteServ
 
 	fmt.Printf("\n📡 Discovered %d SHIP devices:\n", len(services))
 	fmt.Println("────────────────────────────────────────────────────────")
-	
+
 	for i, service := range services {
 		c.discoveredServices[service.Ski] = service
-		
+
 		// Check if we're connected to this device
 		_, connected := c.connectedDevices[service.Ski]
 		connectionStatus := "🔒 Not connected"
 		if connected {
 			connectionStatus = "✅ Connected"
 		}
-		
+
 		fmt.Printf("%d. %s %s (%s)\n", i+1, service.Brand, service.Model, service.Type)
 		fmt.Printf("   SKI: %s\n", service.Ski)
 		fmt.Printf("   Status: %s\n", connectionStatus)
 		fmt.Println()
 	}
-	
+
 	if len(services) > 0 {
 		fmt.Println("💡 Type 'connect <number>' to connect to a device")
 		fmt.Println("💡 Type 'list' to see devices again")
@@ -143,16 +143,16 @@ func (c *ClientHubReader) AllowWaitingForTrust(ski string) bool {
 	} else {
 		fmt.Printf("\n🔒 Unknown device wants to connect: %s\n", ski)
 	}
-	
+
 	fmt.Print("Do you want to trust this device? (yes/no): ")
-	
+
 	// Read user input
 	reader := bufio.NewReader(os.Stdin)
 	response, _ := reader.ReadString('\n')
 	response = strings.TrimSpace(strings.ToLower(response))
-	
+
 	approved := response == "yes" || response == "y"
-	
+
 	if approved {
 		fmt.Printf("✅ Approved connection to %s\n", ski)
 		log.Printf("✅ User approved device: %s", ski)
@@ -160,7 +160,7 @@ func (c *ClientHubReader) AllowWaitingForTrust(ski string) bool {
 		fmt.Printf("❌ Rejected connection to %s\n", ski)
 		log.Printf("❌ User rejected device: %s", ski)
 	}
-	
+
 	return approved
 }
 
@@ -196,7 +196,7 @@ func (c *ClientHubReader) listDevices() {
 
 	fmt.Printf("\n📱 Available devices (%d):\n", len(c.discoveredServices))
 	fmt.Println("────────────────────────────────────────────────────────")
-	
+
 	i := 1
 	for ski, service := range c.discoveredServices {
 		_, connected := c.connectedDevices[ski]
@@ -204,7 +204,7 @@ func (c *ClientHubReader) listDevices() {
 		if connected {
 			connectionStatus = "✅ Connected"
 		}
-		
+
 		fmt.Printf("%d. %s %s (%s)\n", i, service.Brand, service.Model, service.Type)
 		fmt.Printf("   SKI: %s\n", ski)
 		fmt.Printf("   Status: %s\n", connectionStatus)
@@ -221,13 +221,13 @@ func (c *ClientHubReader) showStatus() {
 	fmt.Println("────────────────────────────────────────────────────────")
 	fmt.Printf("Discovered devices: %d\n", len(c.discoveredServices))
 	fmt.Printf("Connected devices: %d\n", len(c.connectedDevices))
-	
+
 	if len(c.connectedDevices) > 0 {
 		fmt.Println("\nActive connections:")
 		for ski, connTime := range c.connectedDevices {
 			if service, exists := c.discoveredServices[ski]; exists {
 				duration := time.Since(connTime)
-				fmt.Printf("  ✅ %s %s (connected for %v)\n", 
+				fmt.Printf("  ✅ %s %s (connected for %v)\n",
 					service.Brand, service.Model, duration)
 			}
 		}
@@ -264,7 +264,7 @@ func (c *ClientHubReader) startUserInterface(h *hub.Hub) {
 	fmt.Println()
 
 	scanner := bufio.NewScanner(os.Stdin)
-	
+
 	for {
 		fmt.Print("ship-client> ")
 		if !scanner.Scan() {
@@ -315,9 +315,9 @@ func (c *ClientHubReader) startUserInterface(h *hub.Hub) {
 			}
 
 			fmt.Printf("🔄 Connecting to %s %s...\n", service.Brand, service.Model)
-			
+
 			// Register the service and initiate connection
-			h.RegisterRemoteSKI(ski, "")
+			h.RegisterRemoteService(ski, "", "")
 
 		case "disconnect", "disc":
 			if len(parts) < 2 {
@@ -364,16 +364,16 @@ func (c *ClientHubReader) startUserInterface(h *hub.Hub) {
 // Certificate creation for client
 func createClientCertificate() (tls.Certificate, string, error) {
 	fmt.Println("🔐 Creating client certificate...")
-	
+
 	// Generate unique certificate for this client
 	hostname, _ := os.Hostname()
 	commonName := fmt.Sprintf("SHIP-Client-%s", hostname)
-	
+
 	certificate, err := cert.CreateCertificate(
-		"ClientUnit",          // OrganizationalUnit
-		"SHIP Client",         // Organization
-		"DE",                  // Country
-		commonName,            // CommonName
+		"ClientUnit",  // OrganizationalUnit
+		"SHIP Client", // Organization
+		"DE",          // Country
+		commonName,    // CommonName
 	)
 	if err != nil {
 		return tls.Certificate{}, "", fmt.Errorf("failed to create certificate: %w", err)
@@ -407,7 +407,7 @@ func main() {
 	fmt.Printf("📜 Client SKI: %s\n", ski)
 
 	// Create service details for this client
-	serviceDetails := api.NewServiceDetails(ski)
+	serviceDetails := api.NewServiceDetails(ski, "", "")
 
 	// Create client hub reader
 	clientReader := NewClientHubReader()
@@ -415,22 +415,24 @@ func main() {
 	// Create mDNS manager for discovery
 	deviceCategories := []api.DeviceCategoryType{} // Empty for client
 	mdnsManager := mdns.NewMDNS(
-		ski,                              // SKI
-		"SHIP-Client",                    // Brand
-		"ExampleClient",                  // Model
-		"Client",                         // Type
-		"CLI-001",                        // Serial
-		deviceCategories,                 // Categories
-		"client-ship-id",                 // SHIP ID
-		"SHIP-Client",                    // Service name
-		4712,                             // Port
-		[]string{},                       // Interfaces (empty = all)
-		mdns.MdnsProviderSelectionAll,    // Provider
+		ski,                           // SKI
+		"SHIP-Client",                 // Brand
+		"ExampleClient",               // Model
+		"Client",                      // Type
+		"CLI-001",                     // Serial
+		deviceCategories,              // Categories
+		"client-ship-id",              // SHIP ID
+		"SHIP-Client",                 // Service name
+		4712,                          // Port
+		[]string{},                    // Interfaces (empty = all)
+		mdns.MdnsProviderSelectionAll, // Provider
 	)
 
-	// Create hub
-	h := hub.NewHub(clientReader, mdnsManager, 4712, certificate, serviceDetails)
-
+	// Create hub (no pairing configuration = no history provider needed)
+	h, err := hub.NewHub(clientReader, mdnsManager, 4712, certificate, serviceDetails, nil, nil)
+	if err != nil {
+		log.Fatal("Failed to create hub:", err)
+	}
 	// Set reasonable connection limit for client
 	h.SetMaxConnections(5)
 

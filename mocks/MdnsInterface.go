@@ -258,6 +258,50 @@ func (_c *MdnsInterface_DeviceSerial_Call) RunAndReturn(run func() string) *Mdns
 	return _c
 }
 
+// DeviceType provides a mock function for the type MdnsInterface
+func (_mock *MdnsInterface) DeviceType() string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeviceType")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// MdnsInterface_DeviceType_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeviceType'
+type MdnsInterface_DeviceType_Call struct {
+	*mock.Call
+}
+
+// DeviceType is a helper method to define mock.On call
+func (_e *MdnsInterface_Expecter) DeviceType() *MdnsInterface_DeviceType_Call {
+	return &MdnsInterface_DeviceType_Call{Call: _e.mock.On("DeviceType")}
+}
+
+func (_c *MdnsInterface_DeviceType_Call) Run(run func()) *MdnsInterface_DeviceType_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MdnsInterface_DeviceType_Call) Return(s string) *MdnsInterface_DeviceType_Call {
+	_c.Call.Return(s)
+	return _c
+}
+
+func (_c *MdnsInterface_DeviceType_Call) RunAndReturn(run func() string) *MdnsInterface_DeviceType_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // RequestMdnsEntries provides a mock function for the type MdnsInterface
 func (_mock *MdnsInterface) RequestMdnsEntries() {
 	_mock.Called()

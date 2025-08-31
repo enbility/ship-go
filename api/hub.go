@@ -13,11 +13,42 @@ type HubInterface interface {
 	// close all connections
 	Shutdown()
 
-	// return the service for a SKI
-	ServiceForSKI(ski string) *ServiceDetails
+	// return the service for a SKI, fingerprint, or SHIP ID
+	//
+	// Parameters:
+	// - ski: the SKI of the remote service (required if fingerprint is not provided)
+	// - fingerprint: the Fingerprint of the remote service (required if SKI is not provided)
+	ServiceForIdentifier(ski, fingerprint string) *ServiceDetails
+
+	// add a new remote service
+	//
+	// Parameters:
+	//   - service: The ServiceDetails instance representing the remote service to add.
+	//
+	// Returns:
+	//   - true if the service was added successfully, false otherwise.
+	//
+	// Note: The service must have an SKI or fingerprint that is not yet added
+	AddService(service *ServiceDetails) bool
+
+	// remove a service from remote services
+	//
+	// Parameters:
+	//   - ski: The SKI (Subject Key Identifier) of the service. Required if fingerprint is not provided
+	//   - fingerprint: The expected certificate fingerprint of the service. Required if SKI is not provided
+	RemoveService(ski, fingerprint string)
 
 	// Provide the current pairing state for a SKI
-	PairingDetailForSki(ski string) *ConnectionStateDetail
+	//
+	// Parameters:
+	// - ski: the SKI of the remote service (required if fingerprint is not provided)
+	// - fingerprint: the Fingerprint of the remote service (required if SKI is not provided)
+	//
+	// returns:
+	//
+	//	ErrNotPaired if the SKI is not in the (to be) paired list
+	//	ErrNoConnectionFound if no connection for the SKI was found
+	PairingDetailForIdentifier(ski, fingerprint string) *ConnectionStateDetail
 
 	// Enables or disables to automatically accept incoming pairing and connection requests
 	//
@@ -27,17 +58,22 @@ type HubInterface interface {
 	// Pair a remote service based on the SKI
 	//
 	// Parameters:
-	// - ski: the SKI of the remote service (required)
+	// - ski: the SKI of the remote service (required if fingerprint is not provided)
+	// - fingerprint: the Fingerprint of the remote service (required if SKI is not provided)
 	// - shipID: the SHIP ID of the remote service (optional)
 	//
 	// Note: The SHIP ID is optional, but should be provided if available.
 	// if provided, it will be used to validate the remote service is
 	// providing this SHIP ID during the handshake process and will reject
 	// the connection if it does not match.
-	RegisterRemoteSKI(ski, shipID string)
+	RegisterRemoteService(ski, fingerprint, shipID string)
 
-	// Unpair the SKI
-	UnregisterRemoteSKI(ski string)
+	// Unpair a remote service based on the SKI or fingerprint
+	//
+	// Parameters:
+	// - ski: the SKI of the remote service (required if fingerprint is not provided)
+	// - fingerprint: the Fingerprint of the remote service (required if SKI is not provided)
+	UnregisterRemoteService(ski, fingerprint string)
 
 	// Disconnect a connection to an SKI
 	DisconnectSKI(ski string, reason string)

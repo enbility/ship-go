@@ -209,13 +209,14 @@ func setupTestHub(t *testing.T) *Hub {
 	hubReader.EXPECT().ServiceShipIDUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Maybe()
 	hubReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
 
-	service := api.NewServiceDetails("test-ski")
+	service := api.NewServiceDetails("testski", "", "")
 	service.SetShipID("test-ship-id")
 
 	// Create a dummy certificate for testing
 	cert := tls.Certificate{}
 
-	hub := NewHub(hubReader, mdns, 4729, cert, service)
+	hub, err := newTestHub(hubReader, mdns, 4729, cert, service, nil)
+	assert.NoError(t, err)
 
 	return hub
 }

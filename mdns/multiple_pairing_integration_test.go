@@ -54,7 +54,7 @@ func (s *MultiplePairingIntegrationSuite) SetupTest() {
 
 	s.mockProvider = mocks.NewMdnsProviderInterface(s.T())
 	s.mockProvider.EXPECT().Shutdown().Return().Maybe()
-	s.mockProvider.EXPECT().UnannounceService(mock.Anything).Return(nil).Maybe()
+	// Note: UnannounceService expectations removed from setup to avoid conflicts with specific test expectations
 
 	// Create real MdnsManager with test setup
 	s.sut = NewMDNS(
@@ -291,8 +291,8 @@ func (s *MultiplePairingIntegrationSuite) Test_InstanceCounter_FirstInstanceBase
 		instanceID, err := s.sut.AnnouncePairingService(txtRecord)
 		assert.NoError(s.T(), err)
 
-		// Verify instance ID is numeric and incremental
-		expectedID := strconv.Itoa(i + 1)
+		// Verify instance ID is provider's format and incremental
+		expectedID := fmt.Sprintf("instance-%d", i+1)
 		assert.Equal(s.T(), expectedID, instanceID, "Instance ID should be incremental: %d", i+1)
 	}
 
@@ -453,15 +453,24 @@ func (s *MultiplePairingIntegrationSuite) Test_ServiceNameValidation_SHIPComplia
 func (s *MultiplePairingIntegrationSuite) Test_StateManagement_InternalConsistency() {
 	// Test 5: Verify internal state tracking is correct
 
-	// Setup mock
+	// Setup mock - each announcement should return a unique instance ID
 	s.mockProvider.EXPECT().AnnounceService(
 		shipPairingZeroConfServiceType,
 		mock.AnythingOfType("string"),
 		s.sut.port,
 		mock.AnythingOfType("[]string"),
-	).Return("test-instance", nil).Times(2)
+	).Return("test-instance-1", nil).Once()
+	
+	s.mockProvider.EXPECT().AnnounceService(
+		shipPairingZeroConfServiceType,
+		mock.AnythingOfType("string"),
+		s.sut.port,
+		mock.AnythingOfType("[]string"),
+	).Return("test-instance-2", nil).Once()
 
-	s.mockProvider.EXPECT().UnannounceService(mock.AnythingOfType("string")).Return(nil).Maybe() // Note: Using Maybe() due to implementation issue
+	// Setup unannounce expectations for the correct provider instance IDs
+	s.mockProvider.EXPECT().UnannounceService("test-instance-1").Return(nil).Once()
+	s.mockProvider.EXPECT().UnannounceService("test-instance-2").Return(nil).Once()
 
 	txtRecord1 := &api.ShipPairingTXT{
 		TxtVers: "1", ParType: api.ParTypeFPSHA256, ForId: "state-1", ForPar: "state-1-par",
@@ -481,6 +490,7 @@ func (s *MultiplePairingIntegrationSuite) Test_StateManagement_InternalConsisten
 	// Announce first service
 	instanceID1, err := s.sut.AnnouncePairingService(txtRecord1)
 	assert.NoError(s.T(), err)
+	s.T().Logf("First announcement returned instance ID: %s", instanceID1)
 
 	// Verify state updated
 	assert.True(s.T(), s.sut.IsPairingServiceAnnounced(), "Should be announced after first service")
@@ -496,6 +506,7 @@ func (s *MultiplePairingIntegrationSuite) Test_StateManagement_InternalConsisten
 	// Announce second service
 	instanceID2, err := s.sut.AnnouncePairingService(txtRecord2)
 	assert.NoError(s.T(), err)
+	s.T().Logf("Second announcement returned instance ID: %s", instanceID2)
 
 	// Verify state still announced
 	assert.True(s.T(), s.sut.IsPairingServiceAnnounced(), "Should still be announced after second service")
@@ -509,6 +520,7 @@ func (s *MultiplePairingIntegrationSuite) Test_StateManagement_InternalConsisten
 	s.sut.pairingInstancesMux.RUnlock()
 
 	// Remove first service
+	s.T().Logf("Attempting to unannounce first instance ID: %s", instanceID1)
 	err = s.sut.UnannouncePairingService(instanceID1)
 	assert.NoError(s.T(), err)
 
@@ -525,6 +537,7 @@ func (s *MultiplePairingIntegrationSuite) Test_StateManagement_InternalConsisten
 	s.sut.pairingInstancesMux.RUnlock()
 
 	// Remove second service
+	s.T().Logf("Attempting to unannounce second instance ID: %s", instanceID2)
 	err = s.sut.UnannouncePairingService(instanceID2)
 	assert.NoError(s.T(), err)
 

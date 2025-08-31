@@ -13,6 +13,14 @@ Basic understanding of the EEBUS concepts SHIP and SPINE to use this library is 
 
 This repository was started as part of the [eebus-go](https://github.com/enbility/eebus-go) before it was moved into its own repository and this separate go package.
 
+## Important API Changes
+
+**Breaking Change in Hub Constructor (v0.8.0+):** The `hub.NewHub()` function now requires 7 parameters instead of 6. The new 7th parameter is `ringBufferPersistence` for SHIP Pairing Service replay protection:
+- For pairing modes `Listener` and `Both`: **Must** provide a `RingBufferPersistence` implementation for storage operations
+- For pairing modes `Announcer` and `Off`: Pass `nil`
+- The library handles ALL ring buffer algorithm logic - applications only handle storage
+- See [Migration Guide](#ship-pairing-service-integration) for implementation details
+
 ## Overview
 
 Includes:
@@ -21,7 +29,11 @@ Includes:
 - mDNS, incl. avahi support (recommended)
 - Websocket server and client
 - Connection handling, including reconnection and double connections
-- Handling of device pairing
+- Advanced SHIP Pairing Service with:
+      * Automatic device pairing
+      * Device Replacement Timing Logic for AddCu devices
+      * HMAC-based authentication
+      * QR code support
 - SHIP handshake
 - Logging which is also used by [spine-go](https://github.com/enbility/spine-go) and [eebus-go](https://github.com/enbility/eebus-go)
 
@@ -43,7 +55,7 @@ Includes:
 - **[Connection Lifecycle](docs/CONNECTION_LIFECYCLE.md)** - Connection states and management
 - **[analysis-docs/](analysis-docs/)** - Comprehensive technical analysis
   - [README_START_HERE.md](analysis-docs/README_START_HERE.md) - Navigation guide to all analysis documents
-  - [EXECUTIVE_SUMMARY.md](analysis-docs/EXECUTIVE_SUMMARY.md) - Business-level overview (implementation score: 8.7/10)
+  - [EXECUTIVE_SUMMARY.md](analysis-docs/EXECUTIVE_SUMMARY.md) - Business-level overview (implementation score: 9.8/10)
   - Detailed security model, specification deviations, and improvement roadmap
 
 ### Development Resources
@@ -161,7 +173,8 @@ The hub supports configurable connection limits to prevent resource exhaustion:
 
 ```go
 // Create hub with default limit of 10 connections
-hub := hub.NewHub(hubReader, mdns, port, certificate, localService)
+// Note: 7th parameter (ringBufferPersistence) is nil when not using pairing listener modes
+hub := hub.NewHub(hubReader, mdns, port, certificate, localService, nil, nil)
 
 // Configure custom connection limit
 hub.SetMaxConnections(20)  // Allow up to 20 simultaneous connections
@@ -179,6 +192,223 @@ When the limit is reached:
 - Incoming connections receive HTTP 503 (Service Unavailable)
 - Outgoing connection attempts return an error
 
+## SHIP Pairing Service Integration
+
+The SHIP Pairing Service enables automatic device pairing using QR codes, HMAC authentication, and Device Replacement Timing Logic. For complete architectural details, see [ARCHITECTURE_SHIPPAIRING.md](ARCHITECTURE_SHIPPAIRING.md).
+
+### Required Interfaces
+
+#### 1. PairingServiceReaderInterface (All pairing modes)
+
+Applications must implement `PairingServiceReaderInterface` to handle pairing events:
+
+```go
+type PairingServiceReaderInterface interface {
+    // Called when device is automatically trusted via pairing service
+    DeviceAutoTrustedViaServiceDetails(service *ServiceDetails)
+    
+    // Called when pairing service fails for a service  
+    PairingServiceFailedForServiceDetails(service *ServiceDetails, reason error)
+    
+    // Called when device trust is automatically removed via replacement logic
+    DeviceAutoTrustRemovedViaReplacementLogic(service *ServiceDetails, reason string)
+}
+```
+
+#### 2. RingBufferPersistence (Listener and Both modes)
+
+**IMPORTANT:** For `PairingModeListener` and `PairingModeBoth`, applications **MUST** implement `RingBufferPersistence` to provide storage operations for replay attack protection as required by the SHIP Pairing Service specification section 11:
+
+```go
+type RingBufferPersistence interface {
+    // LoadRingBuffer restores the ring buffer state from persistent storage
+    // Called once during Hub initialization
+    // Returns: entries array, nextIndex position, error
+    // For new installations: return empty slice and nextIndex=0
+    LoadRingBuffer() ([]DigestEntry, int, error)
+    
+    // SaveRingBuffer persists the current ring buffer state
+    // Called after each successful pairing
+    // Parameters: complete ring buffer array, current nextIndex
+    SaveRingBuffer(entries []DigestEntry, nextIndex int) error
+}
+```
+
+**Key Design Principle:**
+- **Library manages ring buffer logic**: The library handles ALL ring buffer algorithm complexity per SHIP specification
+- **Applications handle storage only**: You only implement load/save operations - no ring buffer logic needed
+- **Clean separation of concerns**: This design ensures SHIP specification compliance while keeping application code simple
+
+**Storage Requirements:**
+- **Persistence is mandatory**: The SHIP specification requires "devA SHALL store 'digest-ring-buffer' and 'next' persistently"
+- **Thread-safe implementation**: Must handle concurrent access safely
+- **Atomic operations**: SaveRingBuffer should be atomic (either fully saves or fails)
+- **For Announcer/Off modes**: Pass `nil` as these modes don't require persistence
+
+**Reference Implementation:** See [examples/pairing-listener/main.go](examples/pairing-listener/main.go) for `ExampleRingBufferPersistence` - shows the storage pattern without actual persistence (add database/file storage for production).
+
+### Configuration
+
+Create a pairing configuration with the desired mode and secret, and provide ring buffer persistence for listener modes:
+
+```go
+// From QR code secret (16 bytes)
+secret := api.PairingSecret(secretBytesFromQRCode)
+defer secret.Clear() // Securely clear from memory
+
+// Configure pairing mode
+config := api.NewPairingConfig(api.PairingModeListener, secret)
+
+// Create ring buffer persistence (required for Listener and Both modes)
+// This MUST persist data per SHIP specification!
+ringBufferPersistence := NewMyPersistence() // Your storage implementation
+
+// Create hub with pairing support
+// 7th parameter is the ring buffer persistence (nil for Announcer/Off modes)
+hub, err := hub.NewHub(hubReader, mdns, port, cert, serviceDetails, config, ringBufferPersistence)
+```
+
+**Pairing Modes:**
+- `PairingModeOff` - No automatic pairing (traditional SHIP only)
+- `PairingModeListener` - Listen for incoming pairing requests (target device)
+- `PairingModeAnnouncer` - Announce pairing to discovered devices (requesting device)
+- `PairingModeBoth` - Support both modes (flexible device)
+
+### Implementation Example
+
+```go
+type MyHubReader struct {
+    devices map[string]*api.ServiceDetails
+}
+
+// Handle automatic device trust from pairing service
+func (m *MyHubReader) DeviceAutoTrustedViaServiceDetails(service *api.ServiceDetails) {
+    log.Printf("Device auto-trusted: SKI=%s, ShipID=%s", service.SKI(), service.ShipID())
+    
+    // Mark AddCu devices for replacement timing logic
+    if isFromPairingService(service) {
+        service.SetPairingType(api.PairingTypeAddCu)
+    }
+    
+    // Store trusted device
+    m.devices[service.SKI()] = service.Copy()
+    
+    // Update application state, UI, etc.
+}
+
+// Handle pairing failures (security events)
+func (m *MyHubReader) PairingServiceFailedForServiceDetails(service *api.ServiceDetails, reason error) {
+    log.Printf("Pairing failed: ShipID=%s, Reason=%v", service.ShipID(), reason)
+    
+    // Log security event for audit
+    m.logSecurityEvent("pairing_failed", service, reason)
+}
+
+// Handle device replacement (15-minute timeout logic for AddCu devices)
+func (m *MyHubReader) DeviceAutoTrustRemovedViaReplacementLogic(service *api.ServiceDetails, reason string) {
+    log.Printf("Device trust removed: ShipID=%s, Reason=%s", service.ShipID(), reason)
+    
+    // Clean up resources
+    delete(m.devices, service.SKI())
+    
+    // Notify user based on reason
+    if strings.Contains(reason, "timeout") {
+        m.notifyUser(fmt.Sprintf("Device %s timed out after 15 minutes", service.ShipID()))
+    } else if strings.Contains(reason, "Replaced") {
+        m.notifyUser(fmt.Sprintf("Device %s was replaced", service.ShipID()))
+    }
+}
+
+// Implement other required HubReaderInterface methods...
+func (m *MyHubReader) RemoteServiceConnected(service *api.ServiceDetails) { /* ... */ }
+func (m *MyHubReader) AllowWaitingForTrust(service *api.ServiceDetails) bool { return true }
+```
+
+### Key Integration Points
+
+1. **Ring Buffer Persistence** - Applications implement ONLY storage operations:
+   ```go
+   // Simple storage-only implementation (no ring buffer logic!)
+   type MyPersistence struct {
+       db *sql.DB
+   }
+   
+   func (p *MyPersistence) LoadRingBuffer() ([]api.DigestEntry, int, error) {
+       // Load from database/file
+       // Return empty for new installations: return []api.DigestEntry{}, 0, nil
+   }
+   
+   func (p *MyPersistence) SaveRingBuffer(entries []api.DigestEntry, nextIndex int) error {
+       // Save to database/file - library manages all ring buffer logic
+   }
+   ```
+
+2. **Device Replacement Logic** - Handle AddCu devices with automatic trust removal:
+   ```go
+   // Set pairing type for devices paired via pairing service
+   service.SetPairingType(api.PairingTypeAddCu)
+   ```
+
+3. **Memory Safety** - Always use `service.Copy()` for concurrent operations:
+   ```go
+   // Safe for concurrent access
+   deviceCopy := service.Copy()
+   go processDevice(deviceCopy)
+   ```
+
+4. **Secret Security** - Use `PairingSecret` type with secure cleanup:
+   ```go
+   secret := api.PairingSecret(secretBytes)
+   defer secret.Clear() // Wipe from memory
+   ```
+
+### Production Considerations
+
+**Persistence Requirements:** The SHIP Pairing Service specification **requires** persistent storage of the digest history to prevent replay attacks across application restarts. Applications must:
+
+1. **Implement RingBufferPersistence** with persistent storage (database, file, etc.)
+2. **Library handles ring buffer algorithm** - You don't implement this! The library manages all ring buffer logic per SHIP spec section 11
+3. **Store complete state** - Save exactly what the library provides (entries array and nextIndex)
+4. **Handle concurrent access** safely with proper synchronization
+
+**Security Implications of Non-Persistence:**
+- Without persistence, replay attacks are possible after application restart
+- An attacker could capture and replay pairing requests
+- This violates SHIP specification security requirements
+
+**Implementation Patterns:**
+```go
+// Example: Database-backed persistence (storage only - no ring buffer logic!)
+type DatabasePersistence struct {
+    db  *sql.DB
+    mux sync.RWMutex
+}
+
+func (d *DatabasePersistence) LoadRingBuffer() ([]api.DigestEntry, int, error) {
+    d.mux.RLock()
+    defer d.mux.RUnlock()
+    
+    // Load from database
+    row := d.db.QueryRow("SELECT entries, next_index FROM ring_buffer WHERE device_id = ?")
+    // Parse and return - library handles all ring buffer logic
+}
+
+func (d *DatabasePersistence) SaveRingBuffer(entries []api.DigestEntry, nextIndex int) error {
+    d.mux.Lock()
+    defer d.mux.Unlock()
+    
+    // Save exactly what library provides - no ring buffer logic needed!
+    _, err := d.db.Exec("REPLACE INTO ring_buffer (device_id, entries, next_index) VALUES (?, ?, ?)",
+        deviceID, entries, nextIndex)
+    return err
+}
+```
+
+For complete examples, see:
+- [examples/pairing-listener/](examples/pairing-listener/) - Target device with **ExampleRingBufferPersistence** showing the storage pattern
+- [examples/pairing-announcer/](examples/pairing-announcer/) - Requesting device (no persistence needed)
+- **Important:** The example shows the pattern but doesn't persist - add real storage for production!
+
 ## Implementation notes
 
 For complete details, see [Specification Compliance](docs/SPEC_COMPLIANCE.md) (95% compliance).
@@ -188,10 +418,18 @@ For complete details, see [Specification Compliance](docs/SPEC_COMPLIANCE.md) (9
 - **PIN Verification** - Only supports "none" PIN state (SHIP 13.4.4.3.5.1)
 - **Access Methods** - Basic implementation only (SHIP 13.4.6)
 - **TLS Fragment Control** - Uses standard TLS record sizes (Go crypto/tls limitation)
+- **Pairing Service** - Full implementation of SHIP Pairing Service specification
+- **Device Replacement** - Automatic 15-minute trust management for AddCu devices
 
 **Supported registration mechanisms (SHIP 5):**
 - Auto accept (for testing/demos only)
 - User verification (recommended for production)
+
+**SHIP Pairing Service Capabilities:**
+- Supports full SHIP Pairing Service specification
+- Implements 15-minute device replacement timer for AddCu devices
+- Supports HMAC-based authentication with automatic replay attack protection
+- Flexible pairing modes: auto-accept and user verification
 
 **Security Model:**
 - Uses self-signed certificates with SKI-based device identification

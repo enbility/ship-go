@@ -107,6 +107,10 @@ func (h *Hub) registerConnection(connection api.ShipConnectionInterface) {
 
 // connectionForSKI returns the connection for a specific SKI
 func (h *Hub) connectionForSKI(ski string) api.ShipConnectionInterface {
+	if ski == "" {
+		return nil
+	}
+
 	h.muxCon.RLock()
 	defer h.muxCon.RUnlock()
 

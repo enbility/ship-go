@@ -109,6 +109,20 @@ func (mr *MockMdnsInterfaceMockRecorder) DeviceSerial() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeviceSerial", reflect.TypeOf((*MockMdnsInterface)(nil).DeviceSerial))
 }
 
+// DeviceType mocks base method.
+func (m *MockMdnsInterface) DeviceType() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeviceType")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// DeviceType indicates an expected call of DeviceType.
+func (mr *MockMdnsInterfaceMockRecorder) DeviceType() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeviceType", reflect.TypeOf((*MockMdnsInterface)(nil).DeviceType))
+}
+
 // RequestMdnsEntries mocks base method.
 func (m *MockMdnsInterface) RequestMdnsEntries() {
 	m.ctrl.T.Helper()

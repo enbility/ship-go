@@ -38,8 +38,8 @@ func (_m *ShipConnectionInfoProviderInterface) EXPECT() *ShipConnectionInfoProvi
 }
 
 // AllowWaitingForTrust provides a mock function for the type ShipConnectionInfoProviderInterface
-func (_mock *ShipConnectionInfoProviderInterface) AllowWaitingForTrust(s string) bool {
-	ret := _mock.Called(s)
+func (_mock *ShipConnectionInfoProviderInterface) AllowWaitingForTrust(ski string) bool {
+	ret := _mock.Called(ski)
 
 	if len(ret) == 0 {
 		panic("no return value specified for AllowWaitingForTrust")
@@ -47,7 +47,7 @@ func (_mock *ShipConnectionInfoProviderInterface) AllowWaitingForTrust(s string)
 
 	var r0 bool
 	if returnFunc, ok := ret.Get(0).(func(string) bool); ok {
-		r0 = returnFunc(s)
+		r0 = returnFunc(ski)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
@@ -60,12 +60,12 @@ type ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call struct {
 }
 
 // AllowWaitingForTrust is a helper method to define mock.On call
-//   - s string
-func (_e *ShipConnectionInfoProviderInterface_Expecter) AllowWaitingForTrust(s interface{}) *ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call {
-	return &ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call{Call: _e.mock.On("AllowWaitingForTrust", s)}
+//   - ski string
+func (_e *ShipConnectionInfoProviderInterface_Expecter) AllowWaitingForTrust(ski interface{}) *ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call {
+	return &ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call{Call: _e.mock.On("AllowWaitingForTrust", ski)}
 }
 
-func (_c *ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call) Run(run func(s string)) *ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call {
+func (_c *ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call) Run(run func(ski string)) *ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 string
 		if args[0] != nil {
@@ -83,7 +83,7 @@ func (_c *ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call) Return(
 	return _c
 }
 
-func (_c *ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call) RunAndReturn(run func(s string) bool) *ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call {
+func (_c *ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call) RunAndReturn(run func(ski string) bool) *ShipConnectionInfoProviderInterface_AllowWaitingForTrust_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -135,8 +135,8 @@ func (_c *ShipConnectionInfoProviderInterface_HandleConnectionClosed_Call) RunAn
 }
 
 // HandleShipHandshakeStateUpdate provides a mock function for the type ShipConnectionInfoProviderInterface
-func (_mock *ShipConnectionInfoProviderInterface) HandleShipHandshakeStateUpdate(s string, shipState model.ShipState) {
-	_mock.Called(s, shipState)
+func (_mock *ShipConnectionInfoProviderInterface) HandleShipHandshakeStateUpdate(ski string, state model.ShipState) {
+	_mock.Called(ski, state)
 	return
 }
 
@@ -146,13 +146,13 @@ type ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Call str
 }
 
 // HandleShipHandshakeStateUpdate is a helper method to define mock.On call
-//   - s string
-//   - shipState model.ShipState
-func (_e *ShipConnectionInfoProviderInterface_Expecter) HandleShipHandshakeStateUpdate(s interface{}, shipState interface{}) *ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Call {
-	return &ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Call{Call: _e.mock.On("HandleShipHandshakeStateUpdate", s, shipState)}
+//   - ski string
+//   - state model.ShipState
+func (_e *ShipConnectionInfoProviderInterface_Expecter) HandleShipHandshakeStateUpdate(ski interface{}, state interface{}) *ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Call {
+	return &ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Call{Call: _e.mock.On("HandleShipHandshakeStateUpdate", ski, state)}
 }
 
-func (_c *ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Call) Run(run func(s string, shipState model.ShipState)) *ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Call {
+func (_c *ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Call) Run(run func(ski string, state model.ShipState)) *ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 string
 		if args[0] != nil {
@@ -175,7 +175,7 @@ func (_c *ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Cal
 	return _c
 }
 
-func (_c *ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Call) RunAndReturn(run func(s string, shipState model.ShipState)) *ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Call {
+func (_c *ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Call) RunAndReturn(run func(ski string, state model.ShipState)) *ShipConnectionInfoProviderInterface_HandleShipHandshakeStateUpdate_Call {
 	_c.Run(run)
 	return _c
 }
@@ -225,8 +225,8 @@ func (_c *ShipConnectionInfoProviderInterface_IsAutoAcceptEnabled_Call) RunAndRe
 }
 
 // IsRemoteServiceForSKIPaired provides a mock function for the type ShipConnectionInfoProviderInterface
-func (_mock *ShipConnectionInfoProviderInterface) IsRemoteServiceForSKIPaired(s string) bool {
-	ret := _mock.Called(s)
+func (_mock *ShipConnectionInfoProviderInterface) IsRemoteServiceForSKIPaired(ski string) bool {
+	ret := _mock.Called(ski)
 
 	if len(ret) == 0 {
 		panic("no return value specified for IsRemoteServiceForSKIPaired")
@@ -234,7 +234,7 @@ func (_mock *ShipConnectionInfoProviderInterface) IsRemoteServiceForSKIPaired(s 
 
 	var r0 bool
 	if returnFunc, ok := ret.Get(0).(func(string) bool); ok {
-		r0 = returnFunc(s)
+		r0 = returnFunc(ski)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
@@ -247,12 +247,12 @@ type ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call struct
 }
 
 // IsRemoteServiceForSKIPaired is a helper method to define mock.On call
-//   - s string
-func (_e *ShipConnectionInfoProviderInterface_Expecter) IsRemoteServiceForSKIPaired(s interface{}) *ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call {
-	return &ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call{Call: _e.mock.On("IsRemoteServiceForSKIPaired", s)}
+//   - ski string
+func (_e *ShipConnectionInfoProviderInterface_Expecter) IsRemoteServiceForSKIPaired(ski interface{}) *ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call {
+	return &ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call{Call: _e.mock.On("IsRemoteServiceForSKIPaired", ski)}
 }
 
-func (_c *ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call) Run(run func(s string)) *ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call {
+func (_c *ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call) Run(run func(ski string)) *ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 string
 		if args[0] != nil {
@@ -270,14 +270,14 @@ func (_c *ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call) 
 	return _c
 }
 
-func (_c *ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call) RunAndReturn(run func(s string) bool) *ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call {
+func (_c *ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call) RunAndReturn(run func(ski string) bool) *ShipConnectionInfoProviderInterface_IsRemoteServiceForSKIPaired_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ReportServiceShipID provides a mock function for the type ShipConnectionInfoProviderInterface
-func (_mock *ShipConnectionInfoProviderInterface) ReportServiceShipID(s string, s1 string) {
-	_mock.Called(s, s1)
+func (_mock *ShipConnectionInfoProviderInterface) ReportServiceShipID(ski string, shipid string) {
+	_mock.Called(ski, shipid)
 	return
 }
 
@@ -287,13 +287,13 @@ type ShipConnectionInfoProviderInterface_ReportServiceShipID_Call struct {
 }
 
 // ReportServiceShipID is a helper method to define mock.On call
-//   - s string
-//   - s1 string
-func (_e *ShipConnectionInfoProviderInterface_Expecter) ReportServiceShipID(s interface{}, s1 interface{}) *ShipConnectionInfoProviderInterface_ReportServiceShipID_Call {
-	return &ShipConnectionInfoProviderInterface_ReportServiceShipID_Call{Call: _e.mock.On("ReportServiceShipID", s, s1)}
+//   - ski string
+//   - shipid string
+func (_e *ShipConnectionInfoProviderInterface_Expecter) ReportServiceShipID(ski interface{}, shipid interface{}) *ShipConnectionInfoProviderInterface_ReportServiceShipID_Call {
+	return &ShipConnectionInfoProviderInterface_ReportServiceShipID_Call{Call: _e.mock.On("ReportServiceShipID", ski, shipid)}
 }
 
-func (_c *ShipConnectionInfoProviderInterface_ReportServiceShipID_Call) Run(run func(s string, s1 string)) *ShipConnectionInfoProviderInterface_ReportServiceShipID_Call {
+func (_c *ShipConnectionInfoProviderInterface_ReportServiceShipID_Call) Run(run func(ski string, shipid string)) *ShipConnectionInfoProviderInterface_ReportServiceShipID_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 string
 		if args[0] != nil {
@@ -316,7 +316,7 @@ func (_c *ShipConnectionInfoProviderInterface_ReportServiceShipID_Call) Return()
 	return _c
 }
 
-func (_c *ShipConnectionInfoProviderInterface_ReportServiceShipID_Call) RunAndReturn(run func(s string, s1 string)) *ShipConnectionInfoProviderInterface_ReportServiceShipID_Call {
+func (_c *ShipConnectionInfoProviderInterface_ReportServiceShipID_Call) RunAndReturn(run func(ski string, shipid string)) *ShipConnectionInfoProviderInterface_ReportServiceShipID_Call {
 	_c.Run(run)
 	return _c
 }

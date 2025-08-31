@@ -21,9 +21,10 @@ import (
 
 // CertificateValidationResult represents the result of certificate validation
 type CertificateValidationResult struct {
-	Valid     bool
-	RemoteSKI string
-	Error     error
+	Valid             bool
+	RemoteSKI         string
+	RemoteFingerprint string
+	Error             error
 }
 
 // validateConnectionLimit checks if a new connection can be established
@@ -48,7 +49,7 @@ func (h *Hub) createWebSocketDialer() *websocket.Dialer {
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 5 * time.Second,
 		TLSClientConfig: &tls.Config{
-			Certificates: []tls.Certificate{h.certifciate},
+			Certificates: []tls.Certificate{h.certificate},
 			// SHIP 12.1: all certificates are locally signed
 			InsecureSkipVerify: true, // #nosec G402
 			// SHIP 9.1: the ciphers are reported insecure but are defined to be used by SHIP
@@ -60,7 +61,7 @@ func (h *Hub) createWebSocketDialer() *websocket.Dialer {
 
 // validateRemoteCertificate validates the remote certificate and returns the SKI
 // This is a pure function that's easy to test
-func validateRemoteCertificate(remoteCerts []*x509.Certificate, expectedSKI string) CertificateValidationResult {
+func validateRemoteCertificate(remoteCerts []*x509.Certificate, expectedSKI, expectedFingerprint string) CertificateValidationResult {
 	if len(remoteCerts) == 0 || remoteCerts[0].SubjectKeyId == nil {
 		return CertificateValidationResult{
 			Valid: false,
@@ -76,10 +77,25 @@ func validateRemoteCertificate(remoteCerts []*x509.Certificate, expectedSKI stri
 		}
 	}
 
-	if remoteSKI != expectedSKI {
+	if expectedSKI != "" && remoteSKI != expectedSKI {
 		return CertificateValidationResult{
 			Valid: false,
 			Error: fmt.Errorf("SKI mismatch: expected %s, got %s", expectedSKI, remoteSKI),
+		}
+	}
+
+	remoteFingerprint, err := cert.FingerprintFromCertificate(remoteCerts[0])
+	if err != nil {
+		return CertificateValidationResult{
+			Valid: false,
+			Error: fmt.Errorf("invalid fingerprint format: %w", err),
+		}
+	}
+
+	if expectedFingerprint != "" && remoteFingerprint != expectedFingerprint {
+		return CertificateValidationResult{
+			Valid: false,
+			Error: fmt.Errorf("fingerprint mismatch: expected %s, got %s", expectedFingerprint, remoteFingerprint),
 		}
 	}
 
@@ -88,8 +104,9 @@ func validateRemoteCertificate(remoteCerts []*x509.Certificate, expectedSKI stri
 	cert.LogCertificateExpiration(remoteCerts[0], remoteSKI)
 
 	return CertificateValidationResult{
-		Valid:     true,
-		RemoteSKI: remoteSKI,
+		Valid:             true,
+		RemoteSKI:         remoteSKI,
+		RemoteFingerprint: remoteFingerprint,
 	}
 }
 
@@ -154,11 +171,16 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 	// Validate remote certificate
 	tlsConn := conn.UnderlyingConn().(*tls.Conn)
 	remoteCerts := tlsConn.ConnectionState().PeerCertificates
-	validationResult := validateRemoteCertificate(remoteCerts, remoteService.SKI())
+	validationResult := validateRemoteCertificate(remoteCerts, remoteService.SKI(), remoteService.Fingerprint())
 	if !validationResult.Valid {
 		errorString := fmt.Sprintf("certificate validation failed for %s: %s", remoteService.SKI(), validationResult.Error)
 		h.safeClose(conn, "certificate validation failed")
 		return errors.New(errorString)
+	}
+
+	// Update service SKI if it was empty (e.g., from SHIP Pairing Service)
+	if remoteService.SKI() == "" && validationResult.RemoteSKI != "" && remoteService.Fingerprint() == validationResult.RemoteFingerprint {
+		remoteService.SetSKI(validationResult.RemoteSKI)
 	}
 
 	// Check for double connections
@@ -178,7 +200,11 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 func (h *Hub) shouldAttemptConnection(remoteService *api.ServiceDetails) bool {
 	// connection attempt is not relevant if the device is no longer paired
 	// or it is not queued for pairing
-	pairingState := h.ServiceForSKI(remoteService.SKI()).ConnectionStateDetail().State()
+	service := h.ServiceForIdentifier(remoteService.SKI(), remoteService.Fingerprint())
+	if service == nil {
+		return false
+	}
+	pairingState := service.ConnectionStateDetail().State()
 	return h.IsRemoteServiceForSKIPaired(remoteService.SKI()) || pairingState == api.ConnectionStateQueued
 }
 

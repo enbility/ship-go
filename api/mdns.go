@@ -87,6 +87,10 @@ type MdnsInterface interface {
 	// This is recommended metadata for unique device identification.
 	DeviceSerial() string
 
+	// DeviceType returns the device type string value for QR code generation and mDNS announcements.
+	// This is optional metadata that helps users identify the device.
+	DeviceType() string
+
 	// DeviceCategories returns the device categories for QR code generation and mDNS announcements.
 	// Categories help classify the device type per SHIP requirements for installation process.
 	DeviceCategories() []DeviceCategoryType

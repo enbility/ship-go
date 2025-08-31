@@ -25,17 +25,18 @@ func TestConnectionDelayRaceConditions(t *testing.T) {
 		mockHubReader := mocks.NewHubReaderInterface(t)
 		mockMdns := mocks.NewMdnsInterface(t)
 		mockMdns.EXPECT().Shutdown().Maybe()
-		localService := api.NewServiceDetails("local-ski")
+		localService := api.NewServiceDetails("localski", "", "")
 		cert := tls.Certificate{}
 
-		hub := NewHub(mockHubReader, mockMdns, 4729, cert, localService)
+		hub, err := newTestHub(mockHubReader, mockMdns, 4729, cert, localService, nil)
+		assert.NoError(t, err)
 
 		// Create remote service details
-		remoteService := api.NewServiceDetails("remote-ski-6000") // Higher than local
+		remoteService := api.NewServiceDetails("remoteski6000", "", "") // Higher than local
 
 		// Mock connections
 		mockConn1 := mocks.NewShipConnectionInterface(t)
-		mockConn1.EXPECT().RemoteSKI().Return("remote-ski-6000").Maybe()
+		mockConn1.EXPECT().RemoteSKI().Return("remoteski6000").Maybe()
 		mockConn1.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 
 		var operationCount atomic.Int32
@@ -67,7 +68,7 @@ func TestConnectionDelayRaceConditions(t *testing.T) {
 			// Goroutine 3: Unregister connection
 			go func() {
 				defer wg.Done()
-				hub.UnregisterConnectionIfMatch("remote-ski-6000", mockConn1)
+				hub.UnregisterConnectionIfMatch("remoteski6000", mockConn1)
 				operationCount.Add(1)
 			}()
 		}
@@ -89,10 +90,11 @@ func TestConnectionDelayRaceConditions(t *testing.T) {
 		mockHubReader := mocks.NewHubReaderInterface(t)
 		mockMdns := mocks.NewMdnsInterface(t)
 		mockMdns.EXPECT().Shutdown().Maybe()
-		localService := api.NewServiceDetails("local-ski-1000")
+		localService := api.NewServiceDetails("localski1000", "", "")
 		cert := tls.Certificate{}
 
-		hub := NewHub(mockHubReader, mockMdns, 4729, cert, localService)
+		hub, err := newTestHub(mockHubReader, mockMdns, 4729, cert, localService, nil)
+		assert.NoError(t, err)
 
 		initialGoroutines := runtime.NumGoroutine()
 
@@ -102,7 +104,7 @@ func TestConnectionDelayRaceConditions(t *testing.T) {
 
 		for i := 0; i < numDelays; i++ {
 			wg.Add(1)
-			ski := fmt.Sprintf("remote-%d", i)
+			ski := fmt.Sprintf("remote%d", i)
 
 			go func(remoteSKI string) {
 				defer wg.Done()

@@ -12,6 +12,7 @@ import (
 	"github.com/enbility/ship-go/cert"
 	"github.com/enbility/ship-go/logging"
 	"github.com/enbility/ship-go/ship"
+	"github.com/enbility/ship-go/util"
 	"github.com/enbility/ship-go/ws"
 	"github.com/gorilla/websocket"
 )
@@ -58,7 +59,7 @@ func (h *Hub) startWebsocketServer() error {
 		Handler:           h,
 		ReadHeaderTimeout: time.Duration(time.Second * 10),
 		TLSConfig: &tls.Config{
-			Certificates:          []tls.Certificate{h.certifciate},
+			Certificates:          []tls.Certificate{h.certificate},
 			ClientAuth:            tls.RequireAnyClientCert, // SHIP 9: Client authentication is required
 			CipherSuites:          cert.CipherSuites,        // #nosec G402 // SHIP 9.1: the ciphers are reported insecure but are defined to be used by SHIP
 			VerifyPeerCertificate: h.verifyPeerCertificate,
@@ -124,6 +125,13 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fingerprint, err := cert.FingerprintFromCertificate(r.TLS.PeerCertificates[0])
+	if err != nil {
+		logConnectionError(err, "client certificate fingerprint extraction failed:")
+		h.safeClose(conn, "rejected connection")
+		return
+	}
+
 	// Log certificate expiration warnings (per SHIP spec 12.1.1)
 	// This does not affect the connection - we log but still allow communication
 	cert.LogCertificateExpiration(r.TLS.PeerCertificates[0], ski)
@@ -132,28 +140,35 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn.SetReadLimit(ws.MaxMessageSize)
 
 	// normalize the incoming SKI
-	remoteService := api.NewServiceDetails(ski)
-	logging.Log().Debug("incoming connection request from", remoteService.SKI())
+	ski = util.NormalizeSKI(ski)
+	logging.Log().Debug("incoming connection request from", ski)
 
 	// Check if the remote service is paired
-	service := h.ServiceForSKI(remoteService.SKI())
+	service := h.ServiceForIdentifier(ski, fingerprint)
+	if service == nil {
+		// Create new service if not found at all
+		service = api.NewServiceDetails(ski, fingerprint, "")
+		h.AddService(service)
+	} else if service.SKI() != ski && service.Fingerprint() == fingerprint {
+		// Update the service with the actual SKI from the connection
+		service.SetSKI(ski)
+	}
+
 	connectionStateDetail := service.ConnectionStateDetail()
 	if connectionStateDetail.State() == api.ConnectionStateQueued {
 		connectionStateDetail.SetState(api.ConnectionStateReceivedPairingRequest)
 		h.hubReader.ServicePairingDetailUpdate(ski, connectionStateDetail)
 	}
 
-	remoteService = service
-
 	// don't allow a second connection
-	if !h.keepThisConnection(conn, true, remoteService) {
+	if !h.keepThisConnection(conn, true, service) {
 		h.safeClose(conn, "double connection rejected")
 		return
 	}
 
-	dataHandler := ws.NewWebsocketConnection(conn, remoteService.SKI())
+	dataHandler := ws.NewWebsocketConnection(conn, service.SKI())
 	shipConnection := ship.NewConnectionHandler(h, dataHandler, ship.ShipRoleServer,
-		h.localService.ShipID(), remoteService.SKI(), remoteService.ShipID())
+		h.localService.ShipID(), service.SKI(), service.ShipID())
 	shipConnection.Run()
 
 	h.registerConnection(shipConnection)

@@ -22,13 +22,14 @@ func TestKeepConnectionTOCTOURaceFix(t *testing.T) {
 		mockHubReader := mocks.NewHubReaderInterface(t)
 		mockMdns := mocks.NewMdnsInterface(t)
 		mockMdns.EXPECT().Shutdown().Maybe()
-		localService := api.NewServiceDetails("local-ski-5000")
+		localService := api.NewServiceDetails("localski5000", "", "")
 		cert := tls.Certificate{}
 
-		hub := NewHub(mockHubReader, mockMdns, 4729, cert, localService)
+		hub, err := newTestHub(mockHubReader, mockMdns, 4729, cert, localService, nil)
+		assert.NoError(t, err)
 
-		remoteSKI := "remote-ski-6000" // Higher than local, so remote should win
-		remoteService := api.NewServiceDetails(remoteSKI)
+		remoteSKI := "remoteski6000" // Higher than local, so remote should win
+		remoteService := api.NewServiceDetails(remoteSKI, "", "")
 
 		// Create mock connections
 		oldConn := mocks.NewShipConnectionInterface(t)
@@ -106,13 +107,14 @@ func TestKeepConnectionTOCTOURaceFix(t *testing.T) {
 		mockHubReader := mocks.NewHubReaderInterface(t)
 		mockMdns := mocks.NewMdnsInterface(t)
 		mockMdns.EXPECT().Shutdown().Maybe()
-		localService := api.NewServiceDetails("local-ski-4000")
+		localService := api.NewServiceDetails("localski4000", "", "")
 		cert := tls.Certificate{}
 
-		hub := NewHub(mockHubReader, mockMdns, 4729, cert, localService)
+		hub, err := newTestHub(mockHubReader, mockMdns, 4729, cert, localService, nil)
+		assert.NoError(t, err)
 
-		remoteSKI := "remote-ski-5000" // Higher than local
-		remoteService := api.NewServiceDetails(remoteSKI)
+		remoteSKI := "remoteski5000" // Higher than local
+		remoteService := api.NewServiceDetails(remoteSKI, "", "")
 
 		// Create multiple mock connections
 		mockConns := make([]*mocks.ShipConnectionInterface, 10)

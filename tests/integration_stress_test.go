@@ -6,8 +6,9 @@
 // realistic usage patterns.
 //
 // To run these tests:
-//   make test-stress
-//   or: go test -race -tags=stress -timeout=60s ./tests
+//
+//	make test-stress
+//	or: go test -race -tags=stress -timeout=60s ./tests
 //
 // The tests are tagged to avoid running them during normal test runs since they
 // are resource-intensive and time-consuming.
@@ -21,14 +22,94 @@ import (
 	"time"
 
 	"github.com/enbility/ship-go/api"
+	"github.com/enbility/ship-go/cert"
 	"github.com/enbility/ship-go/hub"
 	"github.com/enbility/ship-go/mocks"
 	"github.com/enbility/ship-go/model"
 	"github.com/enbility/ship-go/ship"
-	"github.com/enbility/ship-go/cert"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+// TestHistoryProvider implements PairingHistoryProviderInterface for integration testing
+type TestHistoryProvider struct {
+	seen map[string]bool
+	mux  sync.RWMutex
+}
+
+func NewTestHistoryProvider() *TestHistoryProvider {
+	return &TestHistoryProvider{
+		seen: make(map[string]bool),
+	}
+}
+
+func (t *TestHistoryProvider) HasSeenDigest(alg, digest string) bool {
+	t.mux.RLock()
+	defer t.mux.RUnlock()
+	key := alg + ":" + digest
+	return t.seen[key]
+}
+
+func (t *TestHistoryProvider) RecordPairing(alg, digest string) {
+	t.mux.Lock()
+	defer t.mux.Unlock()
+	key := alg + ":" + digest
+	t.seen[key] = true
+}
+
+// TestRingBufferPersistence implements RingBufferPersistence for integration testing
+type TestRingBufferPersistence struct {
+	entries   []api.DigestEntry
+	nextIndex int
+	mux       sync.RWMutex
+}
+
+func NewTestRingBufferPersistence() *TestRingBufferPersistence {
+	return &TestRingBufferPersistence{
+		entries:   make([]api.DigestEntry, 0),
+		nextIndex: 0,
+	}
+}
+
+func (t *TestRingBufferPersistence) LoadRingBuffer() ([]api.DigestEntry, int, error) {
+	t.mux.RLock()
+	defer t.mux.RUnlock()
+
+	// Return a copy to prevent races
+	entries := make([]api.DigestEntry, len(t.entries))
+	copy(entries, t.entries)
+	return entries, t.nextIndex, nil
+}
+
+func (t *TestRingBufferPersistence) SaveRingBuffer(entries []api.DigestEntry, nextIndex int) error {
+	t.mux.Lock()
+	defer t.mux.Unlock()
+
+	// Save a copy to prevent races
+	t.entries = make([]api.DigestEntry, len(entries))
+	copy(t.entries, entries)
+	t.nextIndex = nextIndex
+	return nil
+}
+
+// Test helper for integration tests
+func newTestHub(
+	hubReader api.HubReaderInterface,
+	mdns api.MdnsInterface,
+	port int,
+	certificate tls.Certificate,
+	localService *api.ServiceDetails,
+	pairingConfig *api.PairingConfig,
+) (*hub.Hub, error) {
+	var ringBufferPersistence api.RingBufferPersistence
+	if pairingConfig != nil {
+		mode := pairingConfig.Mode
+		if mode == api.PairingModeListener || mode == api.PairingModeBoth {
+			ringBufferPersistence = NewTestRingBufferPersistence() // Simple test implementation
+		}
+	}
+	return hub.NewHub(hubReader, mdns, port, certificate, localService, pairingConfig, ringBufferPersistence)
+}
 
 // TestFullSystemStress performs comprehensive stress testing of the entire SHIP system
 func TestFullSystemStress(t *testing.T) {
@@ -38,9 +119,9 @@ func TestFullSystemStress(t *testing.T) {
 
 	// Test configuration
 	const (
-		numHubs         = 2
-		numConnections  = 10
-		testDuration    = 5 * time.Second
+		numHubs          = 2
+		numConnections   = 10
+		testDuration     = 5 * time.Second
 		operationsPerSec = 50
 	)
 
@@ -86,7 +167,7 @@ func TestFullSystemStress(t *testing.T) {
 			wg.Add(1)
 			go func(connection *ship.ShipConnection, cID, wID int) {
 				defer wg.Done()
-				runConnectionStressWorker(ctx, connection, cID, wID, 
+				runConnectionStressWorker(ctx, connection, cID, wID,
 					&connectionOperations, &stateTransitions, &errors)
 			}(conn, connIdx, workerID)
 		}
@@ -149,7 +230,7 @@ func createTestHub(t *testing.T, id int) *hub.Hub {
 		t.Fatalf("Failed to create test certificate: %v", err)
 	}
 
-	return hub.NewHub(hubReader, mdns, 4729+id, cert, service)
+	return hub.newTestHub(hubReader, mdns, 4729+id, cert, service)
 }
 
 // createTestConnection creates a connection for stress testing
@@ -178,9 +259,9 @@ func createTestConnection(t *testing.T, id int) *ship.ShipConnection {
 }
 
 // runHubStressWorker performs stress operations on a hub
-func runHubStressWorker(ctx context.Context, h *hub.Hub, hubID, workerID int, 
+func runHubStressWorker(ctx context.Context, h *hub.Hub, hubID, workerID int,
 	hubOps *int64, errors *int64) {
-	
+
 	ticker := time.NewTicker(time.Millisecond * 20)
 	defer ticker.Stop()
 
@@ -234,9 +315,9 @@ func runHubStressWorker(ctx context.Context, h *hub.Hub, hubID, workerID int,
 }
 
 // runConnectionStressWorker performs stress operations on a connection
-func runConnectionStressWorker(ctx context.Context, conn *ship.ShipConnection, 
+func runConnectionStressWorker(ctx context.Context, conn *ship.ShipConnection,
 	connID, workerID int, connOps, stateTransitions, errors *int64) {
-	
+
 	ticker := time.NewTicker(time.Millisecond * 25)
 	defer ticker.Stop()
 
@@ -294,9 +375,9 @@ func runConnectionStressWorker(ctx context.Context, conn *ship.ShipConnection,
 }
 
 // monitorSystemHealth monitors the system during stress testing
-func monitorSystemHealth(ctx context.Context, t *testing.T, 
+func monitorSystemHealth(ctx context.Context, t *testing.T,
 	hubs []*hub.Hub, connections []*ship.ShipConnection) {
-	
+
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
@@ -307,19 +388,19 @@ func monitorSystemHealth(ctx context.Context, t *testing.T,
 		case <-ticker.C:
 			// Check for system responsiveness
 			start := time.Now()
-			
+
 			// Test hub responsiveness
 			for _, h := range hubs {
 				_ = h.IsAutoAcceptEnabled()
 			}
-			
+
 			// Test connection responsiveness
 			for _, conn := range connections {
 				_, _ = conn.ShipHandshakeState()
 			}
-			
+
 			duration := time.Since(start)
-			
+
 			// Log if system is becoming unresponsive
 			if duration > time.Millisecond*100 {
 				t.Logf("System responsiveness degraded: %v", duration)
@@ -353,7 +434,7 @@ func TestDeadlockUnderLoad(t *testing.T) {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			
+
 			for {
 				select {
 				case <-ctx.Done():
@@ -377,7 +458,7 @@ func TestDeadlockUnderLoad(t *testing.T) {
 					case 5:
 						_, _ = conn.ShipHandshakeState()
 					}
-					
+
 					// Small delay to prevent tight loops
 					time.Sleep(time.Microsecond * 10)
 				}
@@ -411,14 +492,14 @@ func TestRaceConditionDetection(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			
+
 			for j := 0; j < iterations; j++ {
 				ski := makeSKI("race", id)
-				
+
 				// Mix of read and write operations
 				_ = h.ServiceForSKI(ski)
 				_ = h.IsAutoAcceptEnabled()
-				
+
 				if j%10 == 0 {
 					service := api.NewServiceDetails(ski)
 					h.RegisterRemoteSKI(ski, service.ShipID())
@@ -432,7 +513,7 @@ func TestRaceConditionDetection(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			
+
 			for j := 0; j < iterations; j++ {
 				_, _ = conn.ShipHandshakeState()
 				// Test other safe operations

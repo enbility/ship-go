@@ -43,7 +43,7 @@ func TestHubMutexOrderingDeadlock(t *testing.T) {
 		// Operation 2: Check pairing details (might need muxReg)
 		go func() {
 			defer wg.Done()
-			_ = hub.ServiceForSKI("ski-1")
+			_ = hub.ServiceForIdentifier("ski-1", "")
 		}()
 
 		// Operation 3: Connection lookup (needs muxCon)
@@ -331,7 +331,7 @@ func TestHubStressWithAllOperations(t *testing.T) {
 				default:
 					idx := workerID % numSKIs
 					monitorOperation(func() {
-						_ = hub.ServiceForSKI(skis[idx])
+						_ = hub.ServiceForIdentifier(skis[idx], "")
 					}, &pairingChecks)
 					time.Sleep(time.Microsecond * 200)
 				}

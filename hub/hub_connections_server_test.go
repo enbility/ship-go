@@ -33,19 +33,19 @@ func TestHubConnectionsServerSuite(t *testing.T) {
 type HubConnectionsServerSuite struct {
 	suite.Suite
 
-	hubReader   *mocks.MockHubReaderInterface
-	mdnsService *mocks.MockMdnsInterface
+	hubReader      *mocks.MockHubReaderInterface
+	mdnsService    *mocks.MockMdnsInterface
 	shipConnection *mocks.ShipConnectionInterface
 	wsDataWriter   *mocks.WebsocketDataWriterInterface
-	remoteSki string
-	sut *Hub
+	remoteSki      string
+	sut            *Hub
 }
 
 func (s *HubConnectionsServerSuite) BeforeTest(suiteName, testName string) {
 	s.remoteSki = "remotetestski"
 
 	ctrl := gomock.NewController(s.T())
-	
+
 	s.hubReader = mocks.NewMockHubReaderInterface(ctrl)
 	s.hubReader.EXPECT().RemoteSKIConnected(gomock.Any()).Return().AnyTimes()
 	s.hubReader.EXPECT().RemoteSKIDisconnected(gomock.Any()).Return().AnyTimes()
@@ -68,9 +68,11 @@ func (s *HubConnectionsServerSuite) BeforeTest(suiteName, testName string) {
 	s.shipConnection.EXPECT().DataHandler().Return(s.wsDataWriter).Maybe()
 	s.shipConnection.EXPECT().ShipHandshakeState().Return(model.SmeStateComplete, nil).Maybe()
 
-	localService := api.NewServiceDetails("localSKI")
+	localService := api.NewServiceDetails("localSKI", "", "")
 	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
-	s.sut = NewHub(s.hubReader, s.mdnsService, 4567, certificate, localService)
+	var err error
+	s.sut, err = newTestHub(s.hubReader, s.mdnsService, 4567, certificate, localService, nil)
+	assert.NoError(s.T(), err)
 }
 
 func (s *HubConnectionsServerSuite) AfterTest(suiteName, testName string) {
@@ -91,10 +93,11 @@ func (s *HubConnectionsServerSuite) Test_SendWSCloseMessage() {
 	assert.Nil(s.T(), err)
 
 	ski := "12af9e"
-	localService := api.NewServiceDetails(ski)
+	localService := api.NewServiceDetails(ski, "", "")
 
-	hub := NewHub(s.hubReader, s.mdnsService, 4567, tls.Certificate{}, localService)
+	hub, err := newTestHub(s.hubReader, s.mdnsService, 4567, tls.Certificate{}, localService, nil)
 	assert.NotNil(s.T(), hub)
+	assert.NoError(s.T(), err)
 
 	hub.sendWSCloseMessage(con)
 
@@ -137,7 +140,7 @@ func (s *HubConnectionsServerSuite) Test_ServeHTTP_01() {
 func (s *HubConnectionsServerSuite) Test_ServeHTTP_02() {
 	server := httptest.NewUnstartedServer(s.sut)
 	server.TLS = &tls.Config{
-		Certificates:       []tls.Certificate{s.sut.certifciate},
+		Certificates:       []tls.Certificate{s.sut.certificate},
 		ClientAuth:         tls.RequireAnyClientCert,
 		CipherSuites:       cert.CipherSuites, // #nosec G402
 		InsecureSkipVerify: true,              // #nosec G402

@@ -24,7 +24,7 @@ type HubConnectionsRegistryCoverageSuite struct {
 
 func (s *HubConnectionsRegistryCoverageSuite) SetupTest() {
 	s.localSKI = "test-local-ski"
-	s.localService = api.NewServiceDetails(s.localSKI)
+	s.localService = api.NewServiceDetails(s.localSKI, "", "")
 
 	cert, err := cert.CreateCertificate("test", "test", "DE", "test")
 	require.NoError(s.T(), err)
@@ -39,22 +39,21 @@ func (s *HubConnectionsRegistryCoverageSuite) SetupTest() {
 	s.mockReader.EXPECT().ServiceShipIDUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Maybe()
 	s.mockReader.EXPECT().RemoteSKIDisconnected(mock.AnythingOfType("string")).Maybe()
 
-	s.hub = NewHub(s.mockReader, s.mockMdns, 0, cert, s.localService)
+	s.hub, err = newTestHub(s.mockReader, s.mockMdns, 0, cert, s.localService, nil)
+	assert.NoError(s.T(), err)
 }
 
 // Test_KeepThisConnection_BasicLogic tests the basic logic of connection management
 func (s *HubConnectionsRegistryCoverageSuite) Test_KeepThisConnection_BasicLogic() {
 	// Test that we can register a service
-	remoteService := api.NewServiceDetails("remote-ski-1")
-
-	s.hub.muxReg.Lock()
-	s.hub.remoteServices[remoteService.SKI()] = remoteService
-	s.hub.muxReg.Unlock()
+	removeService := api.NewServiceDetails("remoteski1", "", "")
+	success := s.hub.AddService(removeService)
+	assert.True(s.T(), success)
 
 	// Verify the service is registered
-	service := s.hub.ServiceForSKI(remoteService.SKI())
+	service := s.hub.ServiceForIdentifier(removeService.SKI(), "")
 	assert.NotNil(s.T(), service)
-	assert.Equal(s.T(), remoteService.SKI(), service.SKI())
+	assert.Equal(s.T(), removeService.SKI(), service.SKI())
 }
 
 // Test_ConnectionForSKI_ThreadSafety tests thread safety of connection lookup
@@ -126,10 +125,9 @@ func (s *HubConnectionsRegistryCoverageSuite) Test_ConnectionRegistration() {
 	assert.Equal(s.T(), mockConn, conn)
 
 	// Create a service for the connection
-	service := api.NewServiceDetails(ski)
-	s.hub.muxReg.Lock()
-	s.hub.remoteServices[ski] = service
-	s.hub.muxReg.Unlock()
+	service := api.NewServiceDetails(ski, "", "")
+	success := s.hub.AddService(service)
+	assert.True(s.T(), success)
 
 	// Simulate connection close
 	mockConn.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()

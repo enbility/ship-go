@@ -28,6 +28,9 @@ var (
 	// ErrInvalidSKI indicates an invalid or missing SKI
 	ErrInvalidSKI = errors.New("invalid SKI")
 
+	// ErrServiceNil indicates a nil service was provided
+	ErrServiceNil = errors.New("service is not initialized")
+
 	// ErrNotPaired indicates the remote service is not paired
 	ErrNotPaired = errors.New("remote service not paired")
 )

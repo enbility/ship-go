@@ -339,6 +339,11 @@ func (m *MdnsManager) AnnounceMdnsEntry() error {
 		return fmt.Errorf("cannot announce mDNS entry: no provider available (selection: %d)", m.providerSelection)
 	}
 
+	// no need to announce if it is already, can happen when call via hub
+	if m.isServiceAnnounced() {
+		return nil
+	}
+
 	// Validate required fields
 	if len(m.identifier) == 0 {
 		return fmt.Errorf("cannot announce mDNS entry: service identifier is empty (SKI: %s)", m.ski)
@@ -465,6 +470,10 @@ func (m *MdnsManager) DeviceModel() string {
 
 func (m *MdnsManager) DeviceSerial() string {
 	return m.deviceSerial
+}
+
+func (m *MdnsManager) DeviceType() string {
+	return m.deviceType
 }
 
 func (m *MdnsManager) DeviceCategories() []api.DeviceCategoryType {
@@ -604,7 +613,7 @@ func (m *MdnsManager) processShipPairingMdnsEntry(elements map[string]string, se
 	mapItems := []string{"txtvers", "parType", "forId", "forPar", "trustId", "trustPar", "trustCurve", "type", "trustNonce", "alg", "digest"}
 	for _, item := range mapItems {
 		if _, ok := elements[item]; !ok {
-			logging.Log().Debug("mdns: pairing - missing mandatory element", item)
+			logging.Log().Debug("mdns: pairing - missing mandatory element", item, serviceName)
 			return
 		}
 	}
@@ -612,7 +621,7 @@ func (m *MdnsManager) processShipPairingMdnsEntry(elements map[string]string, se
 	txtvers := elements["txtvers"]
 	// Validate txtvers value (must be "1" per SHIP spec)
 	if txtvers != "1" {
-		logging.Log().Debug("mdns: pairing - invalid txtvers value", txtvers)
+		logging.Log().Debug("mdns: pairing - invalid txtvers value", txtvers, serviceName)
 		return
 	}
 
@@ -677,7 +686,7 @@ func (m *MdnsManager) processShipPairingMdnsEntry(elements map[string]string, se
 	// Return value: true = continue searching, false = stop searching (pairing accepted)
 	continueSearching := callback(newEntry)
 	if !continueSearching {
-		logging.Log().Debug("mdns: pairing entry accepted, stopping search")
+		logging.Log().Debug("mdns: not searching shippairing")
 	}
 }
 
@@ -952,17 +961,12 @@ func (m *MdnsManager) AnnouncePairingService(txtRecord *api.ShipPairingTXT) (str
 		return "", fmt.Errorf("invalid TXT record: %w", err)
 	}
 
-	// Generate unique instance ID and service name
+	// Generate unique service name
 	m.pairingInstancesMux.Lock()
 	m.instanceCounter++
-	instanceID := strconv.Itoa(m.instanceCounter)
-
 	// Generate service name following SHIP-compliant naming
 	// All instances use #N suffix, starting from #1 (per interface test requirements)
 	serviceName := m.serviceName + "-pairing#" + strconv.Itoa(m.instanceCounter)
-
-	// Store instance before unlocking mutex
-	m.pairingInstances[instanceID] = txtRecord
 	m.pairingInstancesMux.Unlock()
 
 	// Convert ShipPairingTXT to string array
@@ -973,53 +977,41 @@ func (m *MdnsManager) AnnouncePairingService(txtRecord *api.ShipPairingTXT) (str
 	providerInstanceID, err := m.mdnsProvider.AnnounceService(shipPairingZeroConfServiceType, serviceName, m.port, txtArray)
 	if err != nil {
 		logging.Log().Debug("mdns: AnnouncePairingService - provider.AnnounceService failed:", err)
-		// Clean up the instance if announcement failed
-		m.pairingInstancesMux.Lock()
-		delete(m.pairingInstances, instanceID)
-		m.pairingInstancesMux.Unlock()
 		return "", fmt.Errorf("failed to announce pairing service: %w", err)
 	}
 
-	// For now, we ignore the providerInstanceID and use our own instanceID
-	// This is minimal implementation - provider instance management can be added later
-	_ = providerInstanceID
+	// Store instance using provider's actual instance ID for proper cleanup
+	m.pairingInstancesMux.Lock()
+	m.pairingInstances[providerInstanceID] = txtRecord
+	m.pairingInstancesMux.Unlock()
 
 	// Update state tracking after successful announcement
 	m.setIsPairingServiceAnnounced(true)
 
-	return instanceID, nil
+	// Return provider's instance ID so it can be used for cleanup
+	return providerInstanceID, nil
 }
 
 // UnannouncePairingService removes _shippairing._tcp announcement (implements MdnsPairingInterface)
-func (m *MdnsManager) UnannouncePairingService(instanceID string) error {
+func (m *MdnsManager) UnannouncePairingService(providerInstanceID string) error {
 	// Get active provider (testProvider takes precedence for testing)
 	provider := m.mdnsProvider
 	if provider == nil {
 		return api.ErrPairingNotActive
 	}
 
-	// Validate instanceID and remove from instances map
+	// Validate providerInstanceID and remove from instances map
 	m.pairingInstancesMux.Lock()
-	_, exists := m.pairingInstances[instanceID]
+	_, exists := m.pairingInstances[providerInstanceID]
 	if !exists {
 		m.pairingInstancesMux.Unlock()
-		return fmt.Errorf("instance ID %s not found", instanceID)
+		return fmt.Errorf("provider instance ID %s not found", providerInstanceID)
 	}
-	delete(m.pairingInstances, instanceID)
+	delete(m.pairingInstances, providerInstanceID)
 	m.pairingInstancesMux.Unlock()
 
-	// Generate service name for the specific instance
-	// Validate instanceID is numeric
-	if _, err := strconv.Atoi(instanceID); err != nil {
-		return fmt.Errorf("invalid instance ID: %s", instanceID)
-	}
-
-	// Generate service name - all instances use #N suffix
-	serviceName := m.serviceName + "-pairing#" + instanceID
-
-	// Use provider's enhanced UnannounceService method
-	// For minimal implementation, use serviceName as the provider instance ID
-	if err := provider.UnannounceService(serviceName); err != nil {
+	// Use provider's enhanced UnannounceService method with provider's own instance ID
+	if err := provider.UnannounceService(providerInstanceID); err != nil {
 		return err
 	}
 

@@ -82,31 +82,34 @@ func main() {
 	fmt.Printf("📜 Device SKI (identifier): %s\n", ski)
 
 	// Step 2: Create service details for mDNS announcement
-	serviceDetails := api.NewServiceDetails(ski)
+	serviceDetails := api.NewServiceDetails(ski, "", "")
 
 	// Step 3: Create mDNS manager for device discovery
 	// Parameters: SKI, brand, model, type, serial, categories, shipID, serviceName, port, interfaces, provider
 	deviceCategories := []api.DeviceCategoryType{} // Empty for this example
 	interfaces := []string{}                       // Empty = use all interfaces
 	mdnsManager := mdns.NewMDNS(
-		ski,                        // Device SKI
-		"ship-go",                  // Device brand
-		"QuickstartHub",            // Device model
-		"Generic",                  // Device type
-		"DEMO-001",                 // Device serial
-		deviceCategories,           // Device categories
-		"quickstart-ship-id",       // SHIP identifier
-		"SHIP-QuickstartHub",       // Service name
-		4712,                       // Port
-		interfaces,                 // Network interfaces (empty = all)
+		ski,                           // Device SKI
+		"ship-go",                     // Device brand
+		"QuickstartHub",               // Device model
+		"Generic",                     // Device type
+		"DEMO-001",                    // Device serial
+		deviceCategories,              // Device categories
+		"quickstart-ship-id",          // SHIP identifier
+		"SHIP-QuickstartHub",          // Service name
+		4712,                          // Port
+		interfaces,                    // Network interfaces (empty = all)
 		mdns.MdnsProviderSelectionAll, // Provider selection (auto-select Avahi or Zeroconf)
 	)
 
 	// Step 4: Create the hub
 	hubReader := &SimpleHubReader{}
 	port := 4712 // SHIP standard port
-	h := hub.NewHub(hubReader, mdnsManager, port, certificate, serviceDetails)
-
+	// No pairing configuration = no history provider needed
+	h, err := hub.NewHub(hubReader, mdnsManager, port, certificate, serviceDetails, nil, nil)
+	if err != nil {
+		log.Fatal("Failed to create hub:", err)
+	}
 	// Optional: Set connection limit for small devices
 	h.SetMaxConnections(5)
 
@@ -135,13 +138,13 @@ func main() {
 // createCertificate creates a new SHIP-compliant certificate
 func createCertificate() (tls.Certificate, string, error) {
 	fmt.Println("🔐 Creating new certificate...")
-	
+
 	// Create certificate with EEBUS/SHIP required fields
 	certificate, err := cert.CreateCertificate(
-		"Demo",                // OrganizationalUnit
-		"ship-go Quickstart",  // Organization  
-		"DE",                  // Country
-		"QuickstartHub",       // CommonName
+		"Demo",               // OrganizationalUnit
+		"ship-go Quickstart", // Organization
+		"DE",                 // Country
+		"QuickstartHub",      // CommonName
 	)
 	if err != nil {
 		return tls.Certificate{}, "", fmt.Errorf("failed to create certificate: %w", err)

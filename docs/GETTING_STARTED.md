@@ -98,7 +98,8 @@ func main() {
     
     // 3. Create hub
     reader := &MyHubReader{}
-    hub := hub.NewHub(reader, mdns, 4712, cert, serviceDetails)
+    // Note: 6th param (pairingConfig) and 7th param (historyProvider) are nil when not using pairing
+    hub, _ := hub.NewHub(reader, mdns, 4712, cert, serviceDetails, nil, nil)
     
     // 4. Start
     hub.Start()

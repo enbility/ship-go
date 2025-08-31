@@ -5,7 +5,6 @@
 package mocks
 
 import (
-	"github.com/enbility/ship-go/api"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -36,59 +35,55 @@ func (_m *PairingHubInterface) EXPECT() *PairingHubInterface_Expecter {
 	return &PairingHubInterface_Expecter{mock: &_m.Mock}
 }
 
-// IsRemoteServicePaired provides a mock function for the type PairingHubInterface
-func (_mock *PairingHubInterface) IsRemoteServicePaired(ski string, fingerprint string) bool {
-	ret := _mock.Called(ski, fingerprint)
+// HasTrustedAddCuDevice provides a mock function for the type PairingHubInterface
+func (_mock *PairingHubInterface) HasTrustedAddCuDevice() (string, string) {
+	ret := _mock.Called()
 
 	if len(ret) == 0 {
-		panic("no return value specified for IsRemoteServicePaired")
+		panic("no return value specified for HasTrustedAddCuDevice")
 	}
 
-	var r0 bool
-	if returnFunc, ok := ret.Get(0).(func(string, string) bool); ok {
-		r0 = returnFunc(ski, fingerprint)
-	} else {
-		r0 = ret.Get(0).(bool)
+	var r0 string
+	var r1 string
+	if returnFunc, ok := ret.Get(0).(func() (string, string)); ok {
+		return returnFunc()
 	}
-	return r0
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func() string); ok {
+		r1 = returnFunc()
+	} else {
+		r1 = ret.Get(1).(string)
+	}
+	return r0, r1
 }
 
-// PairingHubInterface_IsRemoteServicePaired_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IsRemoteServicePaired'
-type PairingHubInterface_IsRemoteServicePaired_Call struct {
+// PairingHubInterface_HasTrustedAddCuDevice_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'HasTrustedAddCuDevice'
+type PairingHubInterface_HasTrustedAddCuDevice_Call struct {
 	*mock.Call
 }
 
-// IsRemoteServicePaired is a helper method to define mock.On call
-//   - ski string
-//   - fingerprint string
-func (_e *PairingHubInterface_Expecter) IsRemoteServicePaired(ski interface{}, fingerprint interface{}) *PairingHubInterface_IsRemoteServicePaired_Call {
-	return &PairingHubInterface_IsRemoteServicePaired_Call{Call: _e.mock.On("IsRemoteServicePaired", ski, fingerprint)}
+// HasTrustedAddCuDevice is a helper method to define mock.On call
+func (_e *PairingHubInterface_Expecter) HasTrustedAddCuDevice() *PairingHubInterface_HasTrustedAddCuDevice_Call {
+	return &PairingHubInterface_HasTrustedAddCuDevice_Call{Call: _e.mock.On("HasTrustedAddCuDevice")}
 }
 
-func (_c *PairingHubInterface_IsRemoteServicePaired_Call) Run(run func(ski string, fingerprint string)) *PairingHubInterface_IsRemoteServicePaired_Call {
+func (_c *PairingHubInterface_HasTrustedAddCuDevice_Call) Run(run func()) *PairingHubInterface_HasTrustedAddCuDevice_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 string
-		if args[0] != nil {
-			arg0 = args[0].(string)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		run(
-			arg0,
-			arg1,
-		)
+		run()
 	})
 	return _c
 }
 
-func (_c *PairingHubInterface_IsRemoteServicePaired_Call) Return(b bool) *PairingHubInterface_IsRemoteServicePaired_Call {
-	_c.Call.Return(b)
+func (_c *PairingHubInterface_HasTrustedAddCuDevice_Call) Return(fingerprint string, shipID string) *PairingHubInterface_HasTrustedAddCuDevice_Call {
+	_c.Call.Return(fingerprint, shipID)
 	return _c
 }
 
-func (_c *PairingHubInterface_IsRemoteServicePaired_Call) RunAndReturn(run func(ski string, fingerprint string) bool) *PairingHubInterface_IsRemoteServicePaired_Call {
+func (_c *PairingHubInterface_HasTrustedAddCuDevice_Call) RunAndReturn(run func() (string, string)) *PairingHubInterface_HasTrustedAddCuDevice_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -188,111 +183,5 @@ func (_c *PairingHubInterface_OnPairingSuccess_Call) Return() *PairingHubInterfa
 
 func (_c *PairingHubInterface_OnPairingSuccess_Call) RunAndReturn(run func(remoteShipID string, remoteFingerprint string)) *PairingHubInterface_OnPairingSuccess_Call {
 	_c.Run(run)
-	return _c
-}
-
-// ServiceForFingerprint provides a mock function for the type PairingHubInterface
-func (_mock *PairingHubInterface) ServiceForFingerprint(fingerprint string) *api.ServiceDetails {
-	ret := _mock.Called(fingerprint)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ServiceForFingerprint")
-	}
-
-	var r0 *api.ServiceDetails
-	if returnFunc, ok := ret.Get(0).(func(string) *api.ServiceDetails); ok {
-		r0 = returnFunc(fingerprint)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*api.ServiceDetails)
-		}
-	}
-	return r0
-}
-
-// PairingHubInterface_ServiceForFingerprint_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ServiceForFingerprint'
-type PairingHubInterface_ServiceForFingerprint_Call struct {
-	*mock.Call
-}
-
-// ServiceForFingerprint is a helper method to define mock.On call
-//   - fingerprint string
-func (_e *PairingHubInterface_Expecter) ServiceForFingerprint(fingerprint interface{}) *PairingHubInterface_ServiceForFingerprint_Call {
-	return &PairingHubInterface_ServiceForFingerprint_Call{Call: _e.mock.On("ServiceForFingerprint", fingerprint)}
-}
-
-func (_c *PairingHubInterface_ServiceForFingerprint_Call) Run(run func(fingerprint string)) *PairingHubInterface_ServiceForFingerprint_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 string
-		if args[0] != nil {
-			arg0 = args[0].(string)
-		}
-		run(
-			arg0,
-		)
-	})
-	return _c
-}
-
-func (_c *PairingHubInterface_ServiceForFingerprint_Call) Return(serviceDetails *api.ServiceDetails) *PairingHubInterface_ServiceForFingerprint_Call {
-	_c.Call.Return(serviceDetails)
-	return _c
-}
-
-func (_c *PairingHubInterface_ServiceForFingerprint_Call) RunAndReturn(run func(fingerprint string) *api.ServiceDetails) *PairingHubInterface_ServiceForFingerprint_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// ServiceForShipID provides a mock function for the type PairingHubInterface
-func (_mock *PairingHubInterface) ServiceForShipID(shipID string) *api.ServiceDetails {
-	ret := _mock.Called(shipID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ServiceForShipID")
-	}
-
-	var r0 *api.ServiceDetails
-	if returnFunc, ok := ret.Get(0).(func(string) *api.ServiceDetails); ok {
-		r0 = returnFunc(shipID)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*api.ServiceDetails)
-		}
-	}
-	return r0
-}
-
-// PairingHubInterface_ServiceForShipID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ServiceForShipID'
-type PairingHubInterface_ServiceForShipID_Call struct {
-	*mock.Call
-}
-
-// ServiceForShipID is a helper method to define mock.On call
-//   - shipID string
-func (_e *PairingHubInterface_Expecter) ServiceForShipID(shipID interface{}) *PairingHubInterface_ServiceForShipID_Call {
-	return &PairingHubInterface_ServiceForShipID_Call{Call: _e.mock.On("ServiceForShipID", shipID)}
-}
-
-func (_c *PairingHubInterface_ServiceForShipID_Call) Run(run func(shipID string)) *PairingHubInterface_ServiceForShipID_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 string
-		if args[0] != nil {
-			arg0 = args[0].(string)
-		}
-		run(
-			arg0,
-		)
-	})
-	return _c
-}
-
-func (_c *PairingHubInterface_ServiceForShipID_Call) Return(serviceDetails *api.ServiceDetails) *PairingHubInterface_ServiceForShipID_Call {
-	_c.Call.Return(serviceDetails)
-	return _c
-}
-
-func (_c *PairingHubInterface_ServiceForShipID_Call) RunAndReturn(run func(shipID string) *api.ServiceDetails) *PairingHubInterface_ServiceForShipID_Call {
-	_c.Call.Return(run)
 	return _c
 }

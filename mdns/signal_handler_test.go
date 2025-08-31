@@ -23,8 +23,8 @@ func TestNoSignalHandlerLeak(t *testing.T) {
 		// Set up a mock provider to avoid real network operations
 		mockProvider := mocks.NewMdnsProviderInterface(t)
 		mockProvider.EXPECT().Start(mock.Anything, mock.Anything, mock.Anything).Return(true).Once() // Should only be called once due to isStarted check
-		// Note: AnnounceMdnsEntry() calls Announce() on provider for subsequent calls
-		mockProvider.EXPECT().AnnounceService(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("1", nil).Times(5) // May be called for each Start() call
+		// Note: AnnounceMdnsEntry() now has early return if already announced, so only called once
+		mockProvider.EXPECT().AnnounceService(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("1", nil).Once() // Only called on first Start() due to early return
 		mockProvider.EXPECT().UnannounceService(mock.Anything).Maybe()
 		mockProvider.EXPECT().Shutdown().Maybe()
 		manager.SetMdnsProvider(mockProvider)

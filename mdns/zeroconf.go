@@ -36,8 +36,8 @@ type ZeroconfProvider struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// Multiple server support for dual services
-	servers map[string]ZeroconfServerInterface // service type -> server
+	// One server per service instance - fixes architectural flaw
+	instanceServers map[string]ZeroconfServerInterface // instanceID -> dedicated server
 
 	// Instance management for the new interface
 	instanceCounter  int
@@ -63,7 +63,7 @@ type zeroconfInstanceData struct {
 func NewZeroconfProvider(ifaces []net.Interface) *ZeroconfProvider {
 	return &ZeroconfProvider{
 		ifaces:           ifaces,
-		servers:          make(map[string]ZeroconfServerInterface),
+		instanceServers:  make(map[string]ZeroconfServerInterface),
 		instanceCounter:  0,
 		serviceInstances: make(map[string]*zeroconfInstanceData),
 		serverFactory:    &DefaultZeroconfFactory{},
@@ -121,9 +121,6 @@ func (z *ZeroconfProvider) Shutdown() {
 
 // AnnounceService announces a specific service type and returns an instance ID
 func (z *ZeroconfProvider) AnnounceService(serviceType, serviceName string, port int, txt []string) (string, error) {
-	// Use existing announcement logic but with configurable service type
-	// This extends the current Announce() method to support different service types
-
 	z.mux.Lock()
 	defer z.mux.Unlock()
 
@@ -133,20 +130,20 @@ func (z *ZeroconfProvider) AnnounceService(serviceType, serviceName string, port
 		domain = shipZeroConfDomain
 	}
 
-	// Create dedicated server for this service type using the factory
+	// Generate unique instance ID first
+	z.instanceCounter++
+	instanceID := strconv.Itoa(z.instanceCounter)
+
+	// Create dedicated server for this specific instance
 	server, err := z.serverFactory.Register(serviceName, serviceType, domain, port, txt, z.ifaces)
 	if err != nil {
 		return "", fmt.Errorf("failed to register %s service: %w", serviceType, err)
 	}
 
-	// Generate unique instance ID
-	z.instanceCounter++
-	instanceID := strconv.Itoa(z.instanceCounter)
+	// Store dedicated server for this instance - no sharing
+	z.instanceServers[instanceID] = server
 
-	// Store server instance
-	z.servers[serviceType] = server
-
-	// Store instance mapping for cleanup
+	// Store instance data for cleanup
 	z.serviceInstances[instanceID] = &zeroconfInstanceData{
 		ServiceType: serviceType,
 		ServiceName: serviceName,
@@ -163,24 +160,18 @@ func (z *ZeroconfProvider) UnannounceService(instanceID string) error {
 	defer z.mux.Unlock()
 
 	// Look up instance data
-	instanceData, exists := z.serviceInstances[instanceID]
+	_, exists := z.serviceInstances[instanceID]
 	if !exists {
 		return api.ErrPairingNotActive
 	}
 
-	serviceType := instanceData.ServiceType
-
-	// Check if server exists for this service type
-	server, serverExists := z.servers[serviceType]
-	if serverExists {
-		// Shutdown the dedicated server
+	// Shutdown the dedicated server for this instance
+	if server, serverExists := z.instanceServers[instanceID]; serverExists {
 		server.Shutdown()
-
-		// Clean up server reference
-		delete(z.servers, serviceType)
+		delete(z.instanceServers, instanceID)
 	}
 
-	// Clean up instance mapping
+	// Clean up instance data
 	delete(z.serviceInstances, instanceID)
 
 	return nil

@@ -55,7 +55,7 @@ func TestConnectFoundServiceCertificateValidation(t *testing.T) {
 		host := parts[0]
 		port := parts[1]
 
-		service := api.NewServiceDetails("test-ski")
+		service := api.NewServiceDetails("testski", "", "")
 		service.SetShipID("test-ship-id")
 
 		// Attempt connection - should fail due to no peer certificates
@@ -119,7 +119,7 @@ func TestConnectFoundServiceCertificateValidation(t *testing.T) {
 		host := parts[0]
 		port := parts[1]
 
-		service := api.NewServiceDetails("test-ski")
+		service := api.NewServiceDetails("testski", "", "")
 		service.SetShipID("test-ship-id")
 
 		// Attempt connection - should fail due to missing SubjectKeyId
@@ -172,7 +172,7 @@ func TestConnectFoundServiceCertificateValidation(t *testing.T) {
 		port := parts[1]
 
 		// Create service with different SKI than the certificate
-		service := api.NewServiceDetails("different-ski-12345")
+		service := api.NewServiceDetails("differentski12345", "", "")
 		service.SetShipID("test-ship-id")
 
 		// Attempt connection - should fail due to SKI mismatch
