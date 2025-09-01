@@ -44,8 +44,6 @@ func (h *Hub) HandleConnectionClosed(connection api.ShipConnectionInterface, han
 
 // report the ship ID provided during the handshake
 func (h *Hub) ReportServiceShipID(ski string, shipdID string) {
-	h.hubReader.RemoteSKIConnected(ski)
-
 	h.hubReader.ServiceShipIDUpdate(ski, shipdID)
 }
 
@@ -81,6 +79,11 @@ func (h *Hub) HandleShipHandshakeStateUpdate(ski string, state model.ShipState) 
 	existingState := existingDetails.State()
 	if existingState != pairingState || !errors.Is(existingDetails.Error(), state.Error) {
 		service.SetConnectionStateDetail(pairingDetail)
+
+		if pairingState == api.ConnectionStateCompleted {
+			// inform the application about a successful connection
+			h.hubReader.RemoteSKIConnected(ski)
+		}
 
 		// always send a delayed update, as the processing of the new state has to be done
 		// and the SHIP message has to be received by the other service before
