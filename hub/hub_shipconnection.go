@@ -35,7 +35,9 @@ func (h *Hub) HandleConnectionClosed(connection api.ShipConnectionInterface, han
 		h.removeConnectionAttemptCounter(connection.RemoteSKI())
 	}
 
-	h.hubReader.RemoteSKIDisconnected(connection.RemoteSKI())
+	// Convert SKI to ServiceIdentity for callback
+	disconnectedIdentity := api.SKIToServiceIdentity(connection.RemoteSKI())
+	h.hubReader.RemoteServiceDisconnected(disconnectedIdentity)
 
 	// Do not automatically reconnect if handshake failed and not already paired
 	remoteService := h.ServiceForIdentifier(connection.RemoteSKI(), "")
@@ -55,9 +57,24 @@ func (h *Hub) HandleConnectionClosed(connection api.ShipConnectionInterface, han
 
 // report the ship ID provided during the handshake
 func (h *Hub) ReportServiceShipID(ski string, shipdID string) {
-	h.hubReader.RemoteSKIConnected(ski)
+	// Update registry with discovered ShipID if it was empty
+	if service := h.ServiceForIdentifier(ski, ""); service != nil && service.ShipID() == "" {
+		service.SetShipID(shipdID)
+	}
 
-	h.hubReader.ServiceShipIDUpdate(ski, shipdID)
+	// Convert SKI to ServiceIdentity for callbacks
+	connectedIdentity := api.SKIToServiceIdentity(ski)
+	h.hubReader.RemoteServiceConnected(connectedIdentity)
+
+	// For ServiceUpdated, we need to build a complete ServiceIdentity with the ShipID
+	updatedIdentity := api.ServiceIdentity{
+		SKI:         ski,
+		Fingerprint: "",
+		ShipID:      shipdID,
+		PairingType: api.PairingTypeDefault,
+		IPv4:        "",
+	}
+	h.hubReader.ServiceUpdated(updatedIdentity)
 }
 
 // check if the user is still able to trust the connection
@@ -68,7 +85,9 @@ func (h *Hub) AllowWaitingForTrust(ski string) bool {
 		}
 	}
 
-	return h.hubReader.AllowWaitingForTrust(ski)
+	// Convert SKI to ServiceIdentity for callback
+	waitingIdentity := api.SKIToServiceIdentity(ski)
+	return h.hubReader.AllowWaitingForTrust(waitingIdentity)
 }
 
 // report the updated SHIP handshake state and optional error message for a SKI
@@ -113,12 +132,16 @@ func (h *Hub) HandleShipHandshakeStateUpdate(ski string, state model.ShipState) 
 		// acting upon the new state is safe
 		go func() {
 			<-time.After(time.Millisecond * 500)
-			h.hubReader.ServicePairingDetailUpdate(ski, pairingDetail)
+			// Convert SKI to ServiceIdentity for callback
+			pairingIdentity := api.SKIToServiceIdentity(ski)
+			h.hubReader.ServicePairingDetailUpdate(pairingIdentity, pairingDetail)
 		}()
 	}
 }
 
 // report an approved handshake by a remote device
-func (h *Hub) SetupRemoteDevice(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
-	return h.hubReader.SetupRemoteDevice(ski, writeI)
+func (h *Hub) SetupRemoteService(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
+	// Convert SKI to ServiceIdentity for callback
+	setupIdentity := api.SKIToServiceIdentity(ski)
+	return h.hubReader.SetupRemoteService(setupIdentity, writeI)
 }

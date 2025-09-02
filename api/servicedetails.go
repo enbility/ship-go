@@ -46,37 +46,28 @@ const (
 // generic service details about the local or any remote service
 type ServiceDetails struct {
 	// Certificate fingerprint of the service
-	// This is optional and used for additional certificate validation
 	fingerprint string
 
-	// This is the SKI of the service
-	// This needs to be persisted
+	// Certificate public key identification of the service
 	ski string
 
 	// shipID is the SHIP identifier of the service
-	// This needs to be persisted
 	shipID string
 
-	// This is the IPv4 address of the device running the service
-	// This is optional only needed when this runs with
-	// zeroconf as mDNS and the remote device is using the latest
-	// avahi version and thus zeroconf can sometimes not detect
-	// the IPv4 address and not initiate a connection
-	ipv4 string
+	// The pairing type for this service
+	pairingType PairingType
 
 	// Flags if the service auto accepts other services
 	autoAccept bool
 
+	// This is the IPv4 address of the device running the service
+	ipv4 string
+
 	// Flags if the service is trusted and should be reconnected to
-	// Should be enabled after the connection process resulted
-	// ConnectionStateDetail == ConnectionStateTrusted the first time
 	trusted bool
 
 	// the current connection state details
 	connectionStateDetail *ConnectionStateDetail
-
-	// The pairing type for this service (atomic for lock-free access)
-	pairingType PairingType
 
 	mux sync.Mutex
 }
@@ -307,5 +298,33 @@ func (s *ServiceDetails) Copy() *ServiceDetails {
 		trusted:               s.trusted,
 		connectionStateDetail: newConnectionStateDetail,
 		pairingType:           s.pairingType,
+	}
+}
+
+// ToServiceIdentity converts a ServiceDetails to a ServiceIdentity object.
+// This is useful for interfacing with public APIs that use ServiceIdentity.
+func (s *ServiceDetails) ToServiceIdentity() ServiceIdentity {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+
+	return ServiceIdentity{
+		SKI:         s.ski,
+		Fingerprint: s.fingerprint,
+		ShipID:      s.shipID,
+		PairingType: s.pairingType,
+		IPv4:        s.ipv4,
+	}
+}
+
+
+// SKIToServiceIdentity creates a minimal ServiceIdentity from just an SKI.
+// This is a helper for converting SKI-only callbacks to ServiceIdentity format.
+func SKIToServiceIdentity(ski string) ServiceIdentity {
+	return ServiceIdentity{
+		SKI:         ski,
+		Fingerprint: "",
+		ShipID:      "",
+		PairingType: PairingTypeDefault,
+		IPv4:        "",
 	}
 }

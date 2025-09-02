@@ -91,22 +91,22 @@ func (s *AccessSuite) Test_Init() {
 
 func (s *AccessSuite) Test_Init_SendError() {
 	s.sut.setState(model.SmePinStateCheckOk, nil)
-	
+
 	// Clear the existing mock expectations first
 	s.mockWSWrite.ExpectedCalls = nil
 	s.mockWSWrite.Calls = nil
-	
+
 	// Mock the WebSocket writer to fail on write (which will cause sendShipModel to fail)
 	s.mockWSWrite.EXPECT().InitDataProcessing(mock.Anything).Return().Maybe()
 	s.mockWSWrite.EXPECT().IsDataConnectionClosed().Return(false, nil).Maybe()
 	s.mockWSWrite.EXPECT().CloseDataConnection(mock.Anything, mock.Anything).Return().Maybe()
-	
+
 	// Make WriteMessageToWebsocketConnection fail
 	expectedErr := errors.New("websocket write failed during init")
 	s.mockWSWrite.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(expectedErr).Once()
-	
+
 	s.sut.handleState(false, nil)
-	
+
 	// Verify state changed to error due to sendShipModel failure in handshakeAccessMethods_Init
 	assert.Equal(s.T(), model.SmeStateError, s.sut.getState())
 	assert.Equal(s.T(), false, s.sut.handshakeTimerRunning)
@@ -145,7 +145,7 @@ func (s *AccessSuite) Test_Request_Invalid() {
 
 func (s *AccessSuite) Test_Methods_Ok() {
 	reader := mocks.NewShipConnectionDataReaderInterface(s.T())
-	s.mockShipInfo.EXPECT().SetupRemoteDevice(mock.Anything, mock.Anything).Return(reader)
+	s.mockShipInfo.EXPECT().SetupRemoteService(mock.Anything, mock.Anything).Return(reader)
 	s.sut.setState(model.SmeAccessMethodsRequest, nil)
 
 	accessMsg := model.AccessMethods{
@@ -202,7 +202,7 @@ func (s *AccessSuite) Test_Methods_WrongShipID() {
 func (s *AccessSuite) Test_Methods_NoShipID() {
 	reader := mocks.NewShipConnectionDataReaderInterface(s.T())
 	s.mockShipInfo.EXPECT().ReportServiceShipID(mock.Anything, mock.Anything)
-	s.mockShipInfo.EXPECT().SetupRemoteDevice(mock.Anything, mock.Anything).Return(reader)
+	s.mockShipInfo.EXPECT().SetupRemoteService(mock.Anything, mock.Anything).Return(reader)
 	s.sut.remoteShipID = ""
 
 	s.sut.setState(model.SmeAccessMethodsRequest, nil)
@@ -224,7 +224,7 @@ func (s *AccessSuite) Test_Methods_NoShipID() {
 
 func (s *AccessSuite) Test_Methods_ArrayFormat_WithSpaces() {
 	reader := mocks.NewShipConnectionDataReaderInterface(s.T())
-	s.mockShipInfo.EXPECT().SetupRemoteDevice(mock.Anything, mock.Anything).Return(reader)
+	s.mockShipInfo.EXPECT().SetupRemoteService(mock.Anything, mock.Anything).Return(reader)
 	s.sut.setState(model.SmeAccessMethodsRequest, nil)
 	s.sut.remoteShipID = "i:46353_u:1234567890"
 
@@ -242,7 +242,7 @@ func (s *AccessSuite) Test_Methods_ArrayFormat_WithSpaces() {
 
 func (s *AccessSuite) Test_Methods_ArrayFormat_NoSpaces() {
 	reader := mocks.NewShipConnectionDataReaderInterface(s.T())
-	s.mockShipInfo.EXPECT().SetupRemoteDevice(mock.Anything, mock.Anything).Return(reader)
+	s.mockShipInfo.EXPECT().SetupRemoteService(mock.Anything, mock.Anything).Return(reader)
 	s.sut.setState(model.SmeAccessMethodsRequest, nil)
 	s.sut.remoteShipID = "i:46353_u:1234567890"
 
@@ -380,7 +380,7 @@ func (s *AccessSuite) Test_HandshakeAccessMethods_Request_MethodsType_Success() 
 
 	// Mock approveHandshake expectations
 	mockReader := mocks.NewShipConnectionDataReaderInterface(s.T())
-	s.mockShipInfo.EXPECT().SetupRemoteDevice(mock.Anything, mock.Anything).Return(mockReader).Once()
+	s.mockShipInfo.EXPECT().SetupRemoteService(mock.Anything, mock.Anything).Return(mockReader).Once()
 
 	s.sut.handshakeAccessMethods_Request(message)
 

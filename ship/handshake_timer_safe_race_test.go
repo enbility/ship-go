@@ -42,8 +42,8 @@ func (s *safeInfoProvider) HandleShipHandshakeStateUpdate(ski string, state mode
 	s.mock.HandleShipHandshakeStateUpdate(ski, state)
 }
 
-func (s *safeInfoProvider) SetupRemoteDevice(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
-	return s.mock.SetupRemoteDevice(ski, writeI)
+func (s *safeInfoProvider) SetupRemoteService(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
+	return s.mock.SetupRemoteService(ski, writeI)
 }
 
 // TestHandshakeTimerSafeRace tests timer operations without mock formatting races

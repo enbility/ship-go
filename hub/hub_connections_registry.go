@@ -105,20 +105,82 @@ func (h *Hub) registerConnection(connection api.ShipConnectionInterface) {
 	h.cancelConnectionDelayTimer(ski)
 }
 
-// connectionForSKI returns the connection for a specific SKI
-func (h *Hub) connectionForSKI(ski string) api.ShipConnectionInterface {
-	if ski == "" {
+// connectionForService finds an active connection for a given service using multiple identifiers.
+// This method provides robust connection lookup that handles the AddCu device identifier lifecycle
+// where SKI might be empty initially but fingerprint and shipID are available.
+//
+// Lookup priority:
+// 1. SKI (fastest - direct map lookup)
+// 2. Fingerprint match (reliable for AddCu devices)
+// 3. ShipID match (fallback for identifier consistency)
+//
+// Parameters:
+// - service: ServiceDetails object with available identifiers
+//
+// Returns:
+// - ShipConnectionInterface: Active connection if found, nil otherwise
+//
+// Thread-safe: Uses read lock for safe concurrent access
+//
+// Example usage:
+//
+//	service := api.NewServiceDetails("", fingerprint, shipID) // AddCu from persistence
+//	if conn := hub.connectionForService(service); conn != nil {
+//	    // Device is connected
+//	}
+func (h *Hub) connectionForService(service *api.ServiceDetails) api.ShipConnectionInterface {
+	if service == nil {
 		return nil
 	}
 
 	h.muxCon.RLock()
 	defer h.muxCon.RUnlock()
 
-	con, ok := h.connections[ski]
-	if !ok {
-		return nil
+	// Fast path: Direct SKI lookup (most common case)
+	if ski := service.SKI(); ski != "" {
+		if conn, exists := h.connections[ski]; exists {
+			return conn
+		}
 	}
-	return con
+
+	// Fallback path: Iterate connections for fingerprint/shipID match
+	// This handles AddCu devices where SKI might be empty at startup
+	targetFingerprint := service.Fingerprint()
+	targetShipID := service.ShipID()
+
+	if targetFingerprint == "" && targetShipID == "" {
+		return nil // No fallback identifiers available
+	}
+
+	for connSKI, conn := range h.connections {
+		// Get the service details for this connection's remote service
+		// Use thread-safe service lookup to get connection's service details
+		h.muxReg.RLock()
+		var connService *api.ServiceDetails
+		for _, remoteService := range h.remoteServices {
+			if remoteService.SKI() == connSKI {
+				connService = remoteService
+				break
+			}
+		}
+		h.muxReg.RUnlock()
+
+		if connService == nil {
+			continue
+		}
+
+		// Match by fingerprint (reliable for AddCu devices)
+		if targetFingerprint != "" && connService.Fingerprint() == targetFingerprint {
+			return conn
+		}
+
+		// Match by shipID (fallback for consistency)
+		if targetShipID != "" && connService.ShipID() == targetShipID {
+			return conn
+		}
+	}
+
+	return nil
 }
 
 // UnregisterConnectionIfMatch atomically unregisters a connection if it matches the provided one

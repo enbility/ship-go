@@ -61,7 +61,7 @@ type PairingHubReader struct {
 	mode              PairingMode
 	whitelist         *DeviceWhitelist
 	whitelistFile     string
-	discoveredDevices map[string]api.RemoteService
+	discoveredDevices map[string]api.RemoteMdnsService
 	pendingApprovals  map[string]chan bool
 	autoApproveCount  int
 	maxAutoApprove    int
@@ -73,7 +73,7 @@ func NewPairingHubReader(mode PairingMode, whitelistFile string) *PairingHubRead
 	reader := &PairingHubReader{
 		mode:              mode,
 		whitelistFile:     whitelistFile,
-		discoveredDevices: make(map[string]api.RemoteService),
+		discoveredDevices: make(map[string]api.RemoteMdnsService),
 		pendingApprovals:  make(map[string]chan bool),
 		autoApproveCount:  0,
 		maxAutoApprove:    3, // Auto-approve first 3 devices
@@ -89,10 +89,11 @@ func NewPairingHubReader(mode PairingMode, whitelistFile string) *PairingHubRead
 
 // HubReaderInterface implementation
 
-func (p *PairingHubReader) RemoteSKIConnected(ski string) {
+func (p *PairingHubReader) RemoteServiceConnected(identity api.ServiceIdentity) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
+	ski := identity.SKI
 	// Update last seen time for trusted devices
 	for i, device := range p.whitelist.TrustedDevices {
 		if device.SKI == ski {
@@ -119,7 +120,8 @@ func (p *PairingHubReader) RemoteSKIConnected(ski string) {
 	log.Printf("Device connected: %s", ski)
 }
 
-func (p *PairingHubReader) RemoteSKIDisconnected(ski string) {
+func (p *PairingHubReader) RemoteServiceDisconnected(identity api.ServiceIdentity) {
+	ski := identity.SKI
 	if service, exists := p.discoveredDevices[ski]; exists {
 		fmt.Printf("👋 Disconnected from %s %s (SKI: %s)\n",
 			service.Brand, service.Model, ski)
@@ -130,11 +132,11 @@ func (p *PairingHubReader) RemoteSKIDisconnected(ski string) {
 	log.Printf("Device disconnected: %s", ski)
 }
 
-func (p *PairingHubReader) SetupRemoteDevice(
-	ski string,
+func (p *PairingHubReader) SetupRemoteService(
+	identity api.ServiceIdentity,
 	writer api.ShipConnectionDataWriterInterface,
 ) api.ShipConnectionDataReaderInterface {
-	log.Printf("Setting up SPINE layer for device: %s", ski)
+	log.Printf("Setting up SPINE layer for device: %s", identity.SKI)
 
 	// In a real implementation, you would:
 	// 1. Create a SPINE device handler
@@ -144,7 +146,7 @@ func (p *PairingHubReader) SetupRemoteDevice(
 	return nil
 }
 
-func (p *PairingHubReader) VisibleRemoteServicesUpdated(services []api.RemoteService) {
+func (p *PairingHubReader) VisibleRemoteMdnsServicesUpdated(services []api.RemoteMdnsService) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
@@ -166,21 +168,22 @@ func (p *PairingHubReader) VisibleRemoteServicesUpdated(services []api.RemoteSer
 	}
 }
 
-func (p *PairingHubReader) ServiceShipIDUpdate(ski string, shipID string) {
-	log.Printf("Device %s has SHIP ID: %s", ski, shipID)
+func (p *PairingHubReader) ServiceUpdated(identity api.ServiceIdentity) {
+	log.Printf("Device %s updated - SHIP ID: %s", identity.SKI, identity.ShipID)
 }
 
-func (p *PairingHubReader) ServicePairingDetailUpdate(ski string, detail *api.ConnectionStateDetail) {
-	log.Printf("Pairing detail update for %s: state=%d", ski, detail.State())
+func (p *PairingHubReader) ServicePairingDetailUpdate(identity api.ServiceIdentity, detail *api.ConnectionStateDetail) {
+	log.Printf("Pairing detail update for %s: state=%d", identity.SKI, detail.State())
 }
 
-func (p *PairingHubReader) AllowWaitingForTrust(ski string) bool {
+func (p *PairingHubReader) AllowWaitingForTrust(identity api.ServiceIdentity) bool {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
+	ski := identity.SKI
 	service, exists := p.discoveredDevices[ski]
 	if !exists {
-		service = api.RemoteService{
+		service = api.RemoteMdnsService{
 			Ski:   ski,
 			Brand: "Unknown",
 			Model: "Unknown",
@@ -211,38 +214,18 @@ func (p *PairingHubReader) AllowWaitingForTrust(ski string) bool {
 	}
 }
 
-func (p *PairingHubReader) ServiceConnectionStateChanged(ski string, state api.ConnectionState) {
-	timestamp := time.Now().Format("15:04:05")
-	log.Printf("[%s] Connection state changed %s: %v", timestamp, ski, state)
-
-	// Show user-friendly status updates
-	switch state {
-	case api.ConnectionStateReceivedPairingRequest:
-		fmt.Printf("🤝 Received pairing request from %s\n", ski)
-
-	case api.ConnectionStateInProgress:
-		fmt.Printf("🔄 Pairing in progress with %s\n", ski)
-
-	case api.ConnectionStateCompleted:
-		fmt.Printf("✅ Pairing completed with %s\n", ski)
-
-	case api.ConnectionStateError:
-		fmt.Printf("❌ Pairing failed with %s\n", ski)
-
-	case api.ConnectionStateRemoteDeniedTrust:
-		fmt.Printf("🚫 Device %s rejected our pairing request\n", ski)
-	}
-}
+// ServiceConnectionStateChanged method removed - this was not part of HubReaderInterface
+// Connection state updates are handled through ServicePairingDetailUpdate
 
 // Pairing strategy implementations
 
-func (p *PairingHubReader) handleManualPairing(ski string, service api.RemoteService) bool {
+func (p *PairingHubReader) handleManualPairing(ski string, service api.RemoteMdnsService) bool {
 	fmt.Printf("📝 Manual Pairing Mode - User approval required\n")
 
 	return p.promptUserForApproval(ski, service)
 }
 
-func (p *PairingHubReader) handleWhitelistPairing(ski string, service api.RemoteService) bool {
+func (p *PairingHubReader) handleWhitelistPairing(ski string, service api.RemoteMdnsService) bool {
 	if p.isInWhitelist(ski) {
 		fmt.Printf("✅ Auto-approved (device is whitelisted)\n")
 		return true
@@ -253,7 +236,7 @@ func (p *PairingHubReader) handleWhitelistPairing(ski string, service api.Remote
 	return false
 }
 
-func (p *PairingHubReader) handleBlacklistPairing(ski string, service api.RemoteService) bool {
+func (p *PairingHubReader) handleBlacklistPairing(ski string, service api.RemoteMdnsService) bool {
 	// In a real implementation, you'd have a blacklist check here
 	// For this example, we'll just approve everything
 	fmt.Printf("✅ Auto-approved (device not blacklisted)\n")
@@ -263,7 +246,7 @@ func (p *PairingHubReader) handleBlacklistPairing(ski string, service api.Remote
 	return true
 }
 
-func (p *PairingHubReader) handleAutoFirstPairing(ski string, service api.RemoteService) bool {
+func (p *PairingHubReader) handleAutoFirstPairing(ski string, service api.RemoteMdnsService) bool {
 	if p.autoApproveCount < p.maxAutoApprove {
 		p.autoApproveCount++
 		fmt.Printf("✅ Auto-approved (%d/%d auto-approvals used)\n",
@@ -278,7 +261,7 @@ func (p *PairingHubReader) handleAutoFirstPairing(ski string, service api.Remote
 	return p.promptUserForApproval(ski, service)
 }
 
-func (p *PairingHubReader) promptUserForApproval(ski string, service api.RemoteService) bool {
+func (p *PairingHubReader) promptUserForApproval(ski string, service api.RemoteMdnsService) bool {
 	fmt.Printf("Do you want to pair with this device? (yes/no/whitelist): ")
 
 	reader := bufio.NewReader(os.Stdin)
@@ -374,7 +357,7 @@ func (p *PairingHubReader) isInWhitelist(ski string) bool {
 	return false
 }
 
-func (p *PairingHubReader) addToWhitelist(ski string, service api.RemoteService, autoApproved bool) {
+func (p *PairingHubReader) addToWhitelist(ski string, service api.RemoteMdnsService, autoApproved bool) {
 	if p.whitelist == nil {
 		p.whitelist = &DeviceWhitelist{
 			TrustedDevices: []TrustedDevice{},

@@ -162,7 +162,8 @@ func NewProductionHubReader(config *Configuration) (*ProductionHubReader, error)
 
 // HubReaderInterface implementation
 
-func (r *ProductionHubReader) RemoteSKIConnected(ski string) {
+func (r *ProductionHubReader) RemoteServiceConnected(identity api.ServiceIdentity) {
+	ski := identity.SKI
 	r.devicesMutex.Lock()
 	r.connectionTimes[ski] = time.Now()
 	r.devicesMutex.Unlock()
@@ -184,7 +185,8 @@ func (r *ProductionHubReader) RemoteSKIConnected(ski string) {
 	log.Printf("✅ Device connected: %s", ski)
 }
 
-func (r *ProductionHubReader) RemoteSKIDisconnected(ski string) {
+func (r *ProductionHubReader) RemoteServiceDisconnected(identity api.ServiceIdentity) {
+	ski := identity.SKI
 	r.devicesMutex.Lock()
 	startTime, existed := r.connectionTimes[ski]
 	if existed {
@@ -214,18 +216,18 @@ func (r *ProductionHubReader) RemoteSKIDisconnected(ski string) {
 	r.userInterface.NotifyConnectionStateChange(ski, api.ConnectionStateNone)
 }
 
-func (r *ProductionHubReader) SetupRemoteDevice(
-	ski string,
+func (r *ProductionHubReader) SetupRemoteService(
+	identity api.ServiceIdentity,
 	writer api.ShipConnectionDataWriterInterface,
 ) api.ShipConnectionDataReaderInterface {
-	log.Printf("🔧 Setting up SPINE layer for device: %s", ski)
+	log.Printf("🔧 Setting up SPINE layer for device: %s", identity.SKI)
 
 	// In a real implementation, return your SPINE message handler here
 	// For this example, we return nil (connection works but no SPINE data exchange)
 	return nil
 }
 
-func (r *ProductionHubReader) VisibleRemoteServicesUpdated(services []api.RemoteService) {
+func (r *ProductionHubReader) VisibleRemoteMdnsServicesUpdated(services []api.RemoteMdnsService) {
 	log.Printf("📡 Discovered %d devices", len(services))
 
 	for _, service := range services {
@@ -240,12 +242,12 @@ func (r *ProductionHubReader) VisibleRemoteServicesUpdated(services []api.Remote
 	}
 }
 
-func (r *ProductionHubReader) ServiceShipIDUpdate(ski string, shipID string) {
-	log.Printf("🆔 Device %s has SHIP ID: %s", ski, shipID)
+func (r *ProductionHubReader) ServiceUpdated(identity api.ServiceIdentity) {
+	log.Printf("🆔 Device %s updated - SHIP ID: %s", identity.SKI, identity.ShipID)
 }
 
-func (r *ProductionHubReader) ServicePairingDetailUpdate(ski string, detail *api.ConnectionStateDetail) {
-	log.Printf("🤝 Pairing update for %s: state=%d", ski, detail.State())
+func (r *ProductionHubReader) ServicePairingDetailUpdate(identity api.ServiceIdentity, detail *api.ConnectionStateDetail) {
+	log.Printf("🤝 Pairing update for %s: state=%d", identity.SKI, detail.State())
 
 	// Track handshake timing
 	r.metrics.mutex.Lock()
@@ -256,7 +258,8 @@ func (r *ProductionHubReader) ServicePairingDetailUpdate(ski string, detail *api
 	r.metrics.mutex.Unlock()
 }
 
-func (r *ProductionHubReader) AllowWaitingForTrust(ski string) bool {
+func (r *ProductionHubReader) AllowWaitingForTrust(identity api.ServiceIdentity) bool {
+	ski := identity.SKI
 	log.Printf("🔒 Trust decision requested for device: %s", ski)
 
 	// Check if device is already trusted
@@ -297,23 +300,8 @@ func (r *ProductionHubReader) AllowWaitingForTrust(ski string) bool {
 	return trusted
 }
 
-func (r *ProductionHubReader) ServiceConnectionStateChanged(ski string, state api.ConnectionState) {
-	timestamp := time.Now().Format("15:04:05")
-	log.Printf("[%s] 🔄 %s: %v", timestamp, ski, state)
-
-	switch state {
-	case api.ConnectionStateError:
-		r.metrics.mutex.Lock()
-		r.metrics.ConnectionsFailed++
-		r.metrics.mutex.Unlock()
-		r.incrementErrorCount("connection_failed")
-
-	case api.ConnectionStateRemoteDeniedTrust:
-		r.incrementErrorCount("remote_denied_trust")
-	}
-
-	r.userInterface.NotifyConnectionStateChange(ski, state)
-}
+// ServiceConnectionStateChanged method removed - this was not part of HubReaderInterface
+// Connection state updates are handled through ServicePairingDetailUpdate
 
 // Production helper methods
 

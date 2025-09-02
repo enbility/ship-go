@@ -25,7 +25,7 @@ import (
 
 // ClientHubReader implements HubReaderInterface for client behavior
 type ClientHubReader struct {
-	discoveredServices map[string]api.RemoteService
+	discoveredServices map[string]api.RemoteMdnsService
 	connectedDevices   map[string]time.Time
 	servicesMutex      sync.RWMutex
 	userInput          chan string
@@ -34,7 +34,7 @@ type ClientHubReader struct {
 // NewClientHubReader creates a new client hub reader
 func NewClientHubReader() *ClientHubReader {
 	return &ClientHubReader{
-		discoveredServices: make(map[string]api.RemoteService),
+		discoveredServices: make(map[string]api.RemoteMdnsService),
 		connectedDevices:   make(map[string]time.Time),
 		userInput:          make(chan string, 10),
 	}
@@ -42,7 +42,8 @@ func NewClientHubReader() *ClientHubReader {
 
 // HubReaderInterface implementation
 
-func (c *ClientHubReader) RemoteSKIConnected(ski string) {
+func (c *ClientHubReader) RemoteServiceConnected(identity api.ServiceIdentity) {
+	ski := identity.SKI
 	c.servicesMutex.Lock()
 	c.connectedDevices[ski] = time.Now()
 	c.servicesMutex.Unlock()
@@ -57,7 +58,8 @@ func (c *ClientHubReader) RemoteSKIConnected(ski string) {
 	log.Printf("✅ Device connected: %s", ski)
 }
 
-func (c *ClientHubReader) RemoteSKIDisconnected(ski string) {
+func (c *ClientHubReader) RemoteServiceDisconnected(identity api.ServiceIdentity) {
+	ski := identity.SKI
 	c.servicesMutex.Lock()
 	startTime, existed := c.connectedDevices[ski]
 	if existed {
@@ -75,24 +77,24 @@ func (c *ClientHubReader) RemoteSKIDisconnected(ski string) {
 	log.Printf("❌ Device disconnected: %s", ski)
 }
 
-func (c *ClientHubReader) SetupRemoteDevice(
-	ski string,
+func (c *ClientHubReader) SetupRemoteService(
+	identity api.ServiceIdentity,
 	writer api.ShipConnectionDataWriterInterface,
 ) api.ShipConnectionDataReaderInterface {
-	log.Printf("🔧 Setting up SPINE layer for device: %s", ski)
+	log.Printf("🔧 Setting up SPINE layer for device: %s", identity.SKI)
 
 	// In a real client implementation, you would:
 	// 1. Create a SPINE device model for this device
 	// 2. Return a SPINE message reader/handler
 	// 3. Start exchanging SPINE messages
 
-	fmt.Printf("💡 SPINE layer ready for %s - you can now exchange data\n", ski)
+	fmt.Printf("💡 SPINE layer ready for %s - you can now exchange data\n", identity.SKI)
 
 	// For this example, we return nil (connection works but no data exchange)
 	return nil
 }
 
-func (c *ClientHubReader) VisibleRemoteServicesUpdated(services []api.RemoteService) {
+func (c *ClientHubReader) VisibleRemoteMdnsServicesUpdated(services []api.RemoteMdnsService) {
 	c.servicesMutex.Lock()
 	defer c.servicesMutex.Unlock()
 
@@ -123,22 +125,22 @@ func (c *ClientHubReader) VisibleRemoteServicesUpdated(services []api.RemoteServ
 	}
 }
 
-func (c *ClientHubReader) ServiceShipIDUpdate(ski string, shipID string) {
-	log.Printf("🆔 Device %s has SHIP ID: %s", ski, shipID)
+func (c *ClientHubReader) ServiceUpdated(identity api.ServiceIdentity) {
+	log.Printf("🆔 Device %s updated - SHIP ID: %s", identity.SKI, identity.ShipID)
 }
 
-func (c *ClientHubReader) ServicePairingDetailUpdate(ski string, detail *api.ConnectionStateDetail) {
-	log.Printf("🤝 Pairing update for %s: state=%d", ski, detail.State())
+func (c *ClientHubReader) ServicePairingDetailUpdate(identity api.ServiceIdentity, detail *api.ConnectionStateDetail) {
+	log.Printf("🤝 Pairing update for %s: state=%d", identity.SKI, detail.State())
 }
 
-func (c *ClientHubReader) AllowWaitingForTrust(ski string) bool {
+func (c *ClientHubReader) AllowWaitingForTrust(identity api.ServiceIdentity) bool {
+	ski := identity.SKI
 	c.servicesMutex.RLock()
 	service, exists := c.discoveredServices[ski]
 	c.servicesMutex.RUnlock()
 
 	if exists {
 		fmt.Printf("\n🔒 Device wants to connect: %s %s\n", service.Brand, service.Model)
-		fmt.Printf("   SKI: %s\n", ski)
 		fmt.Printf("   SKI: %s\n", ski)
 	} else {
 		fmt.Printf("\n🔒 Unknown device wants to connect: %s\n", ski)
@@ -164,24 +166,8 @@ func (c *ClientHubReader) AllowWaitingForTrust(ski string) bool {
 	return approved
 }
 
-func (c *ClientHubReader) ServiceConnectionStateChanged(ski string, state api.ConnectionState) {
-	timestamp := time.Now().Format("15:04:05")
-	log.Printf("[%s] 🔄 %s: %v", timestamp, ski, state)
-
-	// Show user-friendly status updates
-	switch state {
-	case api.ConnectionStateInitiated:
-		fmt.Printf("🔄 Connecting to %s...\n", ski)
-	case api.ConnectionStateInProgress:
-		fmt.Printf("🤝 Handshaking with %s...\n", ski)
-	case api.ConnectionStateCompleted:
-		fmt.Printf("✅ Successfully connected to %s!\n", ski)
-	case api.ConnectionStateError:
-		fmt.Printf("❌ Failed to connect to %s\n", ski)
-	case api.ConnectionStateRemoteDeniedTrust:
-		fmt.Printf("🚫 Device %s rejected our connection\n", ski)
-	}
-}
+// ServiceConnectionStateChanged method removed - this was not part of HubReaderInterface
+// Connection state updates are handled through ServicePairingDetailUpdate
 
 // Interactive client functions
 
@@ -235,12 +221,12 @@ func (c *ClientHubReader) showStatus() {
 	fmt.Println()
 }
 
-func (c *ClientHubReader) getServiceByIndex(index int) (string, api.RemoteService, bool) {
+func (c *ClientHubReader) getServiceByIndex(index int) (string, api.RemoteMdnsService, bool) {
 	c.servicesMutex.RLock()
 	defer c.servicesMutex.RUnlock()
 
 	if index < 1 || index > len(c.discoveredServices) {
-		return "", api.RemoteService{}, false
+		return "", api.RemoteMdnsService{}, false
 	}
 
 	i := 1
@@ -251,7 +237,7 @@ func (c *ClientHubReader) getServiceByIndex(index int) (string, api.RemoteServic
 		i++
 	}
 
-	return "", api.RemoteService{}, false
+	return "", api.RemoteMdnsService{}, false
 }
 
 func (c *ClientHubReader) startUserInterface(h *hub.Hub) {
@@ -317,7 +303,8 @@ func (c *ClientHubReader) startUserInterface(h *hub.Hub) {
 			fmt.Printf("🔄 Connecting to %s %s...\n", service.Brand, service.Model)
 
 			// Register the service and initiate connection
-			h.RegisterRemoteService(ski, "", "")
+			identity := api.NewServiceIdentity(ski, "", "")
+			h.RegisterRemoteService(identity)
 
 		case "disconnect", "disc":
 			if len(parts) < 2 {
@@ -344,7 +331,8 @@ func (c *ClientHubReader) startUserInterface(h *hub.Hub) {
 			}
 
 			fmt.Printf("👋 Disconnecting from %s %s...\n", service.Brand, service.Model)
-			h.DisconnectSKI(ski, "user requested disconnect")
+			identity := api.NewServiceIdentity(ski, "", "")
+			h.DisconnectService(identity, "user requested disconnect")
 
 		case "help", "h":
 			fmt.Println("Available commands:")

@@ -178,9 +178,13 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 		return errors.New(errorString)
 	}
 
-	// Update service SKI if it was empty (e.g., from SHIP Pairing Service)
+	// Update service identifiers if they were empty (e.g., from SKI-only registration)
 	if remoteService.SKI() == "" && validationResult.RemoteSKI != "" && remoteService.Fingerprint() == validationResult.RemoteFingerprint {
 		remoteService.SetSKI(validationResult.RemoteSKI)
+	}
+	// Update fingerprint if it was empty (e.g., from SKI-only registration)
+	if remoteService.Fingerprint() == "" && validationResult.RemoteFingerprint != "" {
+		remoteService.SetFingerprint(validationResult.RemoteFingerprint)
 	}
 
 	// Check for double connections

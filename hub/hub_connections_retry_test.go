@@ -34,9 +34,9 @@ func (s *HubConnectionsRetrySuite) BeforeTest(suiteName, testName string) {
 	ctrl := gomock.NewController(s.T())
 
 	s.hubReader = mocks.NewMockHubReaderInterface(ctrl)
-	s.hubReader.EXPECT().RemoteSKIConnected(gomock.Any()).Return().AnyTimes()
-	s.hubReader.EXPECT().RemoteSKIDisconnected(gomock.Any()).Return().AnyTimes()
-	s.hubReader.EXPECT().ServiceShipIDUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().RemoteServiceConnected(gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().RemoteServiceDisconnected(gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().ServiceUpdated(gomock.Any()).Return().AnyTimes()
 	s.hubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
 	s.hubReader.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
 

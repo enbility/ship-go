@@ -177,7 +177,7 @@ type PairingCryptoInterface interface {
 }
 
 // RingBufferPersistence - Application-implemented storage interface for SHIP pairing ring buffer
-// Applications implement this to provide persistent storage for the ring buffer state per SHIP 
+// Applications implement this to provide persistent storage for the ring buffer state per SHIP
 // Pairing Service specification section 11. The library handles all ring buffer logic internally.
 //
 // This interface replaces PairingHistoryProviderInterface to simplify application implementation
@@ -228,7 +228,7 @@ type RingBufferPersistence interface {
 	//
 	// Example implementation patterns:
 	//   File-based: Write to temp file, then atomic rename
-	//   Database: Use transactions for atomic updates  
+	//   Database: Use transactions for atomic updates
 	//   Memory: Update in-memory state (for testing only)
 	SaveRingBuffer(entries []DigestEntry, nextIndex int) error
 }
@@ -274,13 +274,15 @@ type PairingHistoryProviderInterface interface {
 // PairingServiceReaderInterface - Callback interface for pairing events
 // Applications implement this to receive pairing event notifications
 type PairingServiceReaderInterface interface {
-	// Called when device is automatically trusted via pairing service
-	DeviceAutoTrustedViaServiceDetails(service *ServiceDetails)
+	// Called when service is automatically trusted via SHIP pairing
+	// The identity parameter contains all necessary device identification information
+	ServiceAutoTrusted(identity ServiceIdentity)
 
-	// Called when pairing service fails for a service
-	PairingServiceFailedForServiceDetails(service *ServiceDetails, reason error)
+	// Called when SHIP pairing fails for a service
+	// The identity parameter contains device identification, reason explains the failure
+	ServiceAutoTrustFailed(identity ServiceIdentity, reason error)
 
-	// DeviceAutoTrustRemovedViaReplacementLogic is called when device trust is automatically
+	// ServiceAutoTrustRemoved is called when device trust is automatically
 	// removed as part of the Device Replacement Timing Logic feature.
 	//
 	// This callback is triggered in two scenarios:
@@ -296,29 +298,29 @@ type PairingServiceReaderInterface interface {
 	//    Reason format: "Replaced by new device pairing from <shipID>"
 	//
 	// Parameters:
-	// - service: The ServiceDetails of the device whose trust was removed
+	// - identity: The ServiceIdentity of the device whose trust was removed
 	// - reason: Human-readable explanation of why trust was removed
 	//
 	// Example implementation:
 	//
-	//	func (r *MyReader) DeviceAutoTrustRemovedViaReplacementLogic(service *api.ServiceDetails, reason string) {
+	//	func (r *MyReader) ServiceAutoTrustRemoved(identity api.ServiceIdentity, reason string) {
 	//	    log.Printf("Device trust removed: SKI=%s, ShipID=%s, Reason=%s",
-	//	        service.SKI(), service.ShipID(), reason)
+	//	        identity.SKI, identity.ShipID, reason)
 	//
 	//	    // Update UI to show device is no longer trusted
-	//	    updateDeviceStatus(service.ShipID(), "untrusted")
+	//	    updateDeviceStatus(identity.ShipID, "untrusted")
 	//
 	//	    // Clean up any device-specific resources
-	//	    cleanupDeviceResources(service.SKI())
+	//	    cleanupDeviceResources(identity.SKI)
 	//
 	//	    // Optionally notify user
 	//	    if strings.Contains(reason, "timeout") {
-	//	        notifyUser("Device %s disconnected and timed out", service.ShipID())
+	//	        notifyUser("Device %s disconnected and timed out", identity.ShipID)
 	//	    } else if strings.Contains(reason, "Replaced") {
-	//	        notifyUser("Device %s was replaced by a new device", service.ShipID())
+	//	        notifyUser("Device %s was replaced by a new device", identity.ShipID)
 	//	    }
 	//	}
-	DeviceAutoTrustRemovedViaReplacementLogic(service *ServiceDetails, reason string)
+	ServiceAutoTrustRemoved(identity ServiceIdentity, reason string)
 }
 
 /* Security Types */

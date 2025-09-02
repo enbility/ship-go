@@ -154,7 +154,7 @@ func TestKeepConnectionTOCTOURaceFix(t *testing.T) {
 		wg.Wait()
 
 		// Final state should be consistent (no connection or one connection)
-		finalConn := hub.connectionForSKI(remoteSKI)
+		finalConn := hub.connectionForService(api.NewServiceDetails(remoteSKI, "", ""))
 		t.Logf("Final connection state: %v", finalConn != nil)
 
 		hub.Shutdown()

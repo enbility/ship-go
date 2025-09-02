@@ -22,50 +22,50 @@ import (
 // SimpleHubReader implements api.HubReaderInterface to handle SHIP events
 type SimpleHubReader struct{}
 
-// RemoteSKIConnected is called when a remote device connects
-func (s *SimpleHubReader) RemoteSKIConnected(ski string) {
-	log.Printf("✅ Device connected: %s", ski)
+// RemoteServiceConnected is called when a remote device connects
+func (s *SimpleHubReader) RemoteServiceConnected(identity api.ServiceIdentity) {
+	log.Printf("✅ Device connected: %s", identity.SKI)
 }
 
-// RemoteSKIDisconnected is called when a remote device disconnects
-func (s *SimpleHubReader) RemoteSKIDisconnected(ski string) {
-	log.Printf("❌ Device disconnected: %s", ski)
+// RemoteServiceDisconnected is called when a remote device disconnects
+func (s *SimpleHubReader) RemoteServiceDisconnected(identity api.ServiceIdentity) {
+	log.Printf("❌ Device disconnected: %s", identity.SKI)
 }
 
-// SetupRemoteDevice provides the SPINE layer interface for message handling
+// SetupRemoteService provides the SPINE layer interface for message handling
 // In a full implementation, this would return a SPINE message handler
-func (s *SimpleHubReader) SetupRemoteDevice(
-	ski string,
+func (s *SimpleHubReader) SetupRemoteService(
+	identity api.ServiceIdentity,
 	writeI api.ShipConnectionDataWriterInterface,
 ) api.ShipConnectionDataReaderInterface {
-	log.Printf("Setting up SPINE layer for device: %s", ski)
+	log.Printf("Setting up SPINE layer for device: %s", identity.SKI)
 	// In a real implementation, return a SPINE protocol handler here
 	// For this example, we return nil (connection will work but no data exchange)
 	return nil
 }
 
-// VisibleRemoteServicesUpdated is called when mDNS discovers or loses devices
-func (s *SimpleHubReader) VisibleRemoteServicesUpdated(entries []api.RemoteService) {
+// VisibleRemoteMdnsServicesUpdated is called when mDNS discovers or loses devices
+func (s *SimpleHubReader) VisibleRemoteMdnsServicesUpdated(entries []api.RemoteMdnsService) {
 	log.Printf("📡 Discovered %d remote devices", len(entries))
 	for _, entry := range entries {
 		log.Printf("  - SKI: %s, Brand: %s, Model: %s", entry.Ski, entry.Brand, entry.Model)
 	}
 }
 
-// ServiceShipIDUpdate is called when a device's SHIP ID is learned
-func (s *SimpleHubReader) ServiceShipIDUpdate(ski string, shipID string) {
-	log.Printf("Device %s has SHIP ID: %s", ski, shipID)
+// ServiceUpdated is called when a device's information is updated
+func (s *SimpleHubReader) ServiceUpdated(identity api.ServiceIdentity) {
+	log.Printf("Device %s updated - SHIP ID: %s", identity.SKI, identity.ShipID)
 }
 
 // ServicePairingDetailUpdate provides pairing process updates
-func (s *SimpleHubReader) ServicePairingDetailUpdate(ski string, detail *api.ConnectionStateDetail) {
-	log.Printf("Pairing update for %s: %+v", ski, detail)
+func (s *SimpleHubReader) ServicePairingDetailUpdate(identity api.ServiceIdentity, detail *api.ConnectionStateDetail) {
+	log.Printf("Pairing update for %s: %+v", identity.SKI, detail)
 }
 
 // AllowWaitingForTrust determines if we accept a new device's pairing request
 // WARNING: Only return true for development. Production should prompt the user!
-func (s *SimpleHubReader) AllowWaitingForTrust(ski string) bool {
-	log.Printf("🤝 Auto-accepting pairing from device: %s (DEV MODE)", ski)
+func (s *SimpleHubReader) AllowWaitingForTrust(identity api.ServiceIdentity) bool {
+	log.Printf("🤝 Auto-accepting pairing from device: %s (DEV MODE)", identity.SKI)
 	return true // Auto-accept for this demo - see SECURITY.md for production guidance
 }
 

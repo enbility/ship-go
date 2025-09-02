@@ -66,7 +66,7 @@ func (s *HubConnectionsClientCoverageSuite) SetupTest() {
 	// The connection attempts in tests trigger callbacks that access ConnectionStateDetail concurrently
 	// We need to allow these calls but avoid inspecting their arguments to prevent races
 	s.mockReader.EXPECT().ServicePairingDetailUpdate(mock.Anything, mock.Anything).Maybe()
-	s.mockReader.EXPECT().RemoteSKIDisconnected(mock.Anything).Maybe()
+	s.mockReader.EXPECT().RemoteServiceDisconnected(mock.Anything).Maybe()
 	s.mockMdns.EXPECT().AnnounceMdnsEntry().Return(nil).Maybe()
 	s.mockMdns.EXPECT().RequestMdnsEntries().Maybe()
 
@@ -93,7 +93,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_Comprehensive
 			},
 			service: api.NewServiceDetails("unpairedski", "", ""),
 			entry: &api.MdnsEntry{
-				Identifier: "unpaired-ski",
+				Identifier: "unpairedski",
 				Host:       "localhost",
 				Port:       4729,
 			},
@@ -103,13 +103,13 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_Comprehensive
 			name: "paired_successful_hostname_connection",
 			setupMocks: func(ski string) {
 				service := api.NewServiceDetails(ski, "", "")
-				success := s.hub.AddService(service)
+				success := s.hub.addService(service)
 				assert.True(s.T(), success)
 				service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 			},
 			service: api.NewServiceDetails("pairedhostnameski", "", ""),
 			entry: &api.MdnsEntry{
-				Identifier: "paired-hostname-ski",
+				Identifier: "pairedhostnameski",
 				Host:       "localhost",
 				Port:       4729,
 				Path:       "/ship",
@@ -120,13 +120,13 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_Comprehensive
 			name: "queued_for_pairing",
 			setupMocks: func(ski string) {
 				service := api.NewServiceDetails(ski, "", "")
-				success := s.hub.AddService(service)
+				success := s.hub.addService(service)
 				assert.True(s.T(), success)
 				service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateQueued, nil))
 			},
 			service: api.NewServiceDetails("queuedski", "", ""),
 			entry: &api.MdnsEntry{
-				Identifier: "queued-ski",
+				Identifier: "queuedski",
 				Host:       "invalid.host",
 				Port:       4729,
 			},
@@ -136,13 +136,13 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_Comprehensive
 			name: "hostname_fails_ipv4_succeeds",
 			setupMocks: func(ski string) {
 				service := api.NewServiceDetails(ski, "", "")
-				success := s.hub.AddService(service)
+				success := s.hub.addService(service)
 				assert.True(s.T(), success)
 				service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 			},
 			service: api.NewServiceDetails("ipv4fallbackski", "", ""),
 			entry: &api.MdnsEntry{
-				Identifier: "ipv4-fallback-ski",
+				Identifier: "ipv4fallbackski",
 				Host:       "invalid.host",
 				Port:       4729,
 				Addresses:  []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("192.168.1.1")},
@@ -153,13 +153,13 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_Comprehensive
 			name: "mixed_ipv4_ipv6_addresses",
 			setupMocks: func(ski string) {
 				service := api.NewServiceDetails(ski, "", "")
-				success := s.hub.AddService(service)
+				success := s.hub.addService(service)
 				assert.True(s.T(), success)
 				service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 			},
 			service: api.NewServiceDetails("mixedipski", "", ""),
 			entry: &api.MdnsEntry{
-				Identifier: "mixed-ip-ski",
+				Identifier: "mixedipski",
 				Host:       "", // No hostname
 				Port:       4729,
 				Addresses: []net.IP{
@@ -175,13 +175,13 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_Comprehensive
 			name: "no_host_no_addresses",
 			setupMocks: func(ski string) {
 				service := api.NewServiceDetails(ski, "", "")
-				success := s.hub.AddService(service)
+				success := s.hub.addService(service)
 				assert.True(s.T(), success)
 				service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 			},
 			service: api.NewServiceDetails("noendpointski", "", ""),
 			entry: &api.MdnsEntry{
-				Identifier: "no-endpoint-ski",
+				Identifier: "noendpointski",
 				Host:       "",
 				Port:       4729,
 				Addresses:  []net.IP{},
@@ -504,7 +504,7 @@ func (s *HubConnectionsClientCoverageSuite) createCertificateWithInvalidSKI() (t
 			OrganizationalUnit: []string{"test"},
 			Organization:       []string{"test"},
 			Country:            []string{"DE"},
-			CommonName:         "test-invalid-ski",
+			CommonName:         "testinvalidski",
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().Add(time.Hour * 24 * 365),
@@ -908,7 +908,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_KeepThisConnection_DirectTest()
 
 		// Call keepThisConnection
 		// For outgoing: keep = localSKI > remoteSKI
-		// Here: "zzz-high-local-ski" > "aaa-low-remote-ski" = true
+		// Here: "zzzhighlocalski" > "aaalowremoteski" = true
 		s.T().Logf("Local SKI: %s, Remote SKI: %s", s.hub.localService.SKI(), remoteService.SKI())
 		result := s.hub.keepThisConnection(nil, false, remoteService)
 
@@ -949,7 +949,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_KeepThisConnection_DirectTest()
 
 		// Call keepThisConnection - this should return false
 		// For outgoing: keep = localSKI > remoteSKI
-		// Here: "aaa-low-local-ski" > "zzz-high-remote-ski" = false
+		// Here: "aaalowlocalski" > "zzzhighremoteski" = false
 		result := s.hub.keepThisConnection(nil, false, remoteService)
 
 		// Should return false (don't keep the new connection)
@@ -1027,7 +1027,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_KeepThisConnection_DirectTest()
 
 		// Call keepThisConnection for incoming request
 		// For incoming: keep = remoteSKI > localSKI
-		// Here: "aaa-low-remote-ski" > "zzz-high-local-ski" = false
+		// Here: "aaalowremoteski" > "zzzhighlocalski" = false
 		result := s.hub.keepThisConnection(nil, true, remoteService)
 
 		// Should return false (don't keep the new incoming connection)
@@ -1108,7 +1108,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_SuccessfulC
 
 	// Setup reader expectations for successful connection callbacks
 	s.mockReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
-	s.mockReader.EXPECT().ServiceShipIDUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Maybe()
+	s.mockReader.EXPECT().ServiceUpdated(mock.AnythingOfType("api.ServiceIdentity")).Maybe()
 
 	// Call connectFoundService - this should successfully establish a connection
 	err = s.hub.connectFoundService(service, host, portStr, "/")
@@ -1199,7 +1199,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_SuccessfulHos
 
 	// Setup reader expectations
 	s.mockReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
-	s.mockReader.EXPECT().ServiceShipIDUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Maybe()
+	s.mockReader.EXPECT().ServiceUpdated(mock.AnythingOfType("api.ServiceIdentity")).Maybe()
 
 	// Call initateConnection - should succeed via hostname
 	result := s.hub.initateConnection(service, entry)
@@ -1212,7 +1212,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_SuccessfulHos
 	assert.True(s.T(), s.hub.isSkiConnected(service.SKI()), "SKI should be connected after successful initateConnection")
 
 	// Cleanup
-	if conn := s.hub.connectionForSKI(service.SKI()); conn != nil {
+	if conn := s.hub.connectionForService(service); conn != nil {
 		conn.CloseConnection(false, 0, "test cleanup")
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -1281,7 +1281,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_SuccessfulIPC
 
 	// Setup reader expectations
 	s.mockReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
-	s.mockReader.EXPECT().ServiceShipIDUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Maybe()
+	s.mockReader.EXPECT().ServiceUpdated(mock.AnythingOfType("api.ServiceIdentity")).Maybe()
 
 	// Call initateConnection - should succeed via IP address
 	result := s.hub.initateConnection(service, entry)
@@ -1294,7 +1294,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_SuccessfulIPC
 	assert.True(s.T(), s.hub.isSkiConnected(service.SKI()), "SKI should be connected after successful initateConnection")
 
 	// Cleanup
-	if conn := s.hub.connectionForSKI(service.SKI()); conn != nil {
+	if conn := s.hub.connectionForService(service); conn != nil {
 		conn.CloseConnection(false, 0, "test cleanup")
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -1362,7 +1362,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_HostnameFails
 
 	// Setup reader expectations
 	s.mockReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
-	s.mockReader.EXPECT().ServiceShipIDUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Maybe()
+	s.mockReader.EXPECT().ServiceUpdated(mock.AnythingOfType("api.ServiceIdentity")).Maybe()
 
 	// Call initateConnection - hostname should fail, IP should succeed
 	result := s.hub.initateConnection(service, entry)
@@ -1375,7 +1375,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_HostnameFails
 	assert.True(s.T(), s.hub.isSkiConnected(service.SKI()), "SKI should be connected after successful IP fallback")
 
 	// Cleanup
-	if conn := s.hub.connectionForSKI(service.SKI()); conn != nil {
+	if conn := s.hub.connectionForService(service); conn != nil {
 		conn.CloseConnection(false, 0, "test cleanup")
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -1475,7 +1475,7 @@ func TestConnectFoundServiceUnitTestSuite(t *testing.T) {
 
 func (s *ConnectFoundServiceUnitTestSuite) SetupTest() {
 	// Setup test identifiers
-	s.testSKI = "test-ski-connect-123"
+	s.testSKI = "testskiconnect123"
 	s.testShipID = "test-ship-id-connect-456"
 	s.testFingerprint = "TEST_FINGERPRINT_CONNECT_789"
 
@@ -1484,12 +1484,12 @@ func (s *ConnectFoundServiceUnitTestSuite) SetupTest() {
 	s.mockMdns = mocks.NewMdnsInterface(s.T())
 
 	// Allow all Hub lifecycle operations
-	s.mockHubReader.EXPECT().RemoteSKIConnected(mock.AnythingOfType("string")).Maybe()
-	s.mockHubReader.EXPECT().RemoteSKIDisconnected(mock.AnythingOfType("string")).Maybe()
-	s.mockHubReader.EXPECT().ServiceShipIDUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Maybe()
+	s.mockHubReader.EXPECT().RemoteServiceConnected(mock.AnythingOfType("string")).Maybe()
+	s.mockHubReader.EXPECT().RemoteServiceDisconnected(mock.AnythingOfType("string")).Maybe()
+	s.mockHubReader.EXPECT().ServiceUpdated(mock.AnythingOfType("api.ServiceIdentity")).Maybe()
 	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
 	s.mockHubReader.EXPECT().AllowWaitingForTrust(mock.AnythingOfType("string")).Return(false).Maybe()
-	s.mockHubReader.EXPECT().SetupRemoteDevice(mock.AnythingOfType("string"), mock.AnythingOfType("api.ShipConnectionDataWriterInterface")).Return(nil).Maybe()
+	s.mockHubReader.EXPECT().SetupRemoteService(mock.AnythingOfType("api.ServiceDetails"), mock.AnythingOfType("api.ShipConnectionDataWriterInterface")).Return(nil).Maybe()
 
 	s.mockMdns.EXPECT().Shutdown().Return().Maybe()
 	s.mockMdns.EXPECT().SetAutoAccept(mock.AnythingOfType("bool")).Return().Maybe()
@@ -1531,7 +1531,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_SkiAlreadyCon
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act - Connection will fail at WebSocket level (no server running)
@@ -1547,15 +1547,15 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_ConnectionLim
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Setup - Fill connection limit
 	s.hub.maxConnections = 1
 	mockConn := mocks.NewShipConnectionInterface(s.T())
-	mockConn.EXPECT().RemoteSKI().Return("existing-ski").Maybe()
+	mockConn.EXPECT().RemoteSKI().Return("existingski").Maybe()
 	mockConn.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-	s.hub.connections["existing-ski"] = mockConn
+	s.hub.connections["existingski"] = mockConn
 
 	// Act
 	err := s.hub.connectFoundService(service, "localhost", "19999", "/ship")
@@ -1570,7 +1570,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_InvalidHostPo
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	testCases := []struct {
@@ -1619,7 +1619,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_WebSocketDial
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Test cases for various dial failures
@@ -1665,7 +1665,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_PathVariation
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Test various path formats (all will fail due to no server, but test path handling)
@@ -1716,7 +1716,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_NetworkTimeou
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Test connection to localhost ports that should be refused (fast failure)
@@ -1754,7 +1754,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_ParameterVali
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	testCases := []struct {
@@ -1808,7 +1808,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_CertificateVa
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act - Try to connect to unreachable host
@@ -1824,7 +1824,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_SKIUpdateLogi
 
 	// Setup - Create service with empty SKI (from SHIP Pairing Service scenario)
 	service := api.NewServiceDetails("", s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act - Connection will fail, but test that function handles empty SKI
@@ -1842,7 +1842,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_FingerprintBa
 
 	// Setup - Create fingerprint-based service
 	service := api.NewServiceDetails("", s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add fingerprint-based service")
 
 	// Act
@@ -1852,12 +1852,39 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_FingerprintBa
 	assert.Error(s.T(), err, "Should fail during connection establishment")
 }
 
+func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_ServiceDetailsUpdatesFromConnection() {
+	// Test that ServiceDetails registry gets updated when connection discovers new information
+	
+	// Setup - Create service with only SKI (simulating SKI-only registration)
+	skiOnlyService := api.NewServiceDetails(s.testSKI, "", "")
+	success := s.hub.addService(skiOnlyService)
+	require.True(s.T(), success, "Should add SKI-only service")
+	
+	// Verify initial state - fingerprint should be empty
+	initialService := s.hub.ServiceForIdentifier(s.testSKI, "")
+	require.NotNil(s.T(), initialService, "Service should exist")
+	assert.Equal(s.T(), s.testSKI, initialService.SKI(), "SKI should be set")
+	assert.Equal(s.T(), "", initialService.Fingerprint(), "Fingerprint should be empty initially")
+	assert.Equal(s.T(), "", initialService.ShipID(), "ShipID should be empty initially")
+	
+	// Note: This test documents the expected behavior for registry updates
+	// In a real connection scenario with valid certificates:
+	// 1. TLS validation would call remoteService.SetFingerprint() if empty
+	// 2. SHIP handshake would call ReportServiceShipID() which updates registry
+	// 3. Final ServiceDetails would have complete identification data
+	
+	// The actual connection will fail due to test environment, but this documents
+	// the intended behavior for ServiceDetails registry updates
+	err := s.hub.connectFoundService(skiOnlyService, "127.0.0.1", "19999", "/ship")
+	assert.Error(s.T(), err, "Connection will fail in test environment")
+}
+
 func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_ServiceWithAllIdentifiers() {
 	// Test service with all identifiers (SKI, fingerprint, ShipID)
 
 	// Setup - Create complete service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add complete service")
 
 	// Act
@@ -1911,7 +1938,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_ServiceIdenti
 				}, "Should panic for nil service from test case: %s", tc.name)
 			} else {
 				// Valid service - add it and test connection failure
-				success := s.hub.AddService(service)
+				success := s.hub.addService(service)
 				require.True(s.T(), success, "Should add service for test case: %s", tc.name)
 
 				// Use fast-failing address to avoid timeouts
@@ -1933,7 +1960,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_CertificateVa
 
 	// Setup - Create service with both SKI and fingerprint
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act - Connection will fail, but we're testing parameter passing
@@ -1955,7 +1982,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_ConnectionLim
 	s.hub.maxConnections = 0
 
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act
@@ -1972,12 +1999,12 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_ConnectionLim
 	// Setup - Set limit to 1 and add 1 connection
 	s.hub.maxConnections = 1
 	mockConn := mocks.NewShipConnectionInterface(s.T())
-	mockConn.EXPECT().RemoteSKI().Return("existing-ski").Maybe()
+	mockConn.EXPECT().RemoteSKI().Return("existingski").Maybe()
 	mockConn.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-	s.hub.connections["existing-ski"] = mockConn
+	s.hub.connections["existingski"] = mockConn
 
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act
@@ -1995,7 +2022,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_ConnectionLim
 	s.hub.maxConnections = 5
 
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act - Should pass limit check but fail at WebSocket level
@@ -2047,15 +2074,15 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_ConnectionLim
 			// Add existing connections
 			for i := 0; i < tc.existingConns; i++ {
 				mockConn := mocks.NewShipConnectionInterface(s.T())
-				mockConn.EXPECT().RemoteSKI().Return(fmt.Sprintf("existing-ski-%d", i)).Maybe()
+				mockConn.EXPECT().RemoteSKI().Return(fmt.Sprintf("existingski%d", i)).Maybe()
 				mockConn.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-				s.hub.connections[fmt.Sprintf("existing-ski-%d", i)] = mockConn
+				s.hub.connections[fmt.Sprintf("existingski%d", i)] = mockConn
 			}
 
 			// Use unique SKI for each test case to avoid conflicts
-			testSKI := fmt.Sprintf("%s-%s", s.testSKI, tc.name)
+			testSKI := fmt.Sprintf("%s%s", s.testSKI, tc.name)
 			service := api.NewServiceDetails(testSKI, s.testFingerprint, s.testShipID)
-			success := s.hub.AddService(service)
+			success := s.hub.addService(service)
 			require.True(s.T(), success, "Should add service")
 
 			// Act
@@ -2085,7 +2112,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_DoubleConnect
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act - Connection will fail at WebSocket level
@@ -2103,7 +2130,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_DoubleConnect
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act - Connection will fail at WebSocket level
@@ -2119,7 +2146,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_DoubleConnect
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act - Connection will fail at WebSocket level
@@ -2134,7 +2161,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_DoubleConnect
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act - Connection will fail before reaching double connection check
@@ -2151,7 +2178,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_ConnectionFlo
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act
@@ -2177,7 +2204,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_NetworkUnreac
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Test localhost addresses with different ports for fast failure
@@ -2202,7 +2229,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_DNSResolution
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Test hostnames that should fail DNS resolution
@@ -2228,7 +2255,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_PortConnectio
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Test ports that should be refused
@@ -2255,7 +2282,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_TLSHandshakeF
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act - Connect to address that won't have proper TLS
@@ -2271,7 +2298,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_WebSocketUpgr
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Act - Connection should fail
@@ -2286,7 +2313,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_NetworkTimeou
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Test connection failures (using localhost for fast failure)
@@ -2326,7 +2353,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_ResourceClean
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Track initial state
@@ -2347,7 +2374,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_ServiceStateA
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
 	service.SetTrusted(true)
 	service.SetPairingType(api.PairingTypeAddCu)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Record initial state
@@ -2372,7 +2399,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_NoConnectionL
 
 	// Setup - Create service
 	service := api.NewServiceDetails(s.testSKI, s.testFingerprint, s.testShipID)
-	success := s.hub.AddService(service)
+	success := s.hub.addService(service)
 	require.True(s.T(), success, "Should add service")
 
 	// Track connection state
@@ -2390,7 +2417,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_NoConnectionL
 	assert.False(s.T(), finalSKIConnected, "SKI should not be connected after failures")
 
 	// No connections should be in the registry
-	conn := s.hub.connectionForSKI(s.testSKI)
+	conn := s.hub.connectionForService(api.NewServiceDetails(s.testSKI, "", ""))
 	assert.Nil(s.T(), conn, "No connection should be registered for failed attempts")
 }
 
@@ -2402,7 +2429,7 @@ func (s *ConnectFoundServiceUnitTestSuite) TestConnectFoundService_ConcurrentFai
 	for i := 0; i < 3; i++ {
 		ski := fmt.Sprintf("concurrent-ski-%d", i)
 		service := api.NewServiceDetails(ski, fmt.Sprintf("fp-%d", i), fmt.Sprintf("ship-%d", i))
-		success := s.hub.AddService(service)
+		success := s.hub.addService(service)
 		require.True(s.T(), success, "Should add service %d", i)
 		services[i] = service
 	}

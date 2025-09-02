@@ -17,7 +17,7 @@ import (
 func TestConnectionRegistration_ConcurrentCloseAndReplace(t *testing.T) {
 	hub := setupTestHub(t)
 
-	const testSKI = "test-ski-123"
+	const testSKI = "testski123"
 	const numIterations = 100
 
 	for i := 0; i < numIterations; i++ {
@@ -42,7 +42,7 @@ func TestConnectionRegistration_ConcurrentCloseAndReplace(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			// Simulate HandleConnectionClosed logic
-			if existingC := hub.connectionForSKI(testSKI); existingC != nil {
+			if existingC := hub.connectionForService(api.NewServiceDetails(testSKI, "", "")); existingC != nil {
 				// Small delay to increase race probability
 				time.Sleep(time.Microsecond)
 				if existingC == conn1 {
@@ -62,7 +62,7 @@ func TestConnectionRegistration_ConcurrentCloseAndReplace(t *testing.T) {
 		wg.Wait()
 
 		// Verify state is consistent
-		finalConn := hub.connectionForSKI(testSKI)
+		finalConn := hub.connectionForService(api.NewServiceDetails(testSKI, "", ""))
 		switch finalConn {
 		case nil, conn2:
 			// Expected: either no connection or the second connection
@@ -107,7 +107,7 @@ func TestUnregisterConnectionIfMatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			hub := setupTestHub(t)
-			const testSKI = "test-ski"
+			const testSKI = "testski"
 
 			conn := mocks.NewShipConnectionInterface(t)
 			conn.EXPECT().RemoteSKI().Return(testSKI).Maybe()
@@ -130,7 +130,7 @@ func TestUnregisterConnectionIfMatch(t *testing.T) {
 			assert.Equal(t, tt.expectSuccess, success)
 
 			// Verify connection state
-			finalConn := hub.connectionForSKI(testSKI)
+			finalConn := hub.connectionForService(api.NewServiceDetails(testSKI, "", ""))
 			if tt.expectRemoved {
 				assert.Nil(t, finalConn)
 			} else {
@@ -153,7 +153,7 @@ func TestConcurrentConnectionOperations(t *testing.T) {
 	skis := make([]string, numSKIs)
 
 	for i := 0; i < numSKIs; i++ {
-		ski := string(rune('a'+i)) + "-ski"
+		ski := string(rune('a'+i)) + "ski"
 		skis[i] = ski
 
 		conn := mocks.NewShipConnectionInterface(t)
@@ -179,7 +179,7 @@ func TestConcurrentConnectionOperations(t *testing.T) {
 			case 0: // Register
 				hub.registerConnection(conn)
 			case 1: // Read
-				_ = hub.connectionForSKI(ski)
+				_ = hub.connectionForService(api.NewServiceDetails(ski, "", ""))
 			case 2: // Unregister if match
 				hub.UnregisterConnectionIfMatch(ski, conn)
 			}
@@ -190,7 +190,7 @@ func TestConcurrentConnectionOperations(t *testing.T) {
 
 	// Verify no panics and state is consistent
 	for i, ski := range skis {
-		conn := hub.connectionForSKI(ski)
+		conn := hub.connectionForService(api.NewServiceDetails(ski, "", ""))
 		if conn != nil {
 			assert.Equal(t, connections[i], conn, "Connection mismatch for SKI %s", ski)
 		}
@@ -204,10 +204,9 @@ func setupTestHub(t *testing.T) *Hub {
 
 	// Set up expectations
 	// Use specific type matchers to avoid race conditions with structs containing sync primitives
-	hubReader.EXPECT().RemoteSKIConnected(mock.AnythingOfType("api.ShipConnectionInterface")).Maybe()
-	hubReader.EXPECT().RemoteSKIDisconnected(mock.AnythingOfType("string")).Maybe()
-	hubReader.EXPECT().ServiceShipIDUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Maybe()
-	hubReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
+	hubReader.EXPECT().RemoteServiceConnected(mock.AnythingOfType("api.ShipConnectionInterface")).Maybe()
+	hubReader.EXPECT().RemoteServiceDisconnected(mock.AnythingOfType("string")).Maybe()
+	hubReader.EXPECT().ServiceUpdated(mock.AnythingOfType("*api.ServiceIdentity")).Maybe()
 
 	service := api.NewServiceDetails("testski", "", "")
 	service.SetShipID("test-ship-id")

@@ -131,9 +131,9 @@ func (p *PairingHubReader) markCompleted(ski string) (completed, total int, allC
 	return p.completedCount, p.totalTargets, p.completedCount >= p.totalTargets
 }
 
-// SetupRemoteDevice provides the SPINE layer interface for message handling
-func (p *PairingHubReader) SetupRemoteDevice(
-	ski string,
+// SetupRemoteService provides the SPINE layer interface for message handling
+func (p *PairingHubReader) SetupRemoteService(
+	identity api.ServiceIdentity,
 	writeI api.ShipConnectionDataWriterInterface,
 ) api.ShipConnectionDataReaderInterface {
 	// we would setup the SPINE layer in here
@@ -141,18 +141,19 @@ func (p *PairingHubReader) SetupRemoteDevice(
 	return nil
 }
 
-// VisibleRemoteServicesUpdated is called when mDNS discovers or loses devices
-func (p *PairingHubReader) VisibleRemoteServicesUpdated(entries []api.RemoteService) {
+// VisibleRemoteMdnsServicesUpdated is called when mDNS discovers or loses devices
+func (p *PairingHubReader) VisibleRemoteMdnsServicesUpdated(entries []api.RemoteMdnsService) {
 	// we could show the visible mDNS entries
 }
 
-// ServiceShipIDUpdate is called when service shipID is known
-func (p *PairingHubReader) ServiceShipIDUpdate(ski, shipID string) {
-	fmt.Printf("📋 Device %s has SHIP ID: %s\n", ski, shipID)
+// ServiceUpdated is called when service information is updated
+func (p *PairingHubReader) ServiceUpdated(identity api.ServiceIdentity) {
+	fmt.Printf("📋 Device %s updated - SHIP ID: %s\n", identity.SKI, identity.ShipID)
 }
 
 // ServicePairingDetailUpdate provides pairing process updates
-func (p *PairingHubReader) ServicePairingDetailUpdate(ski string, detail *api.ConnectionStateDetail) {
+func (p *PairingHubReader) ServicePairingDetailUpdate(identity api.ServiceIdentity, detail *api.ConnectionStateDetail) {
+	ski := identity.SKI
 	state := detail.State()
 	timestamp := time.Now().Format("15:04:05")
 
@@ -184,12 +185,13 @@ func (p *PairingHubReader) ServicePairingDetailUpdate(ski string, detail *api.Co
 }
 
 // AllowWaitingForTrust is for manual trust only
-func (p *PairingHubReader) AllowWaitingForTrust(ski string) bool {
+func (p *PairingHubReader) AllowWaitingForTrust(identity api.ServiceIdentity) bool {
 	return false
 }
 
-// RemoteSKIConnected is called when a new service connects
-func (p *PairingHubReader) RemoteSKIConnected(ski string) {
+// RemoteServiceConnected is called when a new service connects
+func (p *PairingHubReader) RemoteServiceConnected(identity api.ServiceIdentity) {
+	ski := identity.SKI
 	fmt.Printf("\n✅ Device connected: %s\n", ski)
 
 	completed, total, allComplete := p.markCompleted(ski)
@@ -208,39 +210,49 @@ func (p *PairingHubReader) RemoteSKIConnected(ski string) {
 	fmt.Printf("✅ Device connected and ready: %s\n", ski)
 }
 
-// RemoteSKIDisconnected is called when a service disconnects
-func (p *PairingHubReader) RemoteSKIDisconnected(ski string) {
-	fmt.Printf("👋 Device disconnected: %s\n", ski)
+// RemoteServiceDisconnected is called when a service disconnects
+func (p *PairingHubReader) RemoteServiceDisconnected(identity api.ServiceIdentity) {
+	fmt.Printf("👋 Device disconnected: %s\n", identity.SKI)
 }
 
 /* api.PairingServiceReaderInterface implementation */
 
 /* ServiceDetails-based methods */
 
-// DeviceAutoTrustedViaServiceDetails is called when device is automatically trusted via pairing service
-func (p *PairingHubReader) DeviceAutoTrustedViaServiceDetails(service *api.ServiceDetails) {
+// ServiceAutoTrusted is called when device is automatically trusted via pairing service
+func (p *PairingHubReader) ServiceAutoTrusted(identity api.ServiceIdentity) {
 	fmt.Printf("\n🔐 *** TRUST ESTABLISHED! ***\n")
-	fmt.Printf("   Device %s has been automatically trusted via SHIP Pairing Service\n", service.SKI())
-	if service.ShipID() != "" {
-		fmt.Printf("   SHIP ID: %s\n", service.ShipID())
+	fmt.Printf("   Device %s has been automatically trusted via SHIP Pairing Service\n", identity.SKI)
+	if identity.ShipID != "" {
+		fmt.Printf("   SHIP ID: %s\n", identity.ShipID)
 	}
-	if service.Fingerprint() != "" {
-		fmt.Printf("   Certificate Fingerprint: %s\n", service.Fingerprint())
+	if identity.Fingerprint != "" {
+		fmt.Printf("   Certificate Fingerprint: %s\n", identity.Fingerprint)
 	}
 	fmt.Printf("   Waiting for paired device to establish connection...\n")
 	fmt.Printf("   Trust established - device can now connect when ready\n\n")
 }
 
-// PairingServiceFailedForServiceDetails is called when pairing service fails for a service
-func (p *PairingHubReader) PairingServiceFailedForServiceDetails(service *api.ServiceDetails, reason error) {
-	fmt.Printf("\n❌ Pairing failed for device %s: %v\n", service.SKI(), reason)
-	if service.Fingerprint() != "" {
-		fmt.Printf("   Certificate Fingerprint: %s\n", service.Fingerprint())
+// ServiceAutoTrustFailed is called when SHIP pairing fails for a service
+func (p *PairingHubReader) ServiceAutoTrustFailed(identity api.ServiceIdentity, reason error) {
+	fmt.Printf("\n❌ Pairing failed for device %s: %v\n", identity.SKI, reason)
+	if identity.Fingerprint != "" {
+		fmt.Printf("   Certificate Fingerprint: %s\n", identity.Fingerprint)
 	}
-	if service.ShipID() != "" {
-		fmt.Printf("   SHIP ID: %s\n", service.ShipID())
+	if identity.ShipID != "" {
+		fmt.Printf("   SHIP ID: %s\n", identity.ShipID)
 	}
 	p.pairingError = reason
+}
+
+// ServiceAutoTrustRemoved is called when device trust is removed via replacement logic  
+func (p *PairingHubReader) ServiceAutoTrustRemoved(identity api.ServiceIdentity, reason string) {
+	fmt.Printf("\n🔒 *** TRUST REMOVED! ***\n")
+	fmt.Printf("   Device %s trust removed: %s\n", identity.SKI, reason)
+	if identity.ShipID != "" {
+		fmt.Printf("   SHIP ID: %s\n", identity.ShipID)
+	}
+	fmt.Printf("   Device must be re-paired to regain trust\n\n")
 }
 
 // ShipPairingData represents parsed SHIP pairing QR data
@@ -630,7 +642,8 @@ func main() {
 
 	for i, target := range targets {
 		fmt.Printf("  [%d] Registering %s (SHIP ID: %s)\n", i+1, target.SKI, target.ShipID)
-		h.RegisterRemoteService(target.SKI, target.Fingerprint, target.ShipID)
+		targetIdentity := api.NewServiceIdentity(target.SKI, target.Fingerprint, target.ShipID)
+		h.RegisterRemoteService(targetIdentity)
 		hubReader.targetSKIs[target.SKI] = false // not completed yet
 	}
 

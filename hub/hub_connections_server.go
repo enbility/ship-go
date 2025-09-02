@@ -148,16 +148,21 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if service == nil {
 		// Create new service if not found at all
 		service = api.NewServiceDetails(ski, fingerprint, "")
-		h.AddService(service)
+		h.addService(service)
 	} else if service.SKI() != ski && service.Fingerprint() == fingerprint {
 		// Update the service with the actual SKI from the connection
 		service.SetSKI(ski)
+	} else if service.SKI() == ski && service.Fingerprint() == "" {
+		// Update fingerprint if it was empty (e.g., from SKI-only registration)
+		service.SetFingerprint(fingerprint)
 	}
 
 	connectionStateDetail := service.ConnectionStateDetail()
 	if connectionStateDetail.State() == api.ConnectionStateQueued {
 		connectionStateDetail.SetState(api.ConnectionStateReceivedPairingRequest)
-		h.hubReader.ServicePairingDetailUpdate(ski, connectionStateDetail)
+		// Convert SKI to ServiceIdentity for callback
+		pairingIdentity := api.SKIToServiceIdentity(ski)
+		h.hubReader.ServicePairingDetailUpdate(pairingIdentity, connectionStateDetail)
 	}
 
 	// don't allow a second connection

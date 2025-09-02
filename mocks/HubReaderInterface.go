@@ -37,16 +37,16 @@ func (_m *HubReaderInterface) EXPECT() *HubReaderInterface_Expecter {
 }
 
 // AllowWaitingForTrust provides a mock function for the type HubReaderInterface
-func (_mock *HubReaderInterface) AllowWaitingForTrust(ski string) bool {
-	ret := _mock.Called(ski)
+func (_mock *HubReaderInterface) AllowWaitingForTrust(identity api.ServiceIdentity) bool {
+	ret := _mock.Called(identity)
 
 	if len(ret) == 0 {
 		panic("no return value specified for AllowWaitingForTrust")
 	}
 
 	var r0 bool
-	if returnFunc, ok := ret.Get(0).(func(string) bool); ok {
-		r0 = returnFunc(ski)
+	if returnFunc, ok := ret.Get(0).(func(api.ServiceIdentity) bool); ok {
+		r0 = returnFunc(identity)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
@@ -59,16 +59,16 @@ type HubReaderInterface_AllowWaitingForTrust_Call struct {
 }
 
 // AllowWaitingForTrust is a helper method to define mock.On call
-//   - ski string
-func (_e *HubReaderInterface_Expecter) AllowWaitingForTrust(ski interface{}) *HubReaderInterface_AllowWaitingForTrust_Call {
-	return &HubReaderInterface_AllowWaitingForTrust_Call{Call: _e.mock.On("AllowWaitingForTrust", ski)}
+//   - identity api.ServiceIdentity
+func (_e *HubReaderInterface_Expecter) AllowWaitingForTrust(identity interface{}) *HubReaderInterface_AllowWaitingForTrust_Call {
+	return &HubReaderInterface_AllowWaitingForTrust_Call{Call: _e.mock.On("AllowWaitingForTrust", identity)}
 }
 
-func (_c *HubReaderInterface_AllowWaitingForTrust_Call) Run(run func(ski string)) *HubReaderInterface_AllowWaitingForTrust_Call {
+func (_c *HubReaderInterface_AllowWaitingForTrust_Call) Run(run func(identity api.ServiceIdentity)) *HubReaderInterface_AllowWaitingForTrust_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 string
+		var arg0 api.ServiceIdentity
 		if args[0] != nil {
-			arg0 = args[0].(string)
+			arg0 = args[0].(api.ServiceIdentity)
 		}
 		run(
 			arg0,
@@ -82,33 +82,33 @@ func (_c *HubReaderInterface_AllowWaitingForTrust_Call) Return(b bool) *HubReade
 	return _c
 }
 
-func (_c *HubReaderInterface_AllowWaitingForTrust_Call) RunAndReturn(run func(ski string) bool) *HubReaderInterface_AllowWaitingForTrust_Call {
+func (_c *HubReaderInterface_AllowWaitingForTrust_Call) RunAndReturn(run func(identity api.ServiceIdentity) bool) *HubReaderInterface_AllowWaitingForTrust_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// RemoteSKIConnected provides a mock function for the type HubReaderInterface
-func (_mock *HubReaderInterface) RemoteSKIConnected(ski string) {
-	_mock.Called(ski)
+// RemoteServiceConnected provides a mock function for the type HubReaderInterface
+func (_mock *HubReaderInterface) RemoteServiceConnected(identity api.ServiceIdentity) {
+	_mock.Called(identity)
 	return
 }
 
-// HubReaderInterface_RemoteSKIConnected_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoteSKIConnected'
-type HubReaderInterface_RemoteSKIConnected_Call struct {
+// HubReaderInterface_RemoteServiceConnected_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoteServiceConnected'
+type HubReaderInterface_RemoteServiceConnected_Call struct {
 	*mock.Call
 }
 
-// RemoteSKIConnected is a helper method to define mock.On call
-//   - ski string
-func (_e *HubReaderInterface_Expecter) RemoteSKIConnected(ski interface{}) *HubReaderInterface_RemoteSKIConnected_Call {
-	return &HubReaderInterface_RemoteSKIConnected_Call{Call: _e.mock.On("RemoteSKIConnected", ski)}
+// RemoteServiceConnected is a helper method to define mock.On call
+//   - identity api.ServiceIdentity
+func (_e *HubReaderInterface_Expecter) RemoteServiceConnected(identity interface{}) *HubReaderInterface_RemoteServiceConnected_Call {
+	return &HubReaderInterface_RemoteServiceConnected_Call{Call: _e.mock.On("RemoteServiceConnected", identity)}
 }
 
-func (_c *HubReaderInterface_RemoteSKIConnected_Call) Run(run func(ski string)) *HubReaderInterface_RemoteSKIConnected_Call {
+func (_c *HubReaderInterface_RemoteServiceConnected_Call) Run(run func(identity api.ServiceIdentity)) *HubReaderInterface_RemoteServiceConnected_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 string
+		var arg0 api.ServiceIdentity
 		if args[0] != nil {
-			arg0 = args[0].(string)
+			arg0 = args[0].(api.ServiceIdentity)
 		}
 		run(
 			arg0,
@@ -117,38 +117,38 @@ func (_c *HubReaderInterface_RemoteSKIConnected_Call) Run(run func(ski string)) 
 	return _c
 }
 
-func (_c *HubReaderInterface_RemoteSKIConnected_Call) Return() *HubReaderInterface_RemoteSKIConnected_Call {
+func (_c *HubReaderInterface_RemoteServiceConnected_Call) Return() *HubReaderInterface_RemoteServiceConnected_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *HubReaderInterface_RemoteSKIConnected_Call) RunAndReturn(run func(ski string)) *HubReaderInterface_RemoteSKIConnected_Call {
+func (_c *HubReaderInterface_RemoteServiceConnected_Call) RunAndReturn(run func(identity api.ServiceIdentity)) *HubReaderInterface_RemoteServiceConnected_Call {
 	_c.Run(run)
 	return _c
 }
 
-// RemoteSKIDisconnected provides a mock function for the type HubReaderInterface
-func (_mock *HubReaderInterface) RemoteSKIDisconnected(ski string) {
-	_mock.Called(ski)
+// RemoteServiceDisconnected provides a mock function for the type HubReaderInterface
+func (_mock *HubReaderInterface) RemoteServiceDisconnected(identity api.ServiceIdentity) {
+	_mock.Called(identity)
 	return
 }
 
-// HubReaderInterface_RemoteSKIDisconnected_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoteSKIDisconnected'
-type HubReaderInterface_RemoteSKIDisconnected_Call struct {
+// HubReaderInterface_RemoteServiceDisconnected_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoteServiceDisconnected'
+type HubReaderInterface_RemoteServiceDisconnected_Call struct {
 	*mock.Call
 }
 
-// RemoteSKIDisconnected is a helper method to define mock.On call
-//   - ski string
-func (_e *HubReaderInterface_Expecter) RemoteSKIDisconnected(ski interface{}) *HubReaderInterface_RemoteSKIDisconnected_Call {
-	return &HubReaderInterface_RemoteSKIDisconnected_Call{Call: _e.mock.On("RemoteSKIDisconnected", ski)}
+// RemoteServiceDisconnected is a helper method to define mock.On call
+//   - identity api.ServiceIdentity
+func (_e *HubReaderInterface_Expecter) RemoteServiceDisconnected(identity interface{}) *HubReaderInterface_RemoteServiceDisconnected_Call {
+	return &HubReaderInterface_RemoteServiceDisconnected_Call{Call: _e.mock.On("RemoteServiceDisconnected", identity)}
 }
 
-func (_c *HubReaderInterface_RemoteSKIDisconnected_Call) Run(run func(ski string)) *HubReaderInterface_RemoteSKIDisconnected_Call {
+func (_c *HubReaderInterface_RemoteServiceDisconnected_Call) Run(run func(identity api.ServiceIdentity)) *HubReaderInterface_RemoteServiceDisconnected_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 string
+		var arg0 api.ServiceIdentity
 		if args[0] != nil {
-			arg0 = args[0].(string)
+			arg0 = args[0].(api.ServiceIdentity)
 		}
 		run(
 			arg0,
@@ -157,19 +157,19 @@ func (_c *HubReaderInterface_RemoteSKIDisconnected_Call) Run(run func(ski string
 	return _c
 }
 
-func (_c *HubReaderInterface_RemoteSKIDisconnected_Call) Return() *HubReaderInterface_RemoteSKIDisconnected_Call {
+func (_c *HubReaderInterface_RemoteServiceDisconnected_Call) Return() *HubReaderInterface_RemoteServiceDisconnected_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *HubReaderInterface_RemoteSKIDisconnected_Call) RunAndReturn(run func(ski string)) *HubReaderInterface_RemoteSKIDisconnected_Call {
+func (_c *HubReaderInterface_RemoteServiceDisconnected_Call) RunAndReturn(run func(identity api.ServiceIdentity)) *HubReaderInterface_RemoteServiceDisconnected_Call {
 	_c.Run(run)
 	return _c
 }
 
 // ServicePairingDetailUpdate provides a mock function for the type HubReaderInterface
-func (_mock *HubReaderInterface) ServicePairingDetailUpdate(ski string, detail *api.ConnectionStateDetail) {
-	_mock.Called(ski, detail)
+func (_mock *HubReaderInterface) ServicePairingDetailUpdate(identity api.ServiceIdentity, detail *api.ConnectionStateDetail) {
+	_mock.Called(identity, detail)
 	return
 }
 
@@ -179,17 +179,17 @@ type HubReaderInterface_ServicePairingDetailUpdate_Call struct {
 }
 
 // ServicePairingDetailUpdate is a helper method to define mock.On call
-//   - ski string
+//   - identity api.ServiceIdentity
 //   - detail *api.ConnectionStateDetail
-func (_e *HubReaderInterface_Expecter) ServicePairingDetailUpdate(ski interface{}, detail interface{}) *HubReaderInterface_ServicePairingDetailUpdate_Call {
-	return &HubReaderInterface_ServicePairingDetailUpdate_Call{Call: _e.mock.On("ServicePairingDetailUpdate", ski, detail)}
+func (_e *HubReaderInterface_Expecter) ServicePairingDetailUpdate(identity interface{}, detail interface{}) *HubReaderInterface_ServicePairingDetailUpdate_Call {
+	return &HubReaderInterface_ServicePairingDetailUpdate_Call{Call: _e.mock.On("ServicePairingDetailUpdate", identity, detail)}
 }
 
-func (_c *HubReaderInterface_ServicePairingDetailUpdate_Call) Run(run func(ski string, detail *api.ConnectionStateDetail)) *HubReaderInterface_ServicePairingDetailUpdate_Call {
+func (_c *HubReaderInterface_ServicePairingDetailUpdate_Call) Run(run func(identity api.ServiceIdentity, detail *api.ConnectionStateDetail)) *HubReaderInterface_ServicePairingDetailUpdate_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 string
+		var arg0 api.ServiceIdentity
 		if args[0] != nil {
-			arg0 = args[0].(string)
+			arg0 = args[0].(api.ServiceIdentity)
 		}
 		var arg1 *api.ConnectionStateDetail
 		if args[1] != nil {
@@ -208,68 +208,62 @@ func (_c *HubReaderInterface_ServicePairingDetailUpdate_Call) Return() *HubReade
 	return _c
 }
 
-func (_c *HubReaderInterface_ServicePairingDetailUpdate_Call) RunAndReturn(run func(ski string, detail *api.ConnectionStateDetail)) *HubReaderInterface_ServicePairingDetailUpdate_Call {
+func (_c *HubReaderInterface_ServicePairingDetailUpdate_Call) RunAndReturn(run func(identity api.ServiceIdentity, detail *api.ConnectionStateDetail)) *HubReaderInterface_ServicePairingDetailUpdate_Call {
 	_c.Run(run)
 	return _c
 }
 
-// ServiceShipIDUpdate provides a mock function for the type HubReaderInterface
-func (_mock *HubReaderInterface) ServiceShipIDUpdate(ski string, shipdID string) {
-	_mock.Called(ski, shipdID)
+// ServiceUpdated provides a mock function for the type HubReaderInterface
+func (_mock *HubReaderInterface) ServiceUpdated(identity api.ServiceIdentity) {
+	_mock.Called(identity)
 	return
 }
 
-// HubReaderInterface_ServiceShipIDUpdate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ServiceShipIDUpdate'
-type HubReaderInterface_ServiceShipIDUpdate_Call struct {
+// HubReaderInterface_ServiceUpdated_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ServiceUpdated'
+type HubReaderInterface_ServiceUpdated_Call struct {
 	*mock.Call
 }
 
-// ServiceShipIDUpdate is a helper method to define mock.On call
-//   - ski string
-//   - shipdID string
-func (_e *HubReaderInterface_Expecter) ServiceShipIDUpdate(ski interface{}, shipdID interface{}) *HubReaderInterface_ServiceShipIDUpdate_Call {
-	return &HubReaderInterface_ServiceShipIDUpdate_Call{Call: _e.mock.On("ServiceShipIDUpdate", ski, shipdID)}
+// ServiceUpdated is a helper method to define mock.On call
+//   - identity api.ServiceIdentity
+func (_e *HubReaderInterface_Expecter) ServiceUpdated(identity interface{}) *HubReaderInterface_ServiceUpdated_Call {
+	return &HubReaderInterface_ServiceUpdated_Call{Call: _e.mock.On("ServiceUpdated", identity)}
 }
 
-func (_c *HubReaderInterface_ServiceShipIDUpdate_Call) Run(run func(ski string, shipdID string)) *HubReaderInterface_ServiceShipIDUpdate_Call {
+func (_c *HubReaderInterface_ServiceUpdated_Call) Run(run func(identity api.ServiceIdentity)) *HubReaderInterface_ServiceUpdated_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 string
+		var arg0 api.ServiceIdentity
 		if args[0] != nil {
-			arg0 = args[0].(string)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg0 = args[0].(api.ServiceIdentity)
 		}
 		run(
 			arg0,
-			arg1,
 		)
 	})
 	return _c
 }
 
-func (_c *HubReaderInterface_ServiceShipIDUpdate_Call) Return() *HubReaderInterface_ServiceShipIDUpdate_Call {
+func (_c *HubReaderInterface_ServiceUpdated_Call) Return() *HubReaderInterface_ServiceUpdated_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *HubReaderInterface_ServiceShipIDUpdate_Call) RunAndReturn(run func(ski string, shipdID string)) *HubReaderInterface_ServiceShipIDUpdate_Call {
+func (_c *HubReaderInterface_ServiceUpdated_Call) RunAndReturn(run func(identity api.ServiceIdentity)) *HubReaderInterface_ServiceUpdated_Call {
 	_c.Run(run)
 	return _c
 }
 
-// SetupRemoteDevice provides a mock function for the type HubReaderInterface
-func (_mock *HubReaderInterface) SetupRemoteDevice(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
-	ret := _mock.Called(ski, writeI)
+// SetupRemoteService provides a mock function for the type HubReaderInterface
+func (_mock *HubReaderInterface) SetupRemoteService(identity api.ServiceIdentity, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
+	ret := _mock.Called(identity, writeI)
 
 	if len(ret) == 0 {
-		panic("no return value specified for SetupRemoteDevice")
+		panic("no return value specified for SetupRemoteService")
 	}
 
 	var r0 api.ShipConnectionDataReaderInterface
-	if returnFunc, ok := ret.Get(0).(func(string, api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface); ok {
-		r0 = returnFunc(ski, writeI)
+	if returnFunc, ok := ret.Get(0).(func(api.ServiceIdentity, api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface); ok {
+		r0 = returnFunc(identity, writeI)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(api.ShipConnectionDataReaderInterface)
@@ -278,23 +272,23 @@ func (_mock *HubReaderInterface) SetupRemoteDevice(ski string, writeI api.ShipCo
 	return r0
 }
 
-// HubReaderInterface_SetupRemoteDevice_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetupRemoteDevice'
-type HubReaderInterface_SetupRemoteDevice_Call struct {
+// HubReaderInterface_SetupRemoteService_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetupRemoteService'
+type HubReaderInterface_SetupRemoteService_Call struct {
 	*mock.Call
 }
 
-// SetupRemoteDevice is a helper method to define mock.On call
-//   - ski string
+// SetupRemoteService is a helper method to define mock.On call
+//   - identity api.ServiceIdentity
 //   - writeI api.ShipConnectionDataWriterInterface
-func (_e *HubReaderInterface_Expecter) SetupRemoteDevice(ski interface{}, writeI interface{}) *HubReaderInterface_SetupRemoteDevice_Call {
-	return &HubReaderInterface_SetupRemoteDevice_Call{Call: _e.mock.On("SetupRemoteDevice", ski, writeI)}
+func (_e *HubReaderInterface_Expecter) SetupRemoteService(identity interface{}, writeI interface{}) *HubReaderInterface_SetupRemoteService_Call {
+	return &HubReaderInterface_SetupRemoteService_Call{Call: _e.mock.On("SetupRemoteService", identity, writeI)}
 }
 
-func (_c *HubReaderInterface_SetupRemoteDevice_Call) Run(run func(ski string, writeI api.ShipConnectionDataWriterInterface)) *HubReaderInterface_SetupRemoteDevice_Call {
+func (_c *HubReaderInterface_SetupRemoteService_Call) Run(run func(identity api.ServiceIdentity, writeI api.ShipConnectionDataWriterInterface)) *HubReaderInterface_SetupRemoteService_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 string
+		var arg0 api.ServiceIdentity
 		if args[0] != nil {
-			arg0 = args[0].(string)
+			arg0 = args[0].(api.ServiceIdentity)
 		}
 		var arg1 api.ShipConnectionDataWriterInterface
 		if args[1] != nil {
@@ -308,38 +302,38 @@ func (_c *HubReaderInterface_SetupRemoteDevice_Call) Run(run func(ski string, wr
 	return _c
 }
 
-func (_c *HubReaderInterface_SetupRemoteDevice_Call) Return(shipConnectionDataReaderInterface api.ShipConnectionDataReaderInterface) *HubReaderInterface_SetupRemoteDevice_Call {
+func (_c *HubReaderInterface_SetupRemoteService_Call) Return(shipConnectionDataReaderInterface api.ShipConnectionDataReaderInterface) *HubReaderInterface_SetupRemoteService_Call {
 	_c.Call.Return(shipConnectionDataReaderInterface)
 	return _c
 }
 
-func (_c *HubReaderInterface_SetupRemoteDevice_Call) RunAndReturn(run func(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface) *HubReaderInterface_SetupRemoteDevice_Call {
+func (_c *HubReaderInterface_SetupRemoteService_Call) RunAndReturn(run func(identity api.ServiceIdentity, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface) *HubReaderInterface_SetupRemoteService_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// VisibleRemoteServicesUpdated provides a mock function for the type HubReaderInterface
-func (_mock *HubReaderInterface) VisibleRemoteServicesUpdated(entries []api.RemoteService) {
+// VisibleRemoteMdnsServicesUpdated provides a mock function for the type HubReaderInterface
+func (_mock *HubReaderInterface) VisibleRemoteMdnsServicesUpdated(entries []api.RemoteMdnsService) {
 	_mock.Called(entries)
 	return
 }
 
-// HubReaderInterface_VisibleRemoteServicesUpdated_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'VisibleRemoteServicesUpdated'
-type HubReaderInterface_VisibleRemoteServicesUpdated_Call struct {
+// HubReaderInterface_VisibleRemoteMdnsServicesUpdated_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'VisibleRemoteMdnsServicesUpdated'
+type HubReaderInterface_VisibleRemoteMdnsServicesUpdated_Call struct {
 	*mock.Call
 }
 
-// VisibleRemoteServicesUpdated is a helper method to define mock.On call
-//   - entries []api.RemoteService
-func (_e *HubReaderInterface_Expecter) VisibleRemoteServicesUpdated(entries interface{}) *HubReaderInterface_VisibleRemoteServicesUpdated_Call {
-	return &HubReaderInterface_VisibleRemoteServicesUpdated_Call{Call: _e.mock.On("VisibleRemoteServicesUpdated", entries)}
+// VisibleRemoteMdnsServicesUpdated is a helper method to define mock.On call
+//   - entries []api.RemoteMdnsService
+func (_e *HubReaderInterface_Expecter) VisibleRemoteMdnsServicesUpdated(entries interface{}) *HubReaderInterface_VisibleRemoteMdnsServicesUpdated_Call {
+	return &HubReaderInterface_VisibleRemoteMdnsServicesUpdated_Call{Call: _e.mock.On("VisibleRemoteMdnsServicesUpdated", entries)}
 }
 
-func (_c *HubReaderInterface_VisibleRemoteServicesUpdated_Call) Run(run func(entries []api.RemoteService)) *HubReaderInterface_VisibleRemoteServicesUpdated_Call {
+func (_c *HubReaderInterface_VisibleRemoteMdnsServicesUpdated_Call) Run(run func(entries []api.RemoteMdnsService)) *HubReaderInterface_VisibleRemoteMdnsServicesUpdated_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 []api.RemoteService
+		var arg0 []api.RemoteMdnsService
 		if args[0] != nil {
-			arg0 = args[0].([]api.RemoteService)
+			arg0 = args[0].([]api.RemoteMdnsService)
 		}
 		run(
 			arg0,
@@ -348,12 +342,12 @@ func (_c *HubReaderInterface_VisibleRemoteServicesUpdated_Call) Run(run func(ent
 	return _c
 }
 
-func (_c *HubReaderInterface_VisibleRemoteServicesUpdated_Call) Return() *HubReaderInterface_VisibleRemoteServicesUpdated_Call {
+func (_c *HubReaderInterface_VisibleRemoteMdnsServicesUpdated_Call) Return() *HubReaderInterface_VisibleRemoteMdnsServicesUpdated_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *HubReaderInterface_VisibleRemoteServicesUpdated_Call) RunAndReturn(run func(entries []api.RemoteService)) *HubReaderInterface_VisibleRemoteServicesUpdated_Call {
+func (_c *HubReaderInterface_VisibleRemoteMdnsServicesUpdated_Call) RunAndReturn(run func(entries []api.RemoteMdnsService)) *HubReaderInterface_VisibleRemoteMdnsServicesUpdated_Call {
 	_c.Run(run)
 	return _c
 }

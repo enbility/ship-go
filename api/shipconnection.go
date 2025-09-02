@@ -179,7 +179,7 @@ type ShipConnectionInfoProviderInterface interface {
 	// Example states: CmiStateInitStart, HelloStateOk, ProtocolStateOk, AccessStateOk
 	HandleShipHandshakeStateUpdate(ski string, state model.ShipState)
 
-	// SetupRemoteDevice sets up communication with a newly connected remote device.
+	// SetupRemoteService sets up communication with a newly connected remote device.
 	//
 	// This method is called after successful SHIP handshake completion when the
 	// connection is ready for SPINE message exchange. Applications implement this
@@ -193,7 +193,7 @@ type ShipConnectionInfoProviderInterface interface {
 	// - ShipConnectionDataReaderInterface: Reader interface for receiving messages
 	//
 	// Used when: SHIP handshake completes successfully and device is ready for communication
-	SetupRemoteDevice(ski string, writeI ShipConnectionDataWriterInterface) ShipConnectionDataReaderInterface
+	SetupRemoteService(ski string, writeI ShipConnectionDataWriterInterface) ShipConnectionDataReaderInterface
 }
 
 // Used to pass an outgoing SPINE message from a DeviceLocal to the SHIP connection

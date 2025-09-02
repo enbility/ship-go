@@ -13,15 +13,15 @@ import (
 // It avoids the reflection issues that occur with testify mocks when handling
 // objects containing sync primitives.
 type SafeConnectionTracker struct {
-	mu                      sync.Mutex
-	connectionClosedCalls   []ClosedCall
-	handshakeStateUpdates   []HandshakeStateUpdate
-	otherMethodCalls        map[string][]interface{}
-	
+	mu                    sync.Mutex
+	connectionClosedCalls []ClosedCall
+	handshakeStateUpdates []HandshakeStateUpdate
+	otherMethodCalls      map[string][]interface{}
+
 	// Configurable behaviors
-	isRemoteServicePaired   bool
-	isAutoAcceptEnabled     bool
-	allowWaitingForTrust    bool
+	isRemoteServicePaired bool
+	isAutoAcceptEnabled   bool
+	allowWaitingForTrust  bool
 }
 
 // ClosedCall records a call to HandleConnectionClosed
@@ -44,7 +44,7 @@ func NewSafeConnectionTracker() *SafeConnectionTracker {
 		connectionClosedCalls: make([]ClosedCall, 0),
 		handshakeStateUpdates: make([]HandshakeStateUpdate, 0),
 		otherMethodCalls:      make(map[string][]interface{}),
-		isRemoteServicePaired: true,  // Default to paired
+		isRemoteServicePaired: true, // Default to paired
 		isAutoAcceptEnabled:   false,
 		allowWaitingForTrust:  true,
 	}
@@ -54,13 +54,13 @@ func NewSafeConnectionTracker() *SafeConnectionTracker {
 func (s *SafeConnectionTracker) HandleConnectionClosed(conn api.ShipConnectionInterface, handshakeCompleted bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	// Extract only the data we need, avoiding any reflection on sync primitives
 	remoteSKI := ""
 	if conn != nil {
 		remoteSKI = conn.RemoteSKI() // Safe method call
 	}
-	
+
 	s.connectionClosedCalls = append(s.connectionClosedCalls, ClosedCall{
 		RemoteSKI:          remoteSKI,
 		HandshakeCompleted: handshakeCompleted,
@@ -72,7 +72,7 @@ func (s *SafeConnectionTracker) HandleConnectionClosed(conn api.ShipConnectionIn
 func (s *SafeConnectionTracker) GetConnectionClosedCalls() []ClosedCall {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	// Return a copy to avoid races
 	calls := make([]ClosedCall, len(s.connectionClosedCalls))
 	copy(calls, s.connectionClosedCalls)
@@ -83,7 +83,7 @@ func (s *SafeConnectionTracker) GetConnectionClosedCalls() []ClosedCall {
 func (s *SafeConnectionTracker) HandleShipHandshakeStateUpdate(ski string, state model.ShipState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.handshakeStateUpdates = append(s.handshakeStateUpdates, HandshakeStateUpdate{
 		SKI:       ski,
 		State:     state,
@@ -95,7 +95,7 @@ func (s *SafeConnectionTracker) HandleShipHandshakeStateUpdate(ski string, state
 func (s *SafeConnectionTracker) GetHandshakeStateUpdates() []HandshakeStateUpdate {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	updates := make([]HandshakeStateUpdate, len(s.handshakeStateUpdates))
 	copy(updates, s.handshakeStateUpdates)
 	return updates
@@ -105,7 +105,7 @@ func (s *SafeConnectionTracker) GetHandshakeStateUpdates() []HandshakeStateUpdat
 func (s *SafeConnectionTracker) IsRemoteServiceForSKIPaired(ski string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.recordMethodCall("IsRemoteServiceForSKIPaired", ski)
 	return s.isRemoteServicePaired
 }
@@ -114,7 +114,7 @@ func (s *SafeConnectionTracker) IsRemoteServiceForSKIPaired(ski string) bool {
 func (s *SafeConnectionTracker) AllowWaitingForTrust(ski string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.recordMethodCall("AllowWaitingForTrust", ski)
 	return s.allowWaitingForTrust
 }
@@ -123,7 +123,7 @@ func (s *SafeConnectionTracker) AllowWaitingForTrust(ski string) bool {
 func (s *SafeConnectionTracker) IsAutoAcceptEnabled() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.recordMethodCall("IsAutoAcceptEnabled")
 	return s.isAutoAcceptEnabled
 }
@@ -132,15 +132,15 @@ func (s *SafeConnectionTracker) IsAutoAcceptEnabled() bool {
 func (s *SafeConnectionTracker) ReportServiceShipID(ski string, shipID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.recordMethodCall("ReportServiceShipID", ski, shipID)
 }
 
-// SetupRemoteDevice implements the interface method (thread-safe)
-func (s *SafeConnectionTracker) SetupRemoteDevice(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
+// SetupRemoteService implements the interface method (thread-safe)
+func (s *SafeConnectionTracker) SetupRemoteService(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.recordMethodCall("SetupRemoteDevice", ski)
 	return nil // Return nil for test purposes
 }
@@ -157,7 +157,7 @@ func (s *SafeConnectionTracker) recordMethodCall(method string, args ...interfac
 func (s *SafeConnectionTracker) Configure(opts ...func(*SafeConnectionTracker)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -186,7 +186,7 @@ func WithAllowWaitingForTrust(allow bool) func(*SafeConnectionTracker) {
 func (s *SafeConnectionTracker) GetMethodCallCount(method string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	if calls, exists := s.otherMethodCalls[method]; exists {
 		return len(calls)
 	}
@@ -197,7 +197,7 @@ func (s *SafeConnectionTracker) GetMethodCallCount(method string) int {
 func (s *SafeConnectionTracker) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.connectionClosedCalls = make([]ClosedCall, 0)
 	s.handshakeStateUpdates = make([]HandshakeStateUpdate, 0)
 	s.otherMethodCalls = make(map[string][]interface{})

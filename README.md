@@ -15,11 +15,20 @@ This repository was started as part of the [eebus-go](https://github.com/enbilit
 
 ## Important API Changes
 
-**Breaking Change in Hub Constructor (v0.8.0+):** The `hub.NewHub()` function now requires 7 parameters instead of 6. The new 7th parameter is `ringBufferPersistence` for SHIP Pairing Service replay protection:
-- For pairing modes `Listener` and `Both`: **Must** provide a `RingBufferPersistence` implementation for storage operations
-- For pairing modes `Announcer` and `Off`: Pass `nil`
-- The library handles ALL ring buffer algorithm logic - applications only handle storage
-- See [Migration Guide](#ship-pairing-service-integration) for implementation details
+**Breaking Changes in v0.8.0:**
+
+1. **Hub Constructor:** The `hub.NewHub()` function now requires 7 parameters instead of 6. The new 7th parameter is `ringBufferPersistence` for SHIP Pairing Service replay protection:
+   - For pairing modes `Listener` and `Both`: **Must** provide a `RingBufferPersistence` implementation for storage operations
+   - For pairing modes `Announcer` and `Off`: Pass `nil`
+   - The library handles ALL ring buffer algorithm logic - applications only handle storage
+
+2. **Interface Changes:** All callback interfaces now use `ServiceIdentity` instead of `*ServiceDetails`:
+   - `HubReaderInterface` methods receive `ServiceIdentity` parameters
+   - `PairingServiceReaderInterface` methods receive `ServiceIdentity` parameters
+   - Hub management methods like `RegisterRemoteService()` take `ServiceIdentity` parameters
+   - `ServiceIdentity` is a simple value type, thread-safe without requiring `Copy()` calls
+
+- See [Integration Examples](#ship-pairing-service-integration) for implementation details
 
 ## Overview
 
@@ -205,13 +214,13 @@ Applications must implement `PairingServiceReaderInterface` to handle pairing ev
 ```go
 type PairingServiceReaderInterface interface {
     // Called when device is automatically trusted via pairing service
-    DeviceAutoTrustedViaServiceDetails(service *ServiceDetails)
+    ServiceAutoTrusted(identity ServiceIdentity)
     
     // Called when pairing service fails for a service  
-    PairingServiceFailedForServiceDetails(service *ServiceDetails, reason error)
+    ServiceAutoTrustFailed(identity ServiceIdentity, reason error)
     
     // Called when device trust is automatically removed via replacement logic
-    DeviceAutoTrustRemovedViaReplacementLogic(service *ServiceDetails, reason string)
+    ServiceAutoTrustRemoved(identity ServiceIdentity, reason string)
 }
 ```
 
@@ -278,50 +287,48 @@ hub, err := hub.NewHub(hubReader, mdns, port, cert, serviceDetails, config, ring
 
 ```go
 type MyHubReader struct {
-    devices map[string]*api.ServiceDetails
+    devices map[string]api.ServiceIdentity
 }
 
 // Handle automatic device trust from pairing service
-func (m *MyHubReader) DeviceAutoTrustedViaServiceDetails(service *api.ServiceDetails) {
-    log.Printf("Device auto-trusted: SKI=%s, ShipID=%s", service.SKI(), service.ShipID())
+func (m *MyHubReader) ServiceAutoTrusted(identity api.ServiceIdentity) {
+    log.Printf("Device auto-trusted: SKI=%s, ShipID=%s", identity.SKI, identity.ShipID)
     
-    // Mark AddCu devices for replacement timing logic
-    if isFromPairingService(service) {
-        service.SetPairingType(api.PairingTypeAddCu)
-    }
+    // Mark AddCu devices for replacement timing logic (devices paired via SHIP Pairing Service)
+    identity.PairingType = api.PairingTypeAddCu
     
     // Store trusted device
-    m.devices[service.SKI()] = service.Copy()
+    m.devices[identity.SKI] = identity
     
     // Update application state, UI, etc.
 }
 
 // Handle pairing failures (security events)
-func (m *MyHubReader) PairingServiceFailedForServiceDetails(service *api.ServiceDetails, reason error) {
-    log.Printf("Pairing failed: ShipID=%s, Reason=%v", service.ShipID(), reason)
+func (m *MyHubReader) ServiceAutoTrustFailed(identity api.ServiceIdentity, reason error) {
+    log.Printf("Pairing failed: ShipID=%s, Reason=%v", identity.ShipID, reason)
     
     // Log security event for audit
-    m.logSecurityEvent("pairing_failed", service, reason)
+    m.logSecurityEvent("pairing_failed", identity, reason)
 }
 
 // Handle device replacement (15-minute timeout logic for AddCu devices)
-func (m *MyHubReader) DeviceAutoTrustRemovedViaReplacementLogic(service *api.ServiceDetails, reason string) {
-    log.Printf("Device trust removed: ShipID=%s, Reason=%s", service.ShipID(), reason)
+func (m *MyHubReader) ServiceAutoTrustRemoved(identity api.ServiceIdentity, reason string) {
+    log.Printf("Device trust removed: ShipID=%s, Reason=%s", identity.ShipID, reason)
     
     // Clean up resources
-    delete(m.devices, service.SKI())
+    delete(m.devices, identity.SKI)
     
     // Notify user based on reason
     if strings.Contains(reason, "timeout") {
-        m.notifyUser(fmt.Sprintf("Device %s timed out after 15 minutes", service.ShipID()))
+        m.notifyUser(fmt.Sprintf("Device %s timed out after 15 minutes", identity.ShipID))
     } else if strings.Contains(reason, "Replaced") {
-        m.notifyUser(fmt.Sprintf("Device %s was replaced", service.ShipID()))
+        m.notifyUser(fmt.Sprintf("Device %s was replaced", identity.ShipID))
     }
 }
 
 // Implement other required HubReaderInterface methods...
-func (m *MyHubReader) RemoteServiceConnected(service *api.ServiceDetails) { /* ... */ }
-func (m *MyHubReader) AllowWaitingForTrust(service *api.ServiceDetails) bool { return true }
+func (m *MyHubReader) RemoteServiceConnected(identity api.ServiceIdentity) { /* ... */ }
+func (m *MyHubReader) AllowWaitingForTrust(identity api.ServiceIdentity) bool { return true }
 ```
 
 ### Key Integration Points
@@ -346,14 +353,13 @@ func (m *MyHubReader) AllowWaitingForTrust(service *api.ServiceDetails) bool { r
 2. **Device Replacement Logic** - Handle AddCu devices with automatic trust removal:
    ```go
    // Set pairing type for devices paired via pairing service
-   service.SetPairingType(api.PairingTypeAddCu)
+   identity.PairingType = api.PairingTypeAddCu
    ```
 
-3. **Memory Safety** - Always use `service.Copy()` for concurrent operations:
+3. **Memory Safety** - ServiceIdentity is a simple value type, safe for concurrent operations:
    ```go
-   // Safe for concurrent access
-   deviceCopy := service.Copy()
-   go processDevice(deviceCopy)
+   // ServiceIdentity is safe for concurrent access (no internal mutexes)
+   go processDevice(identity)
    ```
 
 4. **Secret Security** - Use `PairingSecret` type with secure cleanup:

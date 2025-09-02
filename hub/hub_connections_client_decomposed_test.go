@@ -32,7 +32,7 @@ type HubConnectionsDecomposedTestSuite struct {
 }
 
 func (s *HubConnectionsDecomposedTestSuite) SetupTest() {
-	s.localSKI = "test-local-ski"
+	s.localSKI = "testlocalski"
 	s.localService = api.NewServiceDetails(s.localSKI, "", "")
 
 	cert, err := cert.CreateCertificate("test", "test", "DE", "test")
@@ -260,7 +260,7 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ValidateRemoteCertificate() {
 		{
 			name:                "ski_mismatch",
 			certs:               []*x509.Certificate{validCert},
-			expectedSKI:         "wrong-ski",
+			expectedSKI:         "wrongski",
 			expectedFingerprint: "",
 			expectValid:         false,
 			errorMsg:            "SKI mismatch",
@@ -354,7 +354,7 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ValidateRemoteCertificate_Error
 				cert.SubjectKeyId = []byte{0x01, 0x02} // Too short for proper SKI
 				return cert
 			},
-			expectedSKI: "test-ski",
+			expectedSKI: "testski",
 			expectValid: false,
 			errorMsg:    "invalid SKI format",
 		},
@@ -548,7 +548,7 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ShouldAttemptConnection() {
 				// Use ServiceForIdentifier which handles normalization and creation
 				service := api.NewServiceDetails("pairedski", "", "")
 				service.SetTrusted(true)
-				success := s.hub.AddService(service)
+				success := s.hub.addService(service)
 				assert.True(s.T(), success)
 				return service
 			},
@@ -560,7 +560,7 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ShouldAttemptConnection() {
 				// Use ServiceForIdentifier which handles normalization and creation
 				service := api.NewServiceDetails("queuedski", "", "")
 				service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
-				success := s.hub.AddService(service)
+				success := s.hub.addService(service)
 				assert.True(s.T(), success)
 				return service
 			},
@@ -573,7 +573,7 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ShouldAttemptConnection() {
 				service := api.NewServiceDetails("unpairedski", "", "")
 				service.SetTrusted(false)
 				service.ConnectionStateDetail().SetState(api.ConnectionStateNone)
-				success := s.hub.AddService(service)
+				success := s.hub.addService(service)
 				assert.True(s.T(), success)
 				return service
 			},

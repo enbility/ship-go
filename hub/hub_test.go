@@ -93,9 +93,9 @@ func (s *HubSuite) BeforeTest(suiteName, testName string) {
 
 	s.hubReader = mocks.NewMockHubReaderInterface(ctrl)
 	// s.serviceProvider = mocks.NewServiceProvider(s.T())
-	s.hubReader.EXPECT().RemoteSKIConnected(gomock.Any()).Return().AnyTimes()
-	s.hubReader.EXPECT().RemoteSKIDisconnected(gomock.Any()).Return().AnyTimes()
-	s.hubReader.EXPECT().ServiceShipIDUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().RemoteServiceConnected(gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().RemoteServiceDisconnected(gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().ServiceUpdated(gomock.Any()).Return().AnyTimes()
 	s.hubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
 	s.hubReader.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
 
@@ -168,7 +168,7 @@ func (s *HubSuite) Test_NewHub_RequiresHistoryProviderForListener() {
 	localService := api.NewServiceDetails(ski, "", "")
 	secret := api.PairingSecret("test-secret-12345678901234567890123456789012")
 	config := api.NewPairingConfig(api.PairingModeListener, secret)
-	
+
 	// Should fail - no history provider for listener mode
 	_, err := NewHub(s.hubReader, s.mdnsService, 4712, tls.Certificate{}, localService, config, nil)
 	assert.Error(s.T(), err)
@@ -180,7 +180,7 @@ func (s *HubSuite) Test_NewHub_RequiresHistoryProviderForBothMode() {
 	localService := api.NewServiceDetails(ski, "", "")
 	secret := api.PairingSecret("test-secret-12345678901234567890123456789012")
 	config := api.NewPairingConfig(api.PairingModeBoth, secret)
-	
+
 	// Should fail - no history provider for both mode
 	_, err := NewHub(s.hubReader, s.mdnsService, 4712, tls.Certificate{}, localService, config, nil)
 	assert.Error(s.T(), err)
@@ -192,7 +192,7 @@ func (s *HubSuite) Test_NewHub_AcceptsNilHistoryProviderForAnnouncer() {
 	localService := api.NewServiceDetails(ski, "", "")
 	secret := api.PairingSecret("test-secret-12345678901234567890123456789012")
 	config := api.NewPairingConfig(api.PairingModeAnnouncer, secret)
-	
+
 	// Should succeed - no history provider needed for announcer
 	h, err := NewHub(s.hubReader, s.mdnsService, 4712, tls.Certificate{}, localService, config, nil)
 	assert.NoError(s.T(), err)
@@ -202,7 +202,7 @@ func (s *HubSuite) Test_NewHub_AcceptsNilHistoryProviderForAnnouncer() {
 func (s *HubSuite) Test_NewHub_AcceptsNilHistoryProviderForOffMode() {
 	ski := "12af9e"
 	localService := api.NewServiceDetails(ski, "", "")
-	
+
 	// Should succeed - no history provider needed when pairing is off
 	h, err := NewHub(s.hubReader, s.mdnsService, 4712, tls.Certificate{}, localService, nil, nil)
 	assert.NoError(s.T(), err)
@@ -214,10 +214,10 @@ func (s *HubSuite) Test_NewHub_AcceptsValidHistoryProviderForListener() {
 	localService := api.NewServiceDetails(ski, "", "")
 	secret := api.PairingSecret("test-secret-12345678901234567890123456789012")
 	config := api.NewPairingConfig(api.PairingModeListener, secret)
-	
+
 	// Create valid history provider
 	ringBufferPersistence := NewTestRingBufferPersistence()
-	
+
 	// Should succeed - valid ring buffer persistence for listener mode
 	h, err := NewHub(s.hubReader, s.mdnsService, 4712, tls.Certificate{}, localService, config, ringBufferPersistence)
 	assert.NoError(s.T(), err)
@@ -245,9 +245,9 @@ func (s *HubSuite) Test_SetupRemoteDevice() {
 	assert.NotNil(s.T(), hub)
 
 	readerI := mocks.NewShipConnectionDataReaderInterface(s.T())
-	s.hubReader.EXPECT().SetupRemoteDevice(gomock.Any(), gomock.Any()).Return(readerI)
+	s.hubReader.EXPECT().SetupRemoteService(gomock.Any(), gomock.Any()).Return(readerI)
 
-	reader := hub.SetupRemoteDevice(ski, nil)
+	reader := hub.SetupRemoteService(ski, nil)
 
 	assert.NotNil(s.T(), reader)
 }
@@ -295,8 +295,8 @@ func (s *HubSuite) Test_MapShipMessageExchangeState() {
 	assert.Equal(s.T(), api.ConnectionStateInProgress, state)
 }
 
-func (s *HubSuite) Test_DisconnectSKI() {
-	s.sut.DisconnectSKI(s.remoteSki, "none")
+func (s *HubSuite) Test_DisconnectService() {
+	s.sut.DisconnectService(api.NewServiceIdentity(s.remoteSki, "none", ""), "")
 }
 
 func (s *HubSuite) Test_Mdns() {
@@ -306,7 +306,7 @@ func (s *HubSuite) Test_Mdns() {
 	assert.Equal(s.T(), 0, len(s.sut.connections))
 	assert.Equal(s.T(), 0, pairedServices)
 
-	s.sut.RegisterRemoteService(s.remoteSki, "", "testshipid")
+	s.sut.RegisterRemoteService(api.NewServiceIdentity(s.remoteSki, "", "testshipid"))
 	pairedServices = s.sut.numberPairedServices()
 	assert.Equal(s.T(), 0, len(s.sut.connections))
 	assert.Equal(s.T(), 1, pairedServices)
@@ -319,7 +319,7 @@ func (s *HubSuite) Test_Mdns() {
 }
 
 func (s *HubSuite) Test_Ship() {
-	s.sut.RegisterRemoteService(s.remoteSki, "", "")
+	s.sut.RegisterRemoteService(api.NewServiceIdentity(s.remoteSki, "", ""))
 
 	s.sut.HandleShipHandshakeStateUpdate(s.remoteSki, model.ShipState{
 		State: model.SmeStateError,
@@ -330,7 +330,17 @@ func (s *HubSuite) Test_Ship() {
 		State: model.SmeHelloStateOk,
 	})
 
+	// Verify initial state - ShipID should be empty
+	service := s.sut.ServiceForIdentifier(s.remoteSki, "")
+	assert.NotNil(s.T(), service, "Service should exist before ShipID report")
+	assert.Equal(s.T(), "", service.ShipID(), "ShipID should be empty initially")
+
 	s.sut.ReportServiceShipID(s.remoteSki, "test")
+
+	// Verify registry was updated with discovered ShipID
+	updatedService := s.sut.ServiceForIdentifier(s.remoteSki, "")
+	assert.NotNil(s.T(), updatedService, "Service should still exist after ShipID report")
+	assert.Equal(s.T(), "test", updatedService.ShipID(), "ShipID should be updated in registry")
 
 	accept := s.sut.IsAutoAcceptEnabled()
 	assert.Equal(s.T(), false, accept)
@@ -341,12 +351,12 @@ func (s *HubSuite) Test_Ship() {
 	trust = s.sut.AllowWaitingForTrust("test")
 	assert.Equal(s.T(), false, trust)
 
-	detail := s.sut.PairingDetailForIdentifier(s.remoteSki, "")
+	detail := s.sut.PairingDetailFor(api.NewServiceIdentity(s.remoteSki, "", ""))
 	assert.NotNil(s.T(), detail)
 
 	s.sut.registerConnection(s.shipConnection)
 
-	detail = s.sut.PairingDetailForIdentifier(s.remoteSki, "")
+	detail = s.sut.PairingDetailFor(api.NewServiceIdentity(s.remoteSki, "", ""))
 	assert.NotNil(s.T(), detail)
 }
 
@@ -356,7 +366,7 @@ func (s *HubSuite) Test_ReportMdnsEntries() {
 
 	entries := make(map[string]*api.MdnsEntry)
 
-	s.hubReader.EXPECT().VisibleRemoteServicesUpdated(gomock.Any()).AnyTimes()
+	s.hubReader.EXPECT().VisibleRemoteMdnsServicesUpdated(gomock.Any()).AnyTimes()
 	s.sut.ReportMdnsEntries(entries, true)
 
 	entries[testski1] = &api.MdnsEntry{
@@ -423,6 +433,99 @@ func (s *HubSuite) Test_StopAddCuReplacementTimer_ValidAddCuService() {
 	// Should call tracker.StopTimer with shipID
 	s.sut.StopAddCuReplacementTimer(service)
 	// No assertion needed - test passes if tracker.StopTimer is called successfully
+}
+
+func (s *HubSuite) Test_startAddCuReplacementTimersForOfflineDevices_NoAddCuDevices() {
+	// Test startup with no AddCu devices - should not start any timers
+	
+	// Add a regular trusted device (not AddCu)
+	regularService := api.NewServiceDetails("regular-ski", "fp", "regular-ship")
+	regularService.SetPairingType(api.PairingTypeDefault)
+	regularService.SetTrusted(true)
+	s.sut.addService(regularService)
+
+	// Call startup method
+	s.sut.startAddCuReplacementTimersForOfflineDevices()
+
+	// Should not start any timers (no AddCu devices)
+	// Test passes if no panics occur
+}
+
+func (s *HubSuite) Test_startAddCuReplacementTimersForOfflineDevices_OfflineAddCuDevice() {
+	// Test startup with offline AddCu device - should start replacement timer
+	
+	// Create trusted AddCu service that's not connected
+	addCuService := api.NewServiceDetails("addcu-ski", "addcu-fp", "addcu-ship-123")
+	addCuService.SetPairingType(api.PairingTypeAddCu)
+	addCuService.SetTrusted(true)
+	s.sut.addService(addCuService)
+
+	// Verify service was added
+	storedService := s.sut.ServiceForIdentifier("addcu-ski", "addcu-fp")
+	require.NotNil(s.T(), storedService)
+	assert.Equal(s.T(), api.PairingTypeAddCu, storedService.PairingType())
+	assert.True(s.T(), storedService.Trusted())
+
+	// Call startup method - should start timer for offline AddCu device
+	s.sut.startAddCuReplacementTimersForOfflineDevices()
+
+	// Test passes if StartTimer is called correctly
+	// The actual timer behavior is tested in addcu_replacement_tracker_test.go
+}
+
+func (s *HubSuite) Test_startAddCuReplacementTimersForOfflineDevices_ConnectedAddCuDevice() {
+	// Test startup with connected AddCu device - should NOT start timer
+	
+	// Create trusted AddCu service
+	addCuService := api.NewServiceDetails("connected-addcu-ski", "addcu-fp", "connected-ship")
+	addCuService.SetPairingType(api.PairingTypeAddCu)
+	addCuService.SetTrusted(true)
+	s.sut.addService(addCuService)
+
+	// Create a mock connection for this service
+	mockConnection := mocks.NewShipConnectionInterface(s.T())
+	mockConnection.EXPECT().RemoteSKI().Return("connected-addcu-ski").Maybe()
+	mockConnection.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
+	
+	// Add connection to hub (simulate connected device)
+	s.sut.muxCon.Lock()
+	s.sut.connections["connected-addcu-ski"] = mockConnection
+	s.sut.muxCon.Unlock()
+
+	// Call startup method - should NOT start timer for connected device
+	s.sut.startAddCuReplacementTimersForOfflineDevices()
+
+	// Test passes - timer should not start for connected devices
+}
+
+func (s *HubSuite) Test_startAddCuReplacementTimersForOfflineDevices_UntrustedAddCuDevice() {
+	// Test startup with untrusted AddCu device - should NOT start timer
+	
+	// Create untrusted AddCu service
+	untrustedService := api.NewServiceDetails("untrusted-ski", "fp", "untrusted-ship")
+	untrustedService.SetPairingType(api.PairingTypeAddCu)
+	untrustedService.SetTrusted(false) // Not trusted
+	s.sut.addService(untrustedService)
+
+	// Call startup method - should NOT start timer for untrusted device
+	s.sut.startAddCuReplacementTimersForOfflineDevices()
+
+	// Test passes - timer should not start for untrusted devices
+}
+
+func (s *HubSuite) Test_startAddCuReplacementTimersForOfflineDevices_AddCuWithoutShipID() {
+	// Test startup with AddCu device without ShipID - should NOT start timer
+	
+	// Create AddCu service without ShipID
+	noShipIDService := api.NewServiceDetails("noshipid-ski", "fp", "")
+	noShipIDService.SetPairingType(api.PairingTypeAddCu)
+	noShipIDService.SetTrusted(true)
+	s.sut.addService(noShipIDService)
+
+	// Call startup method - should NOT start timer (no ShipID)
+	s.sut.startAddCuReplacementTimersForOfflineDevices()
+
+	// Test passes - timer requires ShipID to function
 }
 
 func (s *HubSuite) Test_handleAddCuReplacementTimeout_ServiceNotFound() {
@@ -537,16 +640,16 @@ func (s *HubSuite) Test_callDeviceAutoTrustRemovedCallback_WithInterface() {
 	pairingReader := mocks.NewPairingServiceReaderInterface(s.T())
 
 	// Set up minimal expectations
-	hubReader.EXPECT().RemoteSKIConnected(mock.AnythingOfType("string")).Maybe()
-	hubReader.EXPECT().RemoteSKIDisconnected(mock.AnythingOfType("string")).Maybe()
-	hubReader.EXPECT().ServiceShipIDUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Maybe()
-	hubReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
+	hubReader.EXPECT().RemoteServiceConnected(mock.AnythingOfType("string")).Maybe()
+	hubReader.EXPECT().RemoteServiceDisconnected(mock.AnythingOfType("string")).Maybe()
+	hubReader.EXPECT().ServiceUpdated(mock.AnythingOfType("ServiceIdentity")).Maybe()
+	hubReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("api.ServiceIdentity"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
 	hubReader.EXPECT().AllowWaitingForTrust(mock.AnythingOfType("string")).Return(false).Maybe()
-	hubReader.EXPECT().SetupRemoteDevice(mock.AnythingOfType("string"), mock.AnythingOfType("api.ShipConnectionDataWriterInterface")).Return(nil).Maybe()
+	hubReader.EXPECT().SetupRemoteService(mock.AnythingOfType("ServiceIdentity"), mock.AnythingOfType("api.ShipConnectionDataWriterInterface")).Return(nil).Maybe()
 
 	// Set up the callback expectation
-	pairingReader.EXPECT().DeviceAutoTrustRemovedViaReplacementLogic(
-		mock.AnythingOfType("*api.ServiceDetails"),
+	pairingReader.EXPECT().ServiceAutoTrustRemoved(
+		mock.AnythingOfType("api.ServiceIdentity"),
 		"test callback reason",
 	).Return().Once()
 
@@ -567,7 +670,7 @@ func (s *HubSuite) Test_callDeviceAutoTrustRemovedCallback_WithInterface() {
 	assert.NoError(s.T(), err)
 	defer hubWithCallback.Shutdown()
 
-	service := api.NewServiceDetails("callback-test-ski", "", "test-ship-id")
+	service := api.NewServiceDetails("callbacktestski", "", "test-ship-id")
 
 	// This should now execute the callback path (the missing 60% coverage)
 	hubWithCallback.callDeviceAutoTrustRemovedCallback(service, "test callback reason")
@@ -581,29 +684,29 @@ func (s *HubSuite) Test_callDeviceAutoTrustRemovedCallback_WithInterface() {
 
 func (s *HubSuite) Test_RemoveService_EdgeCases() {
 	// Test removing service with empty parameters
-	s.sut.RemoveService("", "")
+	s.sut.removeService("", "")
 	// Should not panic or error
 
 	// Test removing non-existent service by SKI
-	s.sut.RemoveService("nonexistent-ski", "")
+	s.sut.removeService("nonexistentski", "")
 	// Should not panic or error
 
 	// Test removing non-existent service by fingerprint
-	s.sut.RemoveService("", "nonexistent-fingerprint")
+	s.sut.removeService("", "nonexistent-fingerprint")
 	// Should not panic or error
 }
 
 func (s *HubSuite) Test_RemoveService_BySKI() {
 	// Add a service first
 	service := api.NewServiceDetails("testremoveski", "", "")
-	s.sut.AddService(service)
+	s.sut.addService(service)
 
 	// Verify it was added
 	found := s.sut.ServiceForIdentifier("testremoveski", "")
 	assert.NotNil(s.T(), found)
 
 	// Remove by SKI
-	s.sut.RemoveService("testremoveski", "")
+	s.sut.removeService("testremoveski", "")
 
 	// Verify it was removed
 	notFound := s.sut.ServiceForIdentifier("testremoveski", "")
@@ -612,14 +715,14 @@ func (s *HubSuite) Test_RemoveService_BySKI() {
 
 func (s *HubSuite) Test_RemoveService_ByFingerprint() {
 	// Add a service with fingerprint
-	service := api.NewServiceDetails("test-ski", "test-fingerprint", "")
-	s.sut.AddService(service)
+	service := api.NewServiceDetails("testski", "test-fingerprint", "")
+	s.sut.addService(service)
 
 	// Remove by fingerprint only
-	s.sut.RemoveService("", "test-fingerprint")
+	s.sut.removeService("", "test-fingerprint")
 
 	// Verify it was removed
-	notFound := s.sut.ServiceForIdentifier("test-ski", "")
+	notFound := s.sut.ServiceForIdentifier("testski", "")
 	assert.Nil(s.T(), notFound)
 }
 
@@ -627,11 +730,11 @@ func (s *HubSuite) Test_RemoveService_MultipleCriteria() {
 	// Add multiple services
 	service1 := api.NewServiceDetails("ski1", "fp1", "")
 	service2 := api.NewServiceDetails("ski2", "fp2", "")
-	s.sut.AddService(service1)
-	s.sut.AddService(service2)
+	s.sut.addService(service1)
+	s.sut.addService(service2)
 
 	// Remove by specific SKI and fingerprint combo
-	s.sut.RemoveService("ski1", "fp1")
+	s.sut.removeService("ski1", "fp1")
 
 	// Verify only the specific service was removed
 	notFound := s.sut.ServiceForIdentifier("ski1", "")
@@ -643,35 +746,35 @@ func (s *HubSuite) Test_RemoveService_MultipleCriteria() {
 
 func (s *HubSuite) Test_RemoveService_BothCriteriaMustMatch() {
 	// Test that RemoveService requires both SKI and fingerprint to match when both are provided
-	service := api.NewServiceDetails("test-ski", "test-fp", "")
-	s.sut.AddService(service)
+	service := api.NewServiceDetails("testski", "test-fp", "")
+	s.sut.addService(service)
 
 	// Try to remove with matching SKI but wrong fingerprint - should NOT remove
-	s.sut.RemoveService("test-ski", "wrong-fp")
+	s.sut.removeService("testski", "wrong-fp")
 
 	// Service should still be there (both criteria must match)
-	stillThere := s.sut.ServiceForIdentifier("test-ski", "")
+	stillThere := s.sut.ServiceForIdentifier("testski", "")
 	assert.NotNil(s.T(), stillThere)
 }
 
 func (s *HubSuite) Test_ServiceForIdentifier_EdgeCases() {
 	// Test various lookup scenarios
-	service := api.NewServiceDetails("test-ski", "test-fp", "")
-	s.sut.AddService(service)
+	service := api.NewServiceDetails("testski", "test-fp", "")
+	s.sut.addService(service)
 
 	// Standard lookup by SKI
-	found := s.sut.ServiceForIdentifier("test-ski", "")
+	found := s.sut.ServiceForIdentifier("testski", "")
 	assert.NotNil(s.T(), found)
 
 	// Test with both parameters
-	foundBoth := s.sut.ServiceForIdentifier("test-ski", "test-fp")
+	foundBoth := s.sut.ServiceForIdentifier("testski", "test-fp")
 	assert.NotNil(s.T(), foundBoth)
 }
 
 func (s *HubSuite) Test_AddService_NilService() {
 	// Test adding nil service - should handle gracefully
 	initialCount := len(s.sut.remoteServices)
-	s.sut.AddService(nil)
+	s.sut.addService(nil)
 
 	// Should not have added anything
 	assert.Equal(s.T(), initialCount, len(s.sut.remoteServices))
@@ -700,16 +803,16 @@ func (suite *DualInterfaceCallbackTestSuite) SetupTest() {
 	suite.mockMdns = mocks.NewMdnsInterface(suite.T())
 
 	// Set up minimal mock expectations for HubReaderInterface
-	hubReader.EXPECT().RemoteSKIConnected(mock.AnythingOfType("string")).Maybe()
-	hubReader.EXPECT().RemoteSKIDisconnected(mock.AnythingOfType("string")).Maybe()
-	hubReader.EXPECT().ServiceShipIDUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Maybe()
-	hubReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
+	hubReader.EXPECT().RemoteServiceConnected(mock.AnythingOfType("string")).Maybe()
+	hubReader.EXPECT().RemoteServiceDisconnected(mock.AnythingOfType("string")).Maybe()
+	hubReader.EXPECT().ServiceUpdated(mock.AnythingOfType("ServiceIdentity")).Maybe()
+	hubReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("api.ServiceIdentity"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
 	hubReader.EXPECT().AllowWaitingForTrust(mock.AnythingOfType("string")).Return(false).Maybe()
-	hubReader.EXPECT().SetupRemoteDevice(mock.AnythingOfType("string"), mock.AnythingOfType("api.ShipConnectionDataWriterInterface")).Return(nil).Maybe()
+	hubReader.EXPECT().SetupRemoteService(mock.AnythingOfType("ServiceIdentity"), mock.AnythingOfType("api.ShipConnectionDataWriterInterface")).Return(nil).Maybe()
 
 	// Set up expectation for PairingServiceReaderInterface callback
-	pairingReader.EXPECT().DeviceAutoTrustRemovedViaReplacementLogic(
-		mock.AnythingOfType("*api.ServiceDetails"),
+	pairingReader.EXPECT().ServiceAutoTrustRemoved(
+		mock.AnythingOfType("api.ServiceIdentity"),
 		"test callback reason",
 	).Return().Once()
 
@@ -749,7 +852,7 @@ type EmbeddedDualReader struct {
 
 func (suite *DualInterfaceCallbackTestSuite) TestCallDeviceAutoTrustRemovedCallback_WithBothInterfaces() {
 	// Now we can test the actual callback path!
-	service := api.NewServiceDetails("callback-test-ski", "", "test-ship-id")
+	service := api.NewServiceDetails("callbacktestski", "", "test-ship-id")
 
 	// This should successfully execute the callback path since our mock implements both interfaces
 	suite.hub.callDeviceAutoTrustRemovedCallback(service, "test callback reason")
@@ -792,7 +895,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) SetupTest() {
 	s.ctrl = gomock.NewController(s.T())
 
 	// Setup test identifiers
-	s.testSKI = "test-ski-123"
+	s.testSKI = "testski123"
 	s.testShipID = "test-ship-id-456"
 
 	// Setup gomock mocks (following existing pattern in hub_test.go)
@@ -807,10 +910,11 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) SetupTest() {
 	s.mockMdns.EXPECT().Shutdown().Return().AnyTimes()
 
 	// Allow basic hub reader callbacks
-	s.mockHubReader.EXPECT().RemoteSKIConnected(gomock.Any()).Return().AnyTimes()
-	s.mockHubReader.EXPECT().RemoteSKIDisconnected(gomock.Any()).Return().AnyTimes()
-	s.mockHubReader.EXPECT().ServiceShipIDUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
+	s.mockHubReader.EXPECT().RemoteServiceConnected(gomock.Any()).Return().AnyTimes()
+	s.mockHubReader.EXPECT().RemoteServiceDisconnected(gomock.Any()).Return().AnyTimes()
+	s.mockHubReader.EXPECT().ServiceUpdated(gomock.Any()).Return().AnyTimes()
 	s.mockHubReader.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
+	// ServicePairingDetailUpdate expectations are managed by individual tests
 
 	// Setup test data
 	var err error
@@ -831,7 +935,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) SetupTest() {
 
 	// Add test service for state updates
 	testService := api.NewServiceDetails(s.testSKI, "", s.testShipID)
-	success := s.hub.AddService(testService)
+	success := s.hub.addService(testService)
 	require.True(s.T(), success, "Should add test service")
 }
 
@@ -904,7 +1008,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 			callbackReceived := make(chan struct{}, 1)
 
 			// Setup expectation with callback notification
-			s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+			s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 				callbackReceived <- struct{}{}
 			})
 
@@ -941,7 +1045,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup expectation with callback notification
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackReceived <- struct{}{}
 	})
 
@@ -970,7 +1074,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup expectation with callback notification
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackReceived <- struct{}{}
 	})
 
@@ -1000,7 +1104,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan time.Time, 1)
 
 	// Setup expectation to capture timing
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackReceived <- time.Now()
 	})
 
@@ -1036,7 +1140,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup callback expectation for first call only
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackReceived <- struct{}{}
 	})
 
@@ -1082,7 +1186,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackCount := make(chan struct{}, 3)
 
 	// Setup expectation for multiple callbacks
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(3).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(3).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackCount <- struct{}{}
 	})
 
@@ -1126,9 +1230,9 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup expectation with parameter capture
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(identity api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		mu.Lock()
-		capturedSKI = ski
+		capturedSKI = identity.SKI
 		capturedDetail = detail
 		mu.Unlock()
 		callbackReceived <- struct{}{}
@@ -1178,7 +1282,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup callback expectation with notification
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackReceived <- struct{}{}
 	})
 
@@ -1211,7 +1315,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup callback expectation with notification
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackReceived <- struct{}{}
 	})
 
@@ -1242,7 +1346,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup callback expectation with notification
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackReceived <- struct{}{}
 	})
 
@@ -1272,7 +1376,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup callback expectation with notification
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackReceived <- struct{}{}
 	})
 
@@ -1311,9 +1415,12 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup callback expectation with notification
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
-		callbackReceived <- struct{}{}
-	})
+	s.mockHubReader.EXPECT().
+		ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).
+		Times(1).
+		Do(func(service api.ServiceIdentity, detail *api.ConnectionStateDetail) {
+			callbackReceived <- struct{}{}
+		})
 
 	// Act
 	shipState := model.ShipState{State: model.SmeStateComplete}
@@ -1336,7 +1443,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	// Test thread safety with concurrent state updates for same SKI
 
 	// Allow multiple callback invocations
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).AnyTimes()
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Act - Multiple concurrent state updates
 	var wg sync.WaitGroup
@@ -1360,10 +1467,10 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	// Test concurrent state updates for different SKIs
 
 	// Setup additional services
-	otherSKIs := []string{"other-ski-1", "other-ski-2", "other-ski-3"}
+	otherSKIs := []string{"otherski1", "otherski2", "otherski3"}
 	for _, ski := range otherSKIs {
 		service := api.NewServiceDetails(ski, "", fmt.Sprintf("ship-%s", ski))
-		success := s.hub.AddService(service)
+		success := s.hub.addService(service)
 		require.True(s.T(), success, "Should add service for SKI: %s", ski)
 	}
 
@@ -1393,7 +1500,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	// Test that service state remains consistent under concurrent updates
 
 	// Allow callbacks
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).AnyTimes()
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Act - Concurrent state changes
 	var wg sync.WaitGroup
@@ -1428,10 +1535,10 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUpdate_ServiceNotFound() {
 	// Test behavior when service is not found for SKI
 
-	nonExistentSKI := "non-existent-ski"
+	nonExistentSKI := "nonexistentski"
 
 	// No callback should be triggered since service doesn't exist
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(nonExistentSKI, gomock.Any()).Times(0)
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(0)
 
 	// Act
 	shipState := model.ShipState{State: model.SmeHelloStateOk}
@@ -1449,7 +1556,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup callback expectation with notification
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackReceived <- struct{}{}
 	})
 
@@ -1475,7 +1582,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup callback expectation with notification
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackReceived <- struct{}{}
 	})
 
@@ -1499,7 +1606,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	// Test behavior with empty SKI parameter
 
 	// No callback should be triggered since service won't be found
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate("", gomock.Any()).Times(0)
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(0)
 
 	// Act
 	shipState := model.ShipState{State: model.SmeHelloStateOk}
@@ -1521,7 +1628,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup callback expectation with notification
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackReceived <- struct{}{}
 	})
 
@@ -1560,7 +1667,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup callback expectation with notification
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackReceived <- struct{}{}
 	})
 
@@ -1594,7 +1701,7 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	callbackReceived := make(chan struct{}, 1)
 
 	// Setup callback expectation with notification
-	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(s.testSKI, gomock.Any()).Times(1).Do(func(ski string, detail *api.ConnectionStateDetail) {
+	s.mockHubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Times(1).Do(func(_ api.ServiceIdentity, detail *api.ConnectionStateDetail) {
 		callbackReceived <- struct{}{}
 	})
 

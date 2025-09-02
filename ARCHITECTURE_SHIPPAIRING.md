@@ -5,7 +5,7 @@
 1. [Overview](#overview)
 2. [Architecture Components](#architecture-components)
 3. [Device Replacement Timing Logic](#device-replacement-timing-logic)
-4. [ServiceDetails Enhancements](#servicedetails-enhancements)
+4. [ServiceIdentity Enhancements](#serviceidentity-enhancements)
 5. [Hub API Evolution](#hub-api-evolution)
 6. [Security Model](#security-model)
 7. [QR Code Integration](#qr-code-integration)
@@ -144,8 +144,8 @@ type RingBufferHistoryProvider struct {
 
 // Application implements only storage interface
 type RingBufferPersistence interface {
-    LoadRingBuffer() ([]DigestEntry, error)  // Load from persistent storage
-    SaveRingBuffer(entries []DigestEntry) error  // Save to persistent storage
+    LoadRingBuffer() ([]DigestEntry, int, error)  // Load from persistent storage with nextIndex
+    SaveRingBuffer(entries []DigestEntry, nextIndex int) error  // Save to persistent storage with nextIndex
 }
 ```
 
@@ -213,10 +213,10 @@ if deviceReconnected {
 
 // After new device successfully pairs
 hub.RemoveTrust(oldShipID)
-callback.DeviceAutoTrustRemovedViaReplacementLogic(oldService, "replaced")
+callback.ServiceAutoTrustRemoved(oldServiceIdentity, "replaced")
 ```
 
-## ServiceDetails Enhancements
+## ServiceIdentity Enhancements
 
 The `ServiceDetails` struct has been enhanced to support the Pairing Service requirements:
 
@@ -298,7 +298,7 @@ hub.UnregisterRemoteSKI(ski string)
 hub.DisconnectSKI(ski string, reason string)
 ```
 
-### After (ServiceDetails-Centric with Ring Buffer Support)
+### After (ServiceIdentity-based with Ring Buffer Support)
 
 ```go
 // New API - flexible identifier support
@@ -431,12 +431,12 @@ type MyPersistence struct {
     db *Database
 }
 
-func (p *MyPersistence) LoadRingBuffer() ([]api.DigestEntry, error) {
-    return p.db.LoadDigestHistory()
+func (p *MyPersistence) LoadRingBuffer() ([]api.DigestEntry, int, error) {
+    return p.db.LoadDigestHistory() // Should return entries, nextIndex, error
 }
 
-func (p *MyPersistence) SaveRingBuffer(entries []api.DigestEntry) error {
-    return p.db.SaveDigestHistory(entries)
+func (p *MyPersistence) SaveRingBuffer(entries []api.DigestEntry, nextIndex int) error {
+    return p.db.SaveDigestHistory(entries, nextIndex)
 }
 ```
 
@@ -548,24 +548,35 @@ hub.StartPairingService(config)
 // 1. Create hub reader with pairing callbacks
 type MyHubReader struct{}
 
-func (r *MyHubReader) DeviceAutoTrustedViaServiceDetails(service *api.ServiceDetails) {
-    log.Printf("Auto-trusted device: %s", service.ShipID())
+func (r *MyHubReader) ServiceAutoTrusted(identity api.ServiceIdentity) {
+    log.Printf("Auto-trusted device: %s", identity.ShipID)
     
-    // Mark as AddCu device for replacement logic
-    service.SetPairingType(api.PairingTypeAddCu)
-    
-    // Store in persistent database
-    db.SaveTrustedDevice(service)
+    // Convert to ServiceDetails for internal operations
+    service := identity.ToServiceDetails()
+    if service != nil {
+        // Mark as AddCu device for replacement logic
+        service.SetPairingType(api.PairingTypeAddCu)
+        
+        // Store in persistent database
+        db.SaveTrustedDevice(service)
+    }
 }
 
-func (r *MyHubReader) DeviceAutoTrustRemovedViaReplacementLogic(service *api.ServiceDetails, reason string) {
-    log.Printf("Device %s replaced: %s", service.ShipID(), reason)
+func (r *MyHubReader) ServiceAutoTrustFailed(identity api.ServiceIdentity, reason error) {
+    log.Printf("Auto-trust failed for device %s: %v", identity.ShipID, reason)
+    
+    // Log security event
+    securityLogger.LogPairingFailure(identity.ShipID, reason)
+}
+
+func (r *MyHubReader) ServiceAutoTrustRemoved(identity api.ServiceIdentity, reason string) {
+    log.Printf("Device %s replaced: %s", identity.ShipID, reason)
     
     // Clean up resources
-    db.RemoveTrustedDevice(service.ShipID())
+    db.RemoveTrustedDevice(identity.ShipID)
     
     // Update UI
-    ui.NotifyDeviceReplaced(service)
+    ui.NotifyDeviceReplaced(identity)
 }
 
 // 2. Initialize hub with pairing support
@@ -605,12 +616,12 @@ type ProductionRingBufferStorage struct {
     db *Database
 }
 
-func (s *ProductionRingBufferStorage) LoadRingBuffer() ([]api.DigestEntry, error) {
+func (s *ProductionRingBufferStorage) LoadRingBuffer() ([]api.DigestEntry, int, error) {
     // Load from database on startup
     return s.db.Query("SELECT algorithm, digest, timestamp FROM pairing_history ORDER BY timestamp")
 }
 
-func (s *ProductionRingBufferStorage) SaveRingBuffer(entries []api.DigestEntry) error {
+func (s *ProductionRingBufferStorage) SaveRingBuffer(entries []api.DigestEntry, nextIndex int) error {
     // Save after each successful pairing
     tx := s.db.Begin()
     defer tx.Rollback()
@@ -807,7 +818,7 @@ sequenceDiagram
         Listener->>Listener: Validate HMAC
         Listener->>Hub: EstablishAutoTrust(new)
         Hub->>Old: Remove Trust
-        Hub->>App: DeviceAutoTrustRemovedViaReplacementLogic(old)
+        Hub->>App: ServiceAutoTrustRemoved(old)
         Hub->>New: Connect
         Hub->>App: DeviceConnected(new)
     end

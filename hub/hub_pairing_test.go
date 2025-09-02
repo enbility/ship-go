@@ -277,12 +277,12 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_CallbackInvocation() {
 		PairingServiceReaderInterface: s.mockPairingReader,
 	}
 
-	// Setup expectation for PairingServiceFailedForServiceDetails callback
-	s.mockPairingReader.EXPECT().PairingServiceFailedForServiceDetails(
-		mock.MatchedBy(func(service *api.ServiceDetails) bool {
-			return service.ShipID() == s.testShipID &&
-				service.Fingerprint() == s.testFingerprint &&
-				service.ConnectionStateDetail().State() == api.ConnectionStateError
+	// Setup expectation for ServiceAutoTrustFailed callback
+	s.mockPairingReader.EXPECT().ServiceAutoTrustFailed(
+		mock.MatchedBy(func(identity api.ServiceIdentity) bool {
+			return identity.ShipID == s.testShipID &&
+				identity.Fingerprint == s.testFingerprint
+			// Note: ServiceIdentity only contains identification data, not connection state
 		}),
 		s.testError,
 	).Once()
@@ -328,9 +328,9 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_CallbackWithNilError() 
 	}
 
 	// Setup expectation - callback should still be invoked with nil error
-	s.mockPairingReader.EXPECT().PairingServiceFailedForServiceDetails(
-		mock.MatchedBy(func(service *api.ServiceDetails) bool {
-			return service.ShipID() == s.testShipID && service.Fingerprint() == s.testFingerprint
+	s.mockPairingReader.EXPECT().ServiceAutoTrustFailed(
+		mock.MatchedBy(func(identity api.ServiceIdentity) bool {
+			return identity.ShipID == s.testShipID && identity.Fingerprint == s.testFingerprint
 		}),
 		nil, // nil error
 	).Once()
@@ -354,7 +354,7 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_CallbackWithNilError() 
 func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ServiceDetailsStructure() {
 	// Test that ServiceDetails passed to callback has correct structure and state
 
-	var capturedService *api.ServiceDetails
+	var capturedIdentity api.ServiceIdentity
 	var capturedError error
 
 	// Create composite reader with capture capability
@@ -367,11 +367,11 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ServiceDetailsStructure
 	}
 
 	// Setup expectation with parameter capture
-	s.mockPairingReader.EXPECT().PairingServiceFailedForServiceDetails(
+	s.mockPairingReader.EXPECT().ServiceAutoTrustFailed(
 		mock.Anything,
 		mock.Anything,
 	).Once().Run(func(args mock.Arguments) {
-		capturedService = args.Get(0).(*api.ServiceDetails)
+		capturedIdentity = args.Get(0).(api.ServiceIdentity)
 		capturedError = args.Get(1).(error)
 	})
 
@@ -391,16 +391,13 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ServiceDetailsStructure
 	hub.OnPairingFailure(s.testShipID, s.testFingerprint, s.testError)
 
 	// Assert ServiceDetails structure
-	require.NotNil(s.T(), capturedService, "ServiceDetails should be passed to callback")
-	assert.Equal(s.T(), "", capturedService.SKI(), "SKI should be empty for pairing failure")
-	assert.Equal(s.T(), s.testFingerprint, capturedService.Fingerprint(), "Fingerprint should match")
-	assert.Equal(s.T(), s.testShipID, capturedService.ShipID(), "ShipID should match")
+	// ServiceIdentity should be passed to callback with identification data
+	assert.Equal(s.T(), "", capturedIdentity.SKI, "SKI should be empty for pairing failure")
+	assert.Equal(s.T(), s.testFingerprint, capturedIdentity.Fingerprint, "Fingerprint should match")
+	assert.Equal(s.T(), s.testShipID, capturedIdentity.ShipID, "ShipID should match")
+	assert.Equal(s.T(), api.PairingTypeDefault, capturedIdentity.PairingType, "PairingType should be default")
 
-	// Assert connection state
-	stateDetail := capturedService.ConnectionStateDetail()
-	require.NotNil(s.T(), stateDetail, "ConnectionStateDetail should be set")
-	assert.Equal(s.T(), api.ConnectionStateError, stateDetail.State(), "State should be Error")
-	assert.Equal(s.T(), s.testError, stateDetail.Error(), "Error should be set in state detail")
+	// Connection state is no longer part of ServiceIdentity - method name conveys the failure state
 
 	// Assert captured error matches
 	assert.Equal(s.T(), s.testError, capturedError, "Error parameter should match")
@@ -446,16 +443,16 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_DifferentErrorTypes() {
 
 			// Setup expectation
 			if tc.error != nil {
-				compositeReader.PairingServiceReaderInterface.EXPECT().PairingServiceFailedForServiceDetails(
-					mock.MatchedBy(func(service *api.ServiceDetails) bool {
-						return errors.Is(service.ConnectionStateDetail().Error(), tc.error)
+				compositeReader.PairingServiceReaderInterface.EXPECT().ServiceAutoTrustFailed(
+					mock.MatchedBy(func(identity api.ServiceIdentity) bool {
+						return identity.ShipID == s.testShipID && identity.Fingerprint == s.testFingerprint
 					}),
 					tc.error,
 				).Once()
 			} else {
-				compositeReader.PairingServiceReaderInterface.EXPECT().PairingServiceFailedForServiceDetails(
-					mock.MatchedBy(func(service *api.ServiceDetails) bool {
-						return service.ConnectionStateDetail().Error() == nil
+				compositeReader.PairingServiceReaderInterface.EXPECT().ServiceAutoTrustFailed(
+					mock.MatchedBy(func(identity api.ServiceIdentity) bool {
+						return identity.ShipID == s.testShipID && identity.Fingerprint == s.testFingerprint
 					}),
 					nil,
 				).Once()
@@ -489,7 +486,8 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_DifferentErrorTypes() {
 func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ErrorStateConsistency() {
 	// Test that error state is consistently set in ServiceDetails
 
-	var capturedService *api.ServiceDetails
+	var capturedIdentity api.ServiceIdentity
+	var capturedErr string
 
 	// Create composite reader with capture
 	compositeReader := &struct {
@@ -500,10 +498,11 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ErrorStateConsistency()
 		PairingServiceReaderInterface: s.mockPairingReader,
 	}
 
-	s.mockPairingReader.EXPECT().PairingServiceFailedForServiceDetails(
+	s.mockPairingReader.EXPECT().ServiceAutoTrustFailed(
 		mock.Anything, mock.Anything,
 	).Once().Run(func(args mock.Arguments) {
-		capturedService = args.Get(0).(*api.ServiceDetails)
+		capturedIdentity = args.Get(0).(api.ServiceIdentity)
+		capturedErr = args.Get(1).(error).Error()
 	})
 
 	// Create hub
@@ -522,11 +521,8 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ErrorStateConsistency()
 	hub.OnPairingFailure(s.testShipID, s.testFingerprint, s.testError)
 
 	// Assert error state consistency
-	require.NotNil(s.T(), capturedService)
-	stateDetail := capturedService.ConnectionStateDetail()
-	assert.Equal(s.T(), api.ConnectionStateError, stateDetail.State())
-	assert.Equal(s.T(), s.testError, stateDetail.Error())
-	assert.False(s.T(), capturedService.Trusted(), "Service should not be trusted on failure")
+	require.NotNil(s.T(), capturedIdentity)
+	assert.Equal(s.T(), s.testError.Error(), capturedErr)
 }
 
 func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ErrorMessage() {
@@ -534,7 +530,8 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ErrorMessage() {
 
 	specificError := api.NewPairingValidationError("Certificate fingerprint mismatch: expected ABC123, got DEF456")
 
-	var capturedService *api.ServiceDetails
+	var capturedIdentity api.ServiceIdentity
+	var capturedErr string
 
 	// Create composite reader
 	compositeReader := &struct {
@@ -545,10 +542,11 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ErrorMessage() {
 		PairingServiceReaderInterface: s.mockPairingReader,
 	}
 
-	s.mockPairingReader.EXPECT().PairingServiceFailedForServiceDetails(
+	s.mockPairingReader.EXPECT().ServiceAutoTrustFailed(
 		mock.Anything, specificError,
 	).Once().Run(func(args mock.Arguments) {
-		capturedService = args.Get(0).(*api.ServiceDetails)
+		capturedIdentity = args.Get(0).(api.ServiceIdentity)
+		capturedErr = args.Get(1).(error).Error()
 	})
 
 	// Create hub
@@ -567,10 +565,9 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ErrorMessage() {
 	hub.OnPairingFailure(s.testShipID, s.testFingerprint, specificError)
 
 	// Assert error message
-	require.NotNil(s.T(), capturedService)
-	stateError := capturedService.ConnectionStateDetail().Error()
-	assert.Equal(s.T(), specificError, stateError)
-	assert.Contains(s.T(), stateError.Error(), "Certificate fingerprint mismatch")
+	require.NotNil(s.T(), capturedIdentity)
+	assert.Equal(s.T(), specificError.Error(), capturedErr)
+	assert.Contains(s.T(), capturedErr, "Certificate fingerprint mismatch")
 }
 
 // Concurrent Failure Handling (2 test cases)
@@ -588,7 +585,7 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ConcurrentCalls() {
 	}
 
 	// Allow multiple callback invocations
-	s.mockPairingReader.EXPECT().PairingServiceFailedForServiceDetails(
+	s.mockPairingReader.EXPECT().ServiceAutoTrustFailed(
 		mock.Anything, mock.Anything,
 	).Times(5)
 
@@ -636,7 +633,7 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ConcurrentWithOtherOper
 	}
 
 	// Allow callback invocations
-	s.mockPairingReader.EXPECT().PairingServiceFailedForServiceDetails(
+	s.mockPairingReader.EXPECT().ServiceAutoTrustFailed(
 		mock.Anything, mock.Anything,
 	).Maybe()
 
@@ -674,8 +671,8 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ConcurrentWithOtherOper
 		go func(index int) {
 			defer wg.Done()
 			// Service registration/lookup operations
-			testSKI := fmt.Sprintf("test-ski-%d", index)
-			hub.RegisterRemoteService(testSKI, "", fmt.Sprintf("ship-%d", index))
+			testSKI := fmt.Sprintf("testski%d", index)
+			hub.RegisterRemoteService(api.NewServiceIdentity(testSKI, "", fmt.Sprintf("ship-%d", index)))
 			_ = hub.ServiceForIdentifier(testSKI, "")
 		}(i)
 	}
@@ -710,11 +707,10 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_NilErrorHandling() {
 	}
 
 	// Setup expectation for nil error
-	s.mockPairingReader.EXPECT().PairingServiceFailedForServiceDetails(
-		mock.MatchedBy(func(service *api.ServiceDetails) bool {
-			// Verify that ConnectionStateDetail.Error() returns nil when set with nil
-			return service.ConnectionStateDetail().Error() == nil &&
-				service.ConnectionStateDetail().State() == api.ConnectionStateError
+	s.mockPairingReader.EXPECT().ServiceAutoTrustFailed(
+		mock.MatchedBy(func(identity api.ServiceIdentity) bool {
+			// ServiceIdentity only contains identification data
+			return identity.ShipID == s.testShipID && identity.Fingerprint == s.testFingerprint
 		}),
 		nil,
 	).Once()
@@ -835,9 +831,9 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_ExistingServiceUpdate()
 	// Test updating existing service with empty ShipID
 
 	// Setup - Create existing service with same fingerprint but empty ShipID
-	existingService := api.NewServiceDetails("existing-ski", s.testFingerprint, "")
+	existingService := api.NewServiceDetails("existingski", s.testFingerprint, "")
 	existingService.SetTrusted(false) // Not trusted initially
-	success := s.hub.AddService(existingService)
+	success := s.hub.addService(existingService)
 	require.True(s.T(), success, "Should add existing service")
 
 	// Act
@@ -855,9 +851,9 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_ExistingServiceSameShip
 	// Test updating existing service with matching ShipID
 
 	// Setup - Create existing service with same fingerprint and ShipID
-	existingService := api.NewServiceDetails("existing-ski", s.testFingerprint, s.testShipID)
+	existingService := api.NewServiceDetails("existingski", s.testFingerprint, s.testShipID)
 	existingService.SetTrusted(false)
-	success := s.hub.AddService(existingService)
+	success := s.hub.addService(existingService)
 	require.True(s.T(), success, "Should add existing service")
 
 	// Act
@@ -875,9 +871,9 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_SecurityViolationDiffer
 	// Test security check: same fingerprint with different ShipID from trusted service
 
 	// Setup - Create trusted existing service with same fingerprint but different ShipID
-	existingService := api.NewServiceDetails("existing-ski", s.testFingerprint, s.otherShipID)
+	existingService := api.NewServiceDetails("existingski", s.testFingerprint, s.otherShipID)
 	existingService.SetTrusted(true) // Already trusted with different ShipID
-	success := s.hub.AddService(existingService)
+	success := s.hub.addService(existingService)
 	require.True(s.T(), success, "Should add existing service")
 
 	// Act - Try to pair with same fingerprint but different ShipID
@@ -931,10 +927,10 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_AddCuReplacementScenari
 	// Test AddCu device replacement scenario
 
 	// Setup - Create existing trusted AddCu device
-	existingAddCu := api.NewServiceDetails("existing-ski", s.otherFingerprint, s.otherShipID)
+	existingAddCu := api.NewServiceDetails("existingski", s.otherFingerprint, s.otherShipID)
 	existingAddCu.SetTrusted(true)
 	existingAddCu.SetPairingType(api.PairingTypeAddCu)
-	success := s.hub.AddService(existingAddCu)
+	success := s.hub.addService(existingAddCu)
 	require.True(s.T(), success, "Should add existing AddCu service")
 
 	// Act - New AddCu device pairs (different fingerprint, different ShipID)
@@ -955,10 +951,10 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_NoReplacementSameFinger
 	// Test that same fingerprint with empty ShipID gets updated (not security violation)
 
 	// Setup - Create existing trusted AddCu device with empty ShipID
-	existingAddCu := api.NewServiceDetails("existing-ski", s.testFingerprint, "")
+	existingAddCu := api.NewServiceDetails("existingski", s.testFingerprint, "")
 	existingAddCu.SetTrusted(true)
 	existingAddCu.SetPairingType(api.PairingTypeDefault) // Will be updated to AddCu
-	success := s.hub.AddService(existingAddCu)
+	success := s.hub.addService(existingAddCu)
 	require.True(s.T(), success, "Should add existing AddCu service")
 
 	// Act - Same device pairs (same fingerprint, now providing ShipID)
@@ -976,10 +972,10 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_AddCuTimerInteraction()
 	// Test interaction with AddCu replacement timer
 
 	// Setup - Create existing AddCu and simulate timer
-	existingAddCu := api.NewServiceDetails("existing-ski", s.otherFingerprint, s.otherShipID)
+	existingAddCu := api.NewServiceDetails("existingski", s.otherFingerprint, s.otherShipID)
 	existingAddCu.SetTrusted(true)
 	existingAddCu.SetPairingType(api.PairingTypeAddCu)
-	success := s.hub.AddService(existingAddCu)
+	success := s.hub.addService(existingAddCu)
 	require.True(s.T(), success, "Should add existing AddCu service")
 
 	// Start a replacement timer (simulating disconnection)
@@ -1014,9 +1010,9 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_TrustFromUntrustedServi
 	// Test transition from untrusted to trusted service
 
 	// Setup - Create untrusted service
-	untrustedService := api.NewServiceDetails("test-ski", s.testFingerprint, "")
+	untrustedService := api.NewServiceDetails("testski", s.testFingerprint, "")
 	untrustedService.SetTrusted(false)
-	success := s.hub.AddService(untrustedService)
+	success := s.hub.addService(untrustedService)
 	require.True(s.T(), success, "Should add untrusted service")
 
 	// Verify initial state
@@ -1038,9 +1034,9 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_MaintainTrustFromTruste
 	// Test that already trusted service maintains trust
 
 	// Setup - Create already trusted service
-	trustedService := api.NewServiceDetails("test-ski", s.testFingerprint, s.testShipID)
+	trustedService := api.NewServiceDetails("testski", s.testFingerprint, s.testShipID)
 	trustedService.SetTrusted(true)
-	success := s.hub.AddService(trustedService)
+	success := s.hub.addService(trustedService)
 	require.True(s.T(), success, "Should add trusted service")
 
 	// Act
@@ -1102,13 +1098,12 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_CallbackInvocation() {
 		PairingServiceReaderInterface: s.mockPairingReader,
 	}
 
-	// Setup expectation for DeviceAutoTrustedViaServiceDetails callback
-	s.mockPairingReader.EXPECT().DeviceAutoTrustedViaServiceDetails(
-		mock.MatchedBy(func(service *api.ServiceDetails) bool {
-			return service.ShipID() == s.testShipID &&
-				service.Fingerprint() == s.testFingerprint &&
-				service.Trusted() == true &&
-				service.PairingType() == api.PairingTypeAddCu
+	// Setup expectation for ServiceAutoTrusted callback
+	s.mockPairingReader.EXPECT().ServiceAutoTrusted(
+		mock.MatchedBy(func(identity api.ServiceIdentity) bool {
+			return identity.ShipID == s.testShipID &&
+				identity.Fingerprint == s.testFingerprint &&
+				identity.PairingType == api.PairingTypeAddCu
 		}),
 	).Once()
 
@@ -1144,10 +1139,10 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_ReplacementAndSuccessCa
 	// Test that both replacement and success callbacks are invoked in replacement scenario
 
 	// Setup existing AddCu device
-	existingAddCu := api.NewServiceDetails("existing-ski", s.otherFingerprint, s.otherShipID)
+	existingAddCu := api.NewServiceDetails("existingski", s.otherFingerprint, s.otherShipID)
 	existingAddCu.SetTrusted(true)
 	existingAddCu.SetPairingType(api.PairingTypeAddCu)
-	success := s.hub.AddService(existingAddCu)
+	success := s.hub.addService(existingAddCu)
 	require.True(s.T(), success, "Should add existing AddCu service")
 
 	// Create composite reader
@@ -1160,16 +1155,16 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_ReplacementAndSuccessCa
 	}
 
 	// Setup expectations for both callbacks
-	s.mockPairingReader.EXPECT().DeviceAutoTrustRemovedViaReplacementLogic(
-		mock.MatchedBy(func(service *api.ServiceDetails) bool {
-			return service.ShipID() == s.otherShipID && service.Fingerprint() == s.otherFingerprint
+	s.mockPairingReader.EXPECT().ServiceAutoTrustRemoved(
+		mock.MatchedBy(func(identity api.ServiceIdentity) bool {
+			return identity.ShipID == s.otherShipID && identity.Fingerprint == s.otherFingerprint
 		}),
 		mock.AnythingOfType("string"),
 	).Once()
 
-	s.mockPairingReader.EXPECT().DeviceAutoTrustedViaServiceDetails(
-		mock.MatchedBy(func(service *api.ServiceDetails) bool {
-			return service.ShipID() == s.testShipID && service.Fingerprint() == s.testFingerprint
+	s.mockPairingReader.EXPECT().ServiceAutoTrusted(
+		mock.MatchedBy(func(identity api.ServiceIdentity) bool {
+			return identity.ShipID == s.testShipID && identity.Fingerprint == s.testFingerprint
 		}),
 	).Once()
 
@@ -1186,7 +1181,7 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_ReplacementAndSuccessCa
 	defer hub.Shutdown()
 
 	// Add the existing service to the new hub
-	success = hub.AddService(existingAddCu.Copy())
+	success = hub.addService(existingAddCu.Copy())
 	require.True(s.T(), success, "Should add existing service to new hub")
 
 	// Act - New device pairs, triggering replacement
@@ -1196,7 +1191,7 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_ReplacementAndSuccessCa
 func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_ServiceDetailsPassedToCallback() {
 	// Test that correct ServiceDetails is passed to callback
 
-	var capturedService *api.ServiceDetails
+	var capturedIdentity api.ServiceIdentity
 
 	// Create composite reader with capture capability
 	compositeReader := &struct {
@@ -1208,10 +1203,10 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_ServiceDetailsPassedToC
 	}
 
 	// Setup expectation with parameter capture
-	s.mockPairingReader.EXPECT().DeviceAutoTrustedViaServiceDetails(
+	s.mockPairingReader.EXPECT().ServiceAutoTrusted(
 		mock.Anything,
 	).Once().Run(func(args mock.Arguments) {
-		capturedService = args.Get(0).(*api.ServiceDetails)
+		capturedIdentity = args.Get(0).(api.ServiceIdentity)
 	})
 
 	// Create hub with composite reader
@@ -1229,13 +1224,12 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_ServiceDetailsPassedToC
 	// Act
 	hub.OnPairingSuccess(s.testShipID, s.testFingerprint)
 
-	// Assert ServiceDetails structure
-	require.NotNil(s.T(), capturedService, "ServiceDetails should be passed to callback")
-	assert.Equal(s.T(), "", capturedService.SKI(), "SKI should be empty for fingerprint-based service")
-	assert.Equal(s.T(), s.testFingerprint, capturedService.Fingerprint(), "Fingerprint should match")
-	assert.Equal(s.T(), s.testShipID, capturedService.ShipID(), "ShipID should match")
-	assert.True(s.T(), capturedService.Trusted(), "Service should be trusted")
-	assert.Equal(s.T(), api.PairingTypeAddCu, capturedService.PairingType(), "Should be AddCu type")
+	// Assert ServiceIdentity structure
+	require.NotNil(s.T(), capturedIdentity, "ServiceIdentity should be passed to callback")
+	assert.Equal(s.T(), "", capturedIdentity.SKI, "SKI should be empty for fingerprint-based service")
+	assert.Equal(s.T(), s.testFingerprint, capturedIdentity.Fingerprint, "Fingerprint should match")
+	assert.Equal(s.T(), s.testShipID, capturedIdentity.ShipID, "ShipID should match")
+	assert.Equal(s.T(), api.PairingTypeAddCu, capturedIdentity.PairingType, "Should be AddCu type")
 }
 
 // Fingerprint Validation Edge Cases (3 test cases)
@@ -1368,8 +1362,8 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_ServiceUpdateInPlace() 
 	// Test that existing service is updated in place rather than replaced
 
 	// Setup - Create service and get reference
-	existingService := api.NewServiceDetails("test-ski", s.testFingerprint, "")
-	success := s.hub.AddService(existingService)
+	existingService := api.NewServiceDetails("testski", s.testFingerprint, "")
+	success := s.hub.addService(existingService)
 	require.True(s.T(), success, "Should add existing service")
 
 	originalService := s.hub.ServiceForIdentifier("", s.testFingerprint)
@@ -1456,7 +1450,7 @@ func (suite *HubPairingCompositionTestSuite) TestBackwardCompatibilityWithoutPai
 	assert.Nil(suite.T(), service)
 
 	// Connection operations should work
-	suite.sut.RegisterRemoteService("testski", "", "test-ship-id")
+	suite.sut.RegisterRemoteService(api.NewServiceIdentity("testski", "", "test-ship-id"))
 	service = suite.sut.ServiceForIdentifier("testski", "")
 	assert.Equal(suite.T(), "test-ship-id", service.ShipID())
 
@@ -1985,8 +1979,8 @@ func (s *AutoPairingTestSuite) SetupTest() {
 
 	// Create basic mocks using gomock pattern
 	s.mockReader = mocks.NewMockHubReaderInterface(ctrl)
-	s.mockReader.EXPECT().RemoteSKIConnected(gomock.Any()).Return().AnyTimes()
-	s.mockReader.EXPECT().RemoteSKIDisconnected(gomock.Any()).Return().AnyTimes()
+	s.mockReader.EXPECT().RemoteServiceConnected(gomock.Any()).Return().AnyTimes()
+	s.mockReader.EXPECT().RemoteServiceDisconnected(gomock.Any()).Return().AnyTimes()
 	s.mockReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
 	s.mockReader.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
 
@@ -2035,8 +2029,8 @@ func (s *AutoPairingImplementationTestSuite) SetupTest() {
 
 	// Create mocks with proper setup
 	s.mockReader = mocks.NewMockHubReaderInterface(s.ctrl)
-	s.mockReader.EXPECT().RemoteSKIConnected(gomock.Any()).Return().AnyTimes()
-	s.mockReader.EXPECT().RemoteSKIDisconnected(gomock.Any()).Return().AnyTimes()
+	s.mockReader.EXPECT().RemoteServiceConnected(gomock.Any()).Return().AnyTimes()
+	s.mockReader.EXPECT().RemoteServiceDisconnected(gomock.Any()).Return().AnyTimes()
 	s.mockReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
 	s.mockReader.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
 
@@ -2099,8 +2093,8 @@ func (s *AutoPairingSecurityTestSuite) SetupTest() {
 
 	// Create basic mocks using gomock pattern
 	s.mockReader = mocks.NewMockHubReaderInterface(ctrl)
-	s.mockReader.EXPECT().RemoteSKIConnected(gomock.Any()).Return().AnyTimes()
-	s.mockReader.EXPECT().RemoteSKIDisconnected(gomock.Any()).Return().AnyTimes()
+	s.mockReader.EXPECT().RemoteServiceConnected(gomock.Any()).Return().AnyTimes()
+	s.mockReader.EXPECT().RemoteServiceDisconnected(gomock.Any()).Return().AnyTimes()
 	s.mockReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
 	s.mockReader.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
 
@@ -2168,11 +2162,11 @@ func (s *AutoPairingSecurityTestSuite) Test_ServiceConflictDetection() {
 	fingerprint2 := calculateTestFingerprint("cert2")
 
 	// Register service with first fingerprint
-	s.hub.RegisterRemoteService(ski, fingerprint1, "ship-1")
+	s.hub.RegisterRemoteService(api.NewServiceIdentity(ski, fingerprint1, "ship-1"))
 
 	// ACT: Try to register same SKI with different fingerprint
 	// This should not work
-	s.hub.RegisterRemoteService(ski, fingerprint2, "ship-2")
+	s.hub.RegisterRemoteService(api.NewServiceIdentity(ski, fingerprint2, "ship-2"))
 
 	service := s.hub.ServiceForIdentifier(ski, "")
 	assert.Equal(s.T(), fingerprint1, service.Fingerprint(), "Fingerprint correctly not update")
@@ -2207,7 +2201,7 @@ func (s *AutoPairingSecurityTestSuite) Test_SecureAutoPairingFlow() {
 	// Security fix implemented: Duplicate pairings handled correctly
 
 	s.T().Log("Step 4: Secure trust establishment")
-	s.hub.RegisterRemoteService(ski, fingerprint, shipID)
+	s.hub.RegisterRemoteService(api.NewServiceIdentity(ski, fingerprint, shipID))
 
 	s.T().Log("Step 5: Cleanup verification")
 	// Security fix implemented: Proper cleanup of superseded pairings
@@ -2643,19 +2637,19 @@ func (suite *HubPairingCompositionTestSuite) TestSetPairingService_NilService() 
 
 func (suite *HubPairingCompositionTestSuite) TestCancelPairingWithSKI() {
 	// Setup a service for testing
-	testSKI := "cancel-test-ski"
+	testSKI := "canceltestski"
 	service := api.NewServiceDetails(testSKI, "", "")
 	service.SetTrusted(true)
 	service.ConnectionStateDetail().SetState(api.ConnectionStateTrusted)
 
 	// Add service to hub
-	suite.sut.AddService(service)
+	suite.sut.addService(service)
 
 	// Setup expectation for callback
-	suite.mockHubReader.EXPECT().ServicePairingDetailUpdate(testSKI, mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
+	suite.mockHubReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("api.ServiceIdentity"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
 
 	// Cancel pairing
-	suite.sut.CancelPairingWithSKI(testSKI)
+	suite.sut.CancelPairing(api.NewServiceIdentity(testSKI, "", ""))
 
 	// Verify service state was updated
 	updatedService := suite.sut.ServiceForIdentifier(testSKI, "")
@@ -2666,18 +2660,18 @@ func (suite *HubPairingCompositionTestSuite) TestCancelPairingWithSKI() {
 
 func (suite *HubPairingCompositionTestSuite) TestCancelPairingWithSKI_ServiceNotFound() {
 	// Try to cancel pairing for non-existent SKI
-	testSKI := "nonexistent-ski"
+	testSKI := "nonexistentski"
 
 	// Should not panic or error
-	suite.sut.CancelPairingWithSKI(testSKI)
+	suite.sut.CancelPairing(api.NewServiceIdentity(testSKI, "", ""))
 }
 
 func (suite *HubPairingCompositionTestSuite) TestCancelPairingWithSKI_WithConnection() {
 	// Setup a service with a mock connection
-	testSKI := "connected-test-ski"
+	testSKI := "connectedtestski"
 	service := api.NewServiceDetails(testSKI, "", "")
 	service.SetTrusted(true)
-	suite.sut.AddService(service)
+	suite.sut.addService(service)
 
 	// Mock connection for the SKI with all necessary expectations
 	mockConn := mocks.NewShipConnectionInterface(suite.T())
@@ -2687,10 +2681,10 @@ func (suite *HubPairingCompositionTestSuite) TestCancelPairingWithSKI_WithConnec
 	suite.sut.connections[testSKI] = mockConn
 
 	// Setup expectation for callback
-	suite.mockHubReader.EXPECT().ServicePairingDetailUpdate(testSKI, mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
+	suite.mockHubReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("api.ServiceIdentity"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
 
 	// Cancel pairing
-	suite.sut.CancelPairingWithSKI(testSKI)
+	suite.sut.CancelPairing(api.NewServiceIdentity(testSKI, "", ""))
 
 	// Verify service state updated
 	updatedService := suite.sut.ServiceForIdentifier(testSKI, "")
@@ -2715,14 +2709,14 @@ func (suite *HubPairingCompositionTestSuite) TestOnPairingSuccess_EdgeCases() {
 func (suite *HubPairingCompositionTestSuite) TestOnPairingSuccess_ExistingServiceShipIDUpdate() {
 	testFingerprint := "TEST_FINGERPRINT_123"
 	testShipID := "announcer-258f42adb13a"
-	testSKI := "test-ski-456"
+	testSKI := "testski456"
 
 	// Scenario: Service was created during connection (e.g., from mDNS/server connection)
 	// with empty ShipID, then SHIP Pairing Service completes and should update ShipID
 
 	// Step 1: Create service as if it came from connection with empty ShipID
 	existingService := api.NewServiceDetails(testSKI, testFingerprint, "") // Empty ShipID like server connection
-	require.True(suite.T(), suite.sut.AddService(existingService))
+	require.True(suite.T(), suite.sut.addService(existingService))
 
 	// Verify initial state - ShipID is empty
 	foundService := suite.sut.ServiceForIdentifier(testSKI, testFingerprint)
@@ -2764,7 +2758,7 @@ func (suite *HubPairingCompositionTestSuite) TestOnPairingFailure_EdgeCases() {
 
 func (suite *HubPairingCompositionTestSuite) TestDisconnectSKI() {
 	// Test DisconnectSKI with existing connection
-	testSKI := "disconnect-test-ski"
+	testSKI := "disconnecttestski"
 
 	// Create mock connection with more flexible expectations
 	mockConn := mocks.NewShipConnectionInterface(suite.T())
@@ -2775,21 +2769,21 @@ func (suite *HubPairingCompositionTestSuite) TestDisconnectSKI() {
 	suite.sut.connections[testSKI] = mockConn
 
 	// Disconnect
-	suite.sut.DisconnectSKI(testSKI, "test disconnect reason")
+	suite.sut.DisconnectService(api.NewServiceIdentity(testSKI, "", ""), "test disconnect reason")
 }
 
 func (suite *HubPairingCompositionTestSuite) TestDisconnectSKI_NoConnection() {
 	// Test DisconnectSKI with non-existent connection
-	testSKI := "nonexistent-connection-ski"
+	testSKI := "nonexistentconnectionski"
 
 	// Should not panic or error
-	suite.sut.DisconnectSKI(testSKI, "test reason")
+	suite.sut.DisconnectService(api.NewServiceIdentity(testSKI, "", ""), "test reason")
 	// Test passes if no panic occurs
 }
 
 func (suite *HubPairingCompositionTestSuite) TestDisconnectSKI_EmptyReason() {
 	// Test DisconnectSKI with empty reason
-	testSKI := "empty-reason-ski"
+	testSKI := "emptyreasonski"
 
 	// Create mock connection with flexible expectations
 	mockConn := mocks.NewShipConnectionInterface(suite.T())
@@ -2800,7 +2794,7 @@ func (suite *HubPairingCompositionTestSuite) TestDisconnectSKI_EmptyReason() {
 	suite.sut.connections[testSKI] = mockConn
 
 	// Disconnect with empty reason
-	suite.sut.DisconnectSKI(testSKI, "")
+	suite.sut.DisconnectService(api.NewServiceIdentity(testSKI, "", ""), "")
 }
 
 func (suite *HubPairingCompositionTestSuite) TestStartPairingService_NoPairingService() {

@@ -36,115 +36,29 @@ func (_m *PairingServiceReaderInterface) EXPECT() *PairingServiceReaderInterface
 	return &PairingServiceReaderInterface_Expecter{mock: &_m.Mock}
 }
 
-// DeviceAutoTrustRemovedViaReplacementLogic provides a mock function for the type PairingServiceReaderInterface
-func (_mock *PairingServiceReaderInterface) DeviceAutoTrustRemovedViaReplacementLogic(service *api.ServiceDetails, reason string) {
-	_mock.Called(service, reason)
+// ServiceAutoTrustFailed provides a mock function for the type PairingServiceReaderInterface
+func (_mock *PairingServiceReaderInterface) ServiceAutoTrustFailed(identity api.ServiceIdentity, reason error) {
+	_mock.Called(identity, reason)
 	return
 }
 
-// PairingServiceReaderInterface_DeviceAutoTrustRemovedViaReplacementLogic_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeviceAutoTrustRemovedViaReplacementLogic'
-type PairingServiceReaderInterface_DeviceAutoTrustRemovedViaReplacementLogic_Call struct {
+// PairingServiceReaderInterface_ServiceAutoTrustFailed_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ServiceAutoTrustFailed'
+type PairingServiceReaderInterface_ServiceAutoTrustFailed_Call struct {
 	*mock.Call
 }
 
-// DeviceAutoTrustRemovedViaReplacementLogic is a helper method to define mock.On call
-//   - service *api.ServiceDetails
-//   - reason string
-func (_e *PairingServiceReaderInterface_Expecter) DeviceAutoTrustRemovedViaReplacementLogic(service interface{}, reason interface{}) *PairingServiceReaderInterface_DeviceAutoTrustRemovedViaReplacementLogic_Call {
-	return &PairingServiceReaderInterface_DeviceAutoTrustRemovedViaReplacementLogic_Call{Call: _e.mock.On("DeviceAutoTrustRemovedViaReplacementLogic", service, reason)}
-}
-
-func (_c *PairingServiceReaderInterface_DeviceAutoTrustRemovedViaReplacementLogic_Call) Run(run func(service *api.ServiceDetails, reason string)) *PairingServiceReaderInterface_DeviceAutoTrustRemovedViaReplacementLogic_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *api.ServiceDetails
-		if args[0] != nil {
-			arg0 = args[0].(*api.ServiceDetails)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *PairingServiceReaderInterface_DeviceAutoTrustRemovedViaReplacementLogic_Call) Return() *PairingServiceReaderInterface_DeviceAutoTrustRemovedViaReplacementLogic_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *PairingServiceReaderInterface_DeviceAutoTrustRemovedViaReplacementLogic_Call) RunAndReturn(run func(service *api.ServiceDetails, reason string)) *PairingServiceReaderInterface_DeviceAutoTrustRemovedViaReplacementLogic_Call {
-	_c.Run(run)
-	return _c
-}
-
-// DeviceAutoTrustedViaServiceDetails provides a mock function for the type PairingServiceReaderInterface
-func (_mock *PairingServiceReaderInterface) DeviceAutoTrustedViaServiceDetails(service *api.ServiceDetails) {
-	_mock.Called(service)
-	return
-}
-
-// PairingServiceReaderInterface_DeviceAutoTrustedViaServiceDetails_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeviceAutoTrustedViaServiceDetails'
-type PairingServiceReaderInterface_DeviceAutoTrustedViaServiceDetails_Call struct {
-	*mock.Call
-}
-
-// DeviceAutoTrustedViaServiceDetails is a helper method to define mock.On call
-//   - service *api.ServiceDetails
-func (_e *PairingServiceReaderInterface_Expecter) DeviceAutoTrustedViaServiceDetails(service interface{}) *PairingServiceReaderInterface_DeviceAutoTrustedViaServiceDetails_Call {
-	return &PairingServiceReaderInterface_DeviceAutoTrustedViaServiceDetails_Call{Call: _e.mock.On("DeviceAutoTrustedViaServiceDetails", service)}
-}
-
-func (_c *PairingServiceReaderInterface_DeviceAutoTrustedViaServiceDetails_Call) Run(run func(service *api.ServiceDetails)) *PairingServiceReaderInterface_DeviceAutoTrustedViaServiceDetails_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *api.ServiceDetails
-		if args[0] != nil {
-			arg0 = args[0].(*api.ServiceDetails)
-		}
-		run(
-			arg0,
-		)
-	})
-	return _c
-}
-
-func (_c *PairingServiceReaderInterface_DeviceAutoTrustedViaServiceDetails_Call) Return() *PairingServiceReaderInterface_DeviceAutoTrustedViaServiceDetails_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *PairingServiceReaderInterface_DeviceAutoTrustedViaServiceDetails_Call) RunAndReturn(run func(service *api.ServiceDetails)) *PairingServiceReaderInterface_DeviceAutoTrustedViaServiceDetails_Call {
-	_c.Run(run)
-	return _c
-}
-
-// PairingServiceFailedForServiceDetails provides a mock function for the type PairingServiceReaderInterface
-func (_mock *PairingServiceReaderInterface) PairingServiceFailedForServiceDetails(service *api.ServiceDetails, reason error) {
-	_mock.Called(service, reason)
-	return
-}
-
-// PairingServiceReaderInterface_PairingServiceFailedForServiceDetails_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PairingServiceFailedForServiceDetails'
-type PairingServiceReaderInterface_PairingServiceFailedForServiceDetails_Call struct {
-	*mock.Call
-}
-
-// PairingServiceFailedForServiceDetails is a helper method to define mock.On call
-//   - service *api.ServiceDetails
+// ServiceAutoTrustFailed is a helper method to define mock.On call
+//   - identity api.ServiceIdentity
 //   - reason error
-func (_e *PairingServiceReaderInterface_Expecter) PairingServiceFailedForServiceDetails(service interface{}, reason interface{}) *PairingServiceReaderInterface_PairingServiceFailedForServiceDetails_Call {
-	return &PairingServiceReaderInterface_PairingServiceFailedForServiceDetails_Call{Call: _e.mock.On("PairingServiceFailedForServiceDetails", service, reason)}
+func (_e *PairingServiceReaderInterface_Expecter) ServiceAutoTrustFailed(identity interface{}, reason interface{}) *PairingServiceReaderInterface_ServiceAutoTrustFailed_Call {
+	return &PairingServiceReaderInterface_ServiceAutoTrustFailed_Call{Call: _e.mock.On("ServiceAutoTrustFailed", identity, reason)}
 }
 
-func (_c *PairingServiceReaderInterface_PairingServiceFailedForServiceDetails_Call) Run(run func(service *api.ServiceDetails, reason error)) *PairingServiceReaderInterface_PairingServiceFailedForServiceDetails_Call {
+func (_c *PairingServiceReaderInterface_ServiceAutoTrustFailed_Call) Run(run func(identity api.ServiceIdentity, reason error)) *PairingServiceReaderInterface_ServiceAutoTrustFailed_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *api.ServiceDetails
+		var arg0 api.ServiceIdentity
 		if args[0] != nil {
-			arg0 = args[0].(*api.ServiceDetails)
+			arg0 = args[0].(api.ServiceIdentity)
 		}
 		var arg1 error
 		if args[1] != nil {
@@ -158,12 +72,98 @@ func (_c *PairingServiceReaderInterface_PairingServiceFailedForServiceDetails_Ca
 	return _c
 }
 
-func (_c *PairingServiceReaderInterface_PairingServiceFailedForServiceDetails_Call) Return() *PairingServiceReaderInterface_PairingServiceFailedForServiceDetails_Call {
+func (_c *PairingServiceReaderInterface_ServiceAutoTrustFailed_Call) Return() *PairingServiceReaderInterface_ServiceAutoTrustFailed_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *PairingServiceReaderInterface_PairingServiceFailedForServiceDetails_Call) RunAndReturn(run func(service *api.ServiceDetails, reason error)) *PairingServiceReaderInterface_PairingServiceFailedForServiceDetails_Call {
+func (_c *PairingServiceReaderInterface_ServiceAutoTrustFailed_Call) RunAndReturn(run func(identity api.ServiceIdentity, reason error)) *PairingServiceReaderInterface_ServiceAutoTrustFailed_Call {
+	_c.Run(run)
+	return _c
+}
+
+// ServiceAutoTrustRemoved provides a mock function for the type PairingServiceReaderInterface
+func (_mock *PairingServiceReaderInterface) ServiceAutoTrustRemoved(identity api.ServiceIdentity, reason string) {
+	_mock.Called(identity, reason)
+	return
+}
+
+// PairingServiceReaderInterface_ServiceAutoTrustRemoved_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ServiceAutoTrustRemoved'
+type PairingServiceReaderInterface_ServiceAutoTrustRemoved_Call struct {
+	*mock.Call
+}
+
+// ServiceAutoTrustRemoved is a helper method to define mock.On call
+//   - identity api.ServiceIdentity
+//   - reason string
+func (_e *PairingServiceReaderInterface_Expecter) ServiceAutoTrustRemoved(identity interface{}, reason interface{}) *PairingServiceReaderInterface_ServiceAutoTrustRemoved_Call {
+	return &PairingServiceReaderInterface_ServiceAutoTrustRemoved_Call{Call: _e.mock.On("ServiceAutoTrustRemoved", identity, reason)}
+}
+
+func (_c *PairingServiceReaderInterface_ServiceAutoTrustRemoved_Call) Run(run func(identity api.ServiceIdentity, reason string)) *PairingServiceReaderInterface_ServiceAutoTrustRemoved_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 api.ServiceIdentity
+		if args[0] != nil {
+			arg0 = args[0].(api.ServiceIdentity)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *PairingServiceReaderInterface_ServiceAutoTrustRemoved_Call) Return() *PairingServiceReaderInterface_ServiceAutoTrustRemoved_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *PairingServiceReaderInterface_ServiceAutoTrustRemoved_Call) RunAndReturn(run func(identity api.ServiceIdentity, reason string)) *PairingServiceReaderInterface_ServiceAutoTrustRemoved_Call {
+	_c.Run(run)
+	return _c
+}
+
+// ServiceAutoTrusted provides a mock function for the type PairingServiceReaderInterface
+func (_mock *PairingServiceReaderInterface) ServiceAutoTrusted(identity api.ServiceIdentity) {
+	_mock.Called(identity)
+	return
+}
+
+// PairingServiceReaderInterface_ServiceAutoTrusted_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ServiceAutoTrusted'
+type PairingServiceReaderInterface_ServiceAutoTrusted_Call struct {
+	*mock.Call
+}
+
+// ServiceAutoTrusted is a helper method to define mock.On call
+//   - identity api.ServiceIdentity
+func (_e *PairingServiceReaderInterface_Expecter) ServiceAutoTrusted(identity interface{}) *PairingServiceReaderInterface_ServiceAutoTrusted_Call {
+	return &PairingServiceReaderInterface_ServiceAutoTrusted_Call{Call: _e.mock.On("ServiceAutoTrusted", identity)}
+}
+
+func (_c *PairingServiceReaderInterface_ServiceAutoTrusted_Call) Run(run func(identity api.ServiceIdentity)) *PairingServiceReaderInterface_ServiceAutoTrusted_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 api.ServiceIdentity
+		if args[0] != nil {
+			arg0 = args[0].(api.ServiceIdentity)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *PairingServiceReaderInterface_ServiceAutoTrusted_Call) Return() *PairingServiceReaderInterface_ServiceAutoTrusted_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *PairingServiceReaderInterface_ServiceAutoTrusted_Call) RunAndReturn(run func(identity api.ServiceIdentity)) *PairingServiceReaderInterface_ServiceAutoTrusted_Call {
 	_c.Run(run)
 	return _c
 }

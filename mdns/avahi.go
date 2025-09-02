@@ -314,9 +314,12 @@ func (a *AvahiProvider) attemptReconnect(cb api.MdnsResolveCB, serviceData *mdns
 		}
 		a.mux.Unlock()
 
-		for _, serviceState := range statesToRestore {
-			// Get service type from the service name pattern - this is a best effort recovery
-			serviceType := "_shippairing._tcp" // Default for pairing services
+		for instanceID, serviceState := range statesToRestore {
+			// Get the correct service type from serviceInstances
+			serviceType := "_shippairing._tcp" // Default fallback
+			if instanceInfo, exists := a.serviceInstances[instanceID]; exists {
+				serviceType = instanceInfo.ServiceType
+			}
 			if _, err := a.AnnounceService(serviceType, serviceState.Name, serviceState.Port, serviceState.Txt); err != nil {
 				logging.Log().Debugf("mdns: avahi - error re-announcing service %s: %v", serviceState.Name, err)
 			}
@@ -324,8 +327,18 @@ func (a *AvahiProvider) attemptReconnect(cb api.MdnsResolveCB, serviceData *mdns
 
 		// Legacy compatibility: also restore from serviceData if available and not already restored
 		if serviceData != nil {
-			// Only restore legacy serviceData if it wasn't already restored from serviceStates
-			if _, alreadyRestored := statesToRestore[shipZeroConfServiceType]; !alreadyRestored {
+			// Check if legacy service was already restored from instanceStates
+			alreadyRestored := false
+			for instanceID := range statesToRestore {
+				if instanceInfo, exists := a.serviceInstances[instanceID]; exists {
+					if instanceInfo.ServiceType == shipZeroConfServiceType && instanceInfo.ServiceName == serviceData.Name {
+						alreadyRestored = true
+						break
+					}
+				}
+			}
+			
+			if !alreadyRestored {
 				if _, err := a.AnnounceService(shipZeroConfServiceType, serviceData.Name, serviceData.Port, serviceData.Txt); err != nil {
 					logging.Log().Debug("mdns: avahi - error re-announcing legacy service:", err)
 				}

@@ -115,7 +115,7 @@ func (c *ShipConnection) handleState(timeout bool, message []byte) {
 
 	case model.CmiStateClientWait:
 		if timeout {
-			c.endHandshakeWithError(fmt.Errorf("%w: SHIP client handshake with remote SKI %s (state: %v)", 
+			c.endHandshakeWithError(fmt.Errorf("%w: SHIP client handshake with remote SKI %s (state: %v)",
 				api.ErrConnectionTimeout, c.remoteSKI, model.CmiStateClientWait))
 			return
 		}
@@ -124,7 +124,7 @@ func (c *ShipConnection) handleState(timeout bool, message []byte) {
 
 	case model.CmiStateServerWait:
 		if timeout {
-			c.endHandshakeWithError(fmt.Errorf("%w: SHIP server handshake with remote SKI %s (state: %v)", 
+			c.endHandshakeWithError(fmt.Errorf("%w: SHIP server handshake with remote SKI %s (state: %v)",
 				api.ErrConnectionTimeout, c.remoteSKI, model.CmiStateServerWait))
 			return
 		}
@@ -216,7 +216,7 @@ func (c *ShipConnection) setAndHandleState(state model.ShipMessageExchangeState)
 // SHIP handshake is approved, now set the new state and the SPINE read handler
 func (c *ShipConnection) approveHandshake() {
 	// Report to SPINE local device about this remote device connection
-	c.dataReader = c.infoProvider.SetupRemoteDevice(c.remoteSKI, c)
+	c.dataReader = c.infoProvider.SetupRemoteService(c.remoteSKI, c)
 	c.stopTimerSafe()
 	c.setState(model.SmeStateComplete, nil)
 	c.processBufferedSpineMessages()

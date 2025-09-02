@@ -56,10 +56,10 @@ func TestReportMdnsEntries(t *testing.T) {
 	// Create mock HubReader using the official mock
 	mockHubReader := mocks.NewHubReaderInterface(t)
 
-	// Set up expectation for VisibleRemoteServicesUpdated call
-	var receivedEntries []api.RemoteService
-	mockHubReader.EXPECT().VisibleRemoteServicesUpdated(mock.AnythingOfType("[]api.RemoteService")).
-		RunAndReturn(func(entries []api.RemoteService) {
+	// Set up expectation for VisibleRemoteMdnsServicesUpdated call
+	var receivedEntries []api.RemoteMdnsService
+	mockHubReader.EXPECT().VisibleRemoteMdnsServicesUpdated(mock.AnythingOfType("[]api.RemoteMdnsService")).
+		RunAndReturn(func(entries []api.RemoteMdnsService) {
 			receivedEntries = entries
 		}).
 		Once()
@@ -115,7 +115,7 @@ func TestReportMdnsEntries_WithConnectedService(t *testing.T) {
 	}
 
 	mockHubReader := mocks.NewHubReaderInterface(t)
-	mockHubReader.EXPECT().VisibleRemoteServicesUpdated(mock.AnythingOfType("[]api.RemoteService")).Once()
+	mockHubReader.EXPECT().VisibleRemoteMdnsServicesUpdated(mock.AnythingOfType("[]api.RemoteMdnsService")).Once()
 	hub.hubReader = mockHubReader
 
 	hub.ReportMdnsEntries(entries, true)
@@ -150,7 +150,7 @@ func TestReportMdnsEntries_WithUnpairedService(t *testing.T) {
 	}
 
 	mockHubReader := mocks.NewHubReaderInterface(t)
-	mockHubReader.EXPECT().VisibleRemoteServicesUpdated(mock.AnythingOfType("[]api.RemoteService")).Once()
+	mockHubReader.EXPECT().VisibleRemoteMdnsServicesUpdated(mock.AnythingOfType("[]api.RemoteMdnsService")).Once()
 	hub.hubReader = mockHubReader
 
 	hub.ReportMdnsEntries(entries, true)
@@ -193,7 +193,7 @@ func TestReportMdnsEntries_WithTrustedServiceAndIPv4(t *testing.T) {
 	}
 
 	mockHubReader := mocks.NewHubReaderInterface(t)
-	mockHubReader.EXPECT().VisibleRemoteServicesUpdated(mock.AnythingOfType("[]api.RemoteService")).Once()
+	mockHubReader.EXPECT().VisibleRemoteMdnsServicesUpdated(mock.AnythingOfType("[]api.RemoteMdnsService")).Once()
 	hub.hubReader = mockHubReader
 
 	hub.ReportMdnsEntries(entries, true)
@@ -242,7 +242,7 @@ func TestReportMdnsEntries_WithNonPairedTrustedService(t *testing.T) {
 	}
 
 	mockHubReader := mocks.NewHubReaderInterface(t)
-	mockHubReader.EXPECT().VisibleRemoteServicesUpdated(mock.AnythingOfType("[]api.RemoteService")).Once()
+	mockHubReader.EXPECT().VisibleRemoteMdnsServicesUpdated(mock.AnythingOfType("[]api.RemoteMdnsService")).Once()
 	hub.hubReader = mockHubReader
 
 	hub.ReportMdnsEntries(entries, true)
@@ -273,7 +273,7 @@ func TestReportMdnsEntries_WithUnknownService(t *testing.T) {
 	}
 
 	mockHubReader := mocks.NewHubReaderInterface(t)
-	mockHubReader.EXPECT().VisibleRemoteServicesUpdated(mock.AnythingOfType("[]api.RemoteService")).Once()
+	mockHubReader.EXPECT().VisibleRemoteMdnsServicesUpdated(mock.AnythingOfType("[]api.RemoteMdnsService")).Once()
 	hub.hubReader = mockHubReader
 
 	hub.ReportMdnsEntries(entries, true)

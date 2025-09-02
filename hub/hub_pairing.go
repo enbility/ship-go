@@ -13,7 +13,6 @@ import (
 	"github.com/enbility/ship-go/logging"
 	"github.com/enbility/ship-go/model"
 	"github.com/enbility/ship-go/pairing"
-	"github.com/enbility/ship-go/util"
 )
 
 // AutoTrustEstablishmentRequest contains the required parameters for establishing auto trust via pairing
@@ -31,15 +30,17 @@ type AutoTrustEstablishmentResult struct {
 	Error          error
 }
 
-// Provide the current pairing state for a SKI or fingerprint
-func (h *Hub) PairingDetailForIdentifier(ski, fingerprint string) *api.ConnectionStateDetail {
-	if conn := h.connectionForSKI(ski); conn != nil {
+// Provide the current pairing state for a ServiceIdentity
+func (h *Hub) PairingDetailFor(identity api.ServiceIdentity) *api.ConnectionStateDetail {
+	// Convert ServiceIdentity to ServiceDetails for service-based lookup
+	serviceForLookup := identity.ToServiceDetails()
+	if conn := h.connectionForService(serviceForLookup); conn != nil {
 		shipState, shipError := conn.ShipHandshakeState()
-		state := h.mapShipMessageExchangeState(shipState, ski)
+		state := h.mapShipMessageExchangeState(shipState, identity.SKI)
 		return api.NewConnectionStateDetail(state, shipError)
 	}
 
-	service := h.ServiceForIdentifier(ski, fingerprint)
+	service := h.serviceFor(identity)
 	if service == nil {
 		return nil
 	}
@@ -109,62 +110,69 @@ func (h *Hub) checkHasStarted() bool {
 	return h.hasStarted
 }
 
-// Pair a remote service based on the SKI
-func (h *Hub) RegisterRemoteService(ski, fingerprint, shipID string) {
-	ski = util.NormalizeSKI(ski)
+// Pair a remote service using ServiceIdentity
+func (h *Hub) RegisterRemoteService(identity api.ServiceIdentity) {
+	// Direct field extraction - cleaner than conversion function
+	if identity.IsZero() {
+		return
+	}
 
-	service := api.NewServiceDetails(ski, fingerprint, shipID)
-	if success := h.AddService(service); !success {
+	service := api.NewServiceDetails(identity.SKI, identity.Fingerprint, identity.ShipID)
+	service.SetPairingType(identity.PairingType)
+	service.SetIPv4(identity.IPv4)
+
+	if success := h.addService(service); !success {
 		return
 	}
 
 	service.SetTrusted(true)
-	service.SetShipID(shipID)
 
 	// if the hub has not started, simply add it
 	if !h.checkHasStarted() {
 		h.checkAutoReannounce()
-
 		return
 	}
 
 	// if the hub has started, trigger a search and connection attempt
-	conn := h.connectionForSKI(ski)
+	conn := h.connectionForService(service)
 	// remotely initiated?
 	if conn != nil {
 		conn.ApprovePendingHandshake()
-
 		return
 	}
 
 	// locally initiated
 	service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
 
-	h.hubReader.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
+	h.hubReader.ServicePairingDetailUpdate(identity, service.ConnectionStateDetail())
 
 	h.mdns.RequestMdnsEntries()
 }
 
-// Remove pairing for the SKI
-func (h *Hub) UnregisterRemoteService(ski, fingerprint string) {
-	if service := h.ServiceForIdentifier(ski, fingerprint); service != nil {
+// Remove pairing using ServiceIdentity
+func (h *Hub) UnregisterRemoteService(identity api.ServiceIdentity) {
+	if service := h.serviceFor(identity); service != nil {
 		service.SetTrusted(false)
 		service.ConnectionStateDetail().SetState(api.ConnectionStateNone)
-		h.hubReader.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
-		h.RemoveService(ski, fingerprint)
+		h.hubReader.ServicePairingDetailUpdate(identity, service.ConnectionStateDetail())
+		h.removeService(identity.SKI, identity.Fingerprint)
 	}
 
-	h.removeConnectionAttemptCounter(ski)
+	h.removeConnectionAttemptCounter(identity.SKI)
 
-	if existingC := h.connectionForSKI(ski); existingC != nil {
+	// Convert ServiceIdentity to ServiceDetails for service-based lookup
+	serviceForLookup := identity.ToServiceDetails()
+	if existingC := h.connectionForService(serviceForLookup); existingC != nil {
 		existingC.CloseConnection(true, 4500, "User close")
 	}
 }
 
-// Disconnect a connection to an SKI, used by a service implementation
+// Disconnect a connection using ServiceIdentity, used by a service implementation
 // e.g. if heartbeats go wrong
-func (h *Hub) DisconnectSKI(ski string, reason string) {
-	con := h.connectionForSKI(ski)
+func (h *Hub) DisconnectService(identity api.ServiceIdentity, reason string) {
+	// Convert ServiceIdentity to ServiceDetails for service-based lookup
+	serviceForLookup := identity.ToServiceDetails()
+	con := h.connectionForService(serviceForLookup)
 	if con == nil {
 		return
 	}
@@ -172,19 +180,21 @@ func (h *Hub) DisconnectSKI(ski string, reason string) {
 	con.CloseConnection(true, 0, reason)
 }
 
-// Cancels the pairing process for a SKI
-func (h *Hub) CancelPairingWithSKI(ski string) {
-	h.removeConnectionAttemptCounter(ski)
+// Cancels the pairing process using ServiceIdentity
+func (h *Hub) CancelPairing(identity api.ServiceIdentity) {
+	h.removeConnectionAttemptCounter(identity.SKI)
 
-	if existingC := h.connectionForSKI(ski); existingC != nil {
+	// Convert ServiceIdentity to ServiceDetails for service-based lookup
+	serviceForLookup := identity.ToServiceDetails()
+	if existingC := h.connectionForService(serviceForLookup); existingC != nil {
 		existingC.AbortPendingHandshake()
 	}
 
-	if service := h.ServiceForIdentifier(ski, ""); service != nil {
+	if service := h.serviceFor(identity); service != nil {
 		service.ConnectionStateDetail().SetState(api.ConnectionStateNone)
 		service.SetTrusted(false)
 
-		h.hubReader.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
+		h.hubReader.ServicePairingDetailUpdate(identity, service.ConnectionStateDetail())
 	}
 }
 
@@ -248,14 +258,14 @@ func (h *Hub) initializePairingServiceWithConfig(config *api.PairingConfig) erro
 		}
 		historyProvider = ringBufferProvider
 	}
-	
+
 	// Create pairing service with all dependencies
 	service, err := pairing.NewService(
-		mdnsPairing,        // mDNS pairing interface
-		cryptoProvider,     // Crypto for HMAC
-		historyProvider,    // Ring buffer history provider
-		h,                  // Hub as PairingHubInterface
-		h.certificate,      // Certificate
+		mdnsPairing,     // mDNS pairing interface
+		cryptoProvider,  // Crypto for HMAC
+		historyProvider, // Ring buffer history provider
+		h,               // Hub as PairingHubInterface
+		h.certificate,   // Certificate
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create pairing service: %w", err)
@@ -313,7 +323,8 @@ func (h *Hub) StartAnnouncementTo(target *api.PairingTarget) error {
 	}
 
 	// check if we are already connected to the target
-	conn := h.connectionForSKI(target.SKI)
+	service := api.NewServiceDetails(target.SKI, target.Fingerprint, target.ShipID)
+	conn := h.connectionForService(service)
 	if conn != nil {
 		if connState, err := conn.ShipHandshakeState(); err == nil && connState == model.SmeStateComplete {
 			return nil
@@ -460,7 +471,7 @@ func (h *Hub) OnPairingSuccess(remoteShipID, remoteFingerprint string) {
 		// Only replace if the fingerprints are different (different devices)
 		if replacedService != nil && replacedService.ShipID() != remoteShipID {
 			replacedService.SetTrusted(false)
-			h.RemoveService(replacedService.SKI(), replacedService.Fingerprint())
+			h.removeService(replacedService.SKI(), replacedService.Fingerprint())
 			// Stop any active replacement timer for the old device
 			h.addCuReplacementTracker.StopTimer(existingAddCuShipID)
 		} else if replacedService != nil {
@@ -475,7 +486,7 @@ func (h *Hub) OnPairingSuccess(remoteShipID, remoteFingerprint string) {
 	if service == nil {
 		// This should be the normal case
 		service = api.NewServiceDetails("", remoteFingerprint, remoteShipID)
-		if success := h.AddService(service); !success {
+		if success := h.addService(service); !success {
 			logging.Log().Error("Failed to add service during pairing success - ShipID:", remoteShipID, "Fingerprint:", remoteFingerprint)
 			return
 		}
@@ -505,8 +516,9 @@ func (h *Hub) OnPairingSuccess(remoteShipID, remoteFingerprint string) {
 
 	// Direct callbacks following existing Hub patterns - call PairingServiceReaderInterface if available
 	if pairingReader, ok := h.hubReader.(api.PairingServiceReaderInterface); ok {
-		// Call ServiceDetails method if service is available
-		pairingReader.DeviceAutoTrustedViaServiceDetails(service.Copy())
+		// Convert ServiceDetails to ServiceIdentity - thread-safe, no Copy() needed
+		identity := service.ToServiceIdentity()
+		pairingReader.ServiceAutoTrusted(identity)
 	}
 
 	// we have to initiate checking the mds records again, to trigger a connection
@@ -522,8 +534,9 @@ func (h *Hub) OnPairingFailure(remoteShipID, remoteFingerprint string, reason er
 
 	// Direct callbacks following existing Hub patterns
 	if pairingReader, ok := h.hubReader.(api.PairingServiceReaderInterface); ok {
-		// Call ServiceDetails method if service is available
-		pairingReader.PairingServiceFailedForServiceDetails(service, reason)
+		// Convert ServiceDetails to ServiceIdentity - thread-safe, no Copy() needed
+		identity := service.ToServiceIdentity()
+		pairingReader.ServiceAutoTrustFailed(identity, reason)
 	}
 }
 

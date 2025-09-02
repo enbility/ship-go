@@ -61,13 +61,13 @@ func (h *Hub) ReportMdnsEntries(entries map[string]*api.MdnsEntry, newEntries bo
 		h.muxMdns.Unlock()
 	}
 
-	var remoteServices []api.RemoteService
+	var remoteServices []api.RemoteMdnsService
 
 	for _, entry := range entries {
-		remoteService := api.RemoteService{
+		remoteService := api.RemoteMdnsService{
 			Name:       entry.Name,
 			Ski:        entry.Ski,
-			Identifier: entry.Identifier,
+			ShipID:     entry.Identifier,
 			Brand:      entry.Brand,
 			Type:       entry.Type,
 			Model:      entry.Model,
@@ -78,5 +78,5 @@ func (h *Hub) ReportMdnsEntries(entries map[string]*api.MdnsEntry, newEntries bo
 		remoteServices = append(remoteServices, remoteService)
 	}
 
-	h.hubReader.VisibleRemoteServicesUpdated(remoteServices)
+	h.hubReader.VisibleRemoteMdnsServicesUpdated(remoteServices)
 }

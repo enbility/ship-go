@@ -23,7 +23,7 @@ func (n *noOpInfoProvider) HandleShipHandshakeStateUpdate(ski string, state mode
 	// No-op
 }
 
-func (n *noOpInfoProvider) SetupRemoteDevice(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
+func (n *noOpInfoProvider) SetupRemoteService(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
 	return nil
 }
 

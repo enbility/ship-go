@@ -19,9 +19,9 @@ func setupTestHubForTimer(t *testing.T) *Hub {
 
 	// Set up expectations
 	// Use specific type matchers to avoid race conditions with structs containing sync primitives
-	hubReader.EXPECT().RemoteSKIConnected(mock.AnythingOfType("api.ShipConnectionInterface")).Maybe()
-	hubReader.EXPECT().RemoteSKIDisconnected(mock.AnythingOfType("string")).Maybe()
-	hubReader.EXPECT().ServiceShipIDUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Maybe()
+	hubReader.EXPECT().RemoteServiceConnected(mock.AnythingOfType("api.ShipConnectionInterface")).Maybe()
+	hubReader.EXPECT().RemoteServiceDisconnected(mock.AnythingOfType("string")).Maybe()
+	hubReader.EXPECT().ServiceUpdated(mock.AnythingOfType("api.ServiceIdentity")).Maybe()
 	hubReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
 	hubReader.EXPECT().AllowWaitingForTrust(mock.AnythingOfType("string")).Return(false).Maybe()
 
@@ -127,7 +127,7 @@ func TestConnectionAttemptRunningConcurrency(t *testing.T) {
 
 	ski := "test-ski-concurrent"
 	service := api.NewServiceDetails(ski, "", "")
-	success := hub.AddService(service)
+	success := hub.addService(service)
 	assert.True(t, success)
 	service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 
@@ -165,7 +165,7 @@ func TestPrepareConnectionInitiationCounterMismatch(t *testing.T) {
 	ski := "testskicountermismatch"
 	service := api.NewServiceDetails(ski, "", "")
 	service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
-	success := hub.AddService(service)
+	success := hub.addService(service)
 	assert.True(t, success)
 
 	entry := &api.MdnsEntry{
@@ -226,7 +226,7 @@ func TestDoubleConnectionPreventionEdgeCases(t *testing.T) {
 		hub.Start()
 		defer hub.Shutdown()
 
-		existingSKI := "existing-ski"
+		existingSKI := "existingski"
 		existingConn := mocks.NewShipConnectionInterface(t)
 		existingConn.EXPECT().RemoteSKI().Return(existingSKI).Maybe()
 		existingConn.EXPECT().CloseConnection(mock.AnythingOfType("bool"), mock.AnythingOfType("int"), mock.AnythingOfType("string")).Maybe()

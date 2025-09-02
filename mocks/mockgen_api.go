@@ -209,7 +209,7 @@ func (m *MockHubReaderInterface) EXPECT() *MockHubReaderInterfaceMockRecorder {
 }
 
 // AllowWaitingForTrust mocks base method.
-func (m *MockHubReaderInterface) AllowWaitingForTrust(arg0 string) bool {
+func (m *MockHubReaderInterface) AllowWaitingForTrust(arg0 api.ServiceIdentity) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AllowWaitingForTrust", arg0)
 	ret0, _ := ret[0].(bool)
@@ -222,32 +222,32 @@ func (mr *MockHubReaderInterfaceMockRecorder) AllowWaitingForTrust(arg0 any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllowWaitingForTrust", reflect.TypeOf((*MockHubReaderInterface)(nil).AllowWaitingForTrust), arg0)
 }
 
-// RemoteSKIConnected mocks base method.
-func (m *MockHubReaderInterface) RemoteSKIConnected(arg0 string) {
+// RemoteServiceConnected mocks base method.
+func (m *MockHubReaderInterface) RemoteServiceConnected(arg0 api.ServiceIdentity) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RemoteSKIConnected", arg0)
+	m.ctrl.Call(m, "RemoteServiceConnected", arg0)
 }
 
-// RemoteSKIConnected indicates an expected call of RemoteSKIConnected.
-func (mr *MockHubReaderInterfaceMockRecorder) RemoteSKIConnected(arg0 any) *gomock.Call {
+// RemoteServiceConnected indicates an expected call of RemoteServiceConnected.
+func (mr *MockHubReaderInterfaceMockRecorder) RemoteServiceConnected(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteSKIConnected", reflect.TypeOf((*MockHubReaderInterface)(nil).RemoteSKIConnected), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteServiceConnected", reflect.TypeOf((*MockHubReaderInterface)(nil).RemoteServiceConnected), arg0)
 }
 
-// RemoteSKIDisconnected mocks base method.
-func (m *MockHubReaderInterface) RemoteSKIDisconnected(arg0 string) {
+// RemoteServiceDisconnected mocks base method.
+func (m *MockHubReaderInterface) RemoteServiceDisconnected(arg0 api.ServiceIdentity) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RemoteSKIDisconnected", arg0)
+	m.ctrl.Call(m, "RemoteServiceDisconnected", arg0)
 }
 
-// RemoteSKIDisconnected indicates an expected call of RemoteSKIDisconnected.
-func (mr *MockHubReaderInterfaceMockRecorder) RemoteSKIDisconnected(arg0 any) *gomock.Call {
+// RemoteServiceDisconnected indicates an expected call of RemoteServiceDisconnected.
+func (mr *MockHubReaderInterfaceMockRecorder) RemoteServiceDisconnected(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteSKIDisconnected", reflect.TypeOf((*MockHubReaderInterface)(nil).RemoteSKIDisconnected), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteServiceDisconnected", reflect.TypeOf((*MockHubReaderInterface)(nil).RemoteServiceDisconnected), arg0)
 }
 
 // ServicePairingDetailUpdate mocks base method.
-func (m *MockHubReaderInterface) ServicePairingDetailUpdate(arg0 string, arg1 *api.ConnectionStateDetail) {
+func (m *MockHubReaderInterface) ServicePairingDetailUpdate(arg0 api.ServiceIdentity, arg1 *api.ConnectionStateDetail) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ServicePairingDetailUpdate", arg0, arg1)
 }
@@ -258,40 +258,40 @@ func (mr *MockHubReaderInterfaceMockRecorder) ServicePairingDetailUpdate(arg0, a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ServicePairingDetailUpdate", reflect.TypeOf((*MockHubReaderInterface)(nil).ServicePairingDetailUpdate), arg0, arg1)
 }
 
-// ServiceShipIDUpdate mocks base method.
-func (m *MockHubReaderInterface) ServiceShipIDUpdate(arg0, arg1 string) {
+// ServiceUpdated mocks base method.
+func (m *MockHubReaderInterface) ServiceUpdated(arg0 api.ServiceIdentity) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ServiceShipIDUpdate", arg0, arg1)
+	m.ctrl.Call(m, "ServiceUpdated", arg0)
 }
 
-// ServiceShipIDUpdate indicates an expected call of ServiceShipIDUpdate.
-func (mr *MockHubReaderInterfaceMockRecorder) ServiceShipIDUpdate(arg0, arg1 any) *gomock.Call {
+// ServiceUpdated indicates an expected call of ServiceUpdated.
+func (mr *MockHubReaderInterfaceMockRecorder) ServiceUpdated(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ServiceShipIDUpdate", reflect.TypeOf((*MockHubReaderInterface)(nil).ServiceShipIDUpdate), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ServiceUpdated", reflect.TypeOf((*MockHubReaderInterface)(nil).ServiceUpdated), arg0)
 }
 
-// SetupRemoteDevice mocks base method.
-func (m *MockHubReaderInterface) SetupRemoteDevice(arg0 string, arg1 api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
+// SetupRemoteService mocks base method.
+func (m *MockHubReaderInterface) SetupRemoteService(arg0 api.ServiceIdentity, arg1 api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetupRemoteDevice", arg0, arg1)
+	ret := m.ctrl.Call(m, "SetupRemoteService", arg0, arg1)
 	ret0, _ := ret[0].(api.ShipConnectionDataReaderInterface)
 	return ret0
 }
 
-// SetupRemoteDevice indicates an expected call of SetupRemoteDevice.
-func (mr *MockHubReaderInterfaceMockRecorder) SetupRemoteDevice(arg0, arg1 any) *gomock.Call {
+// SetupRemoteService indicates an expected call of SetupRemoteService.
+func (mr *MockHubReaderInterfaceMockRecorder) SetupRemoteService(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetupRemoteDevice", reflect.TypeOf((*MockHubReaderInterface)(nil).SetupRemoteDevice), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetupRemoteService", reflect.TypeOf((*MockHubReaderInterface)(nil).SetupRemoteService), arg0, arg1)
 }
 
-// VisibleRemoteServicesUpdated mocks base method.
-func (m *MockHubReaderInterface) VisibleRemoteServicesUpdated(arg0 []api.RemoteService) {
+// VisibleRemoteMdnsServicesUpdated mocks base method.
+func (m *MockHubReaderInterface) VisibleRemoteMdnsServicesUpdated(arg0 []api.RemoteMdnsService) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "VisibleRemoteServicesUpdated", arg0)
+	m.ctrl.Call(m, "VisibleRemoteMdnsServicesUpdated", arg0)
 }
 
-// VisibleRemoteServicesUpdated indicates an expected call of VisibleRemoteServicesUpdated.
-func (mr *MockHubReaderInterfaceMockRecorder) VisibleRemoteServicesUpdated(arg0 any) *gomock.Call {
+// VisibleRemoteMdnsServicesUpdated indicates an expected call of VisibleRemoteMdnsServicesUpdated.
+func (mr *MockHubReaderInterfaceMockRecorder) VisibleRemoteMdnsServicesUpdated(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VisibleRemoteServicesUpdated", reflect.TypeOf((*MockHubReaderInterface)(nil).VisibleRemoteServicesUpdated), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VisibleRemoteMdnsServicesUpdated", reflect.TypeOf((*MockHubReaderInterface)(nil).VisibleRemoteMdnsServicesUpdated), arg0)
 }

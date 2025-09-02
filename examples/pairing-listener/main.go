@@ -12,13 +12,16 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -76,6 +79,184 @@ func (d *DebugLogger) print(msgType string, args ...interface{}) {
 func (d *DebugLogger) printFormat(msgType, format string, args ...interface{}) {
 	value := fmt.Sprintf(format, args...)
 	fmt.Println(d.currentTimestamp(), msgType, value)
+}
+
+/* Unified Persistence Implementation */
+
+// UnifiedPersistence handles both trust data and ring buffer persistence in a single file.
+// This provides a complete solution for SHIP Pairing Service persistence requirements.
+type UnifiedPersistence struct {
+	filename       string
+	trustedDevices map[string]api.ServiceIdentity // SKI -> ServiceIdentity
+	ringEntries    []api.DigestEntry
+	nextIndex      int
+	mutex          sync.RWMutex
+}
+
+// TrustedDeviceEntry represents a persisted trusted device with metadata
+type TrustedDeviceEntry struct {
+	api.ServiceIdentity
+}
+
+// PersistenceData represents the complete structure saved to disk
+type PersistenceData struct {
+	TrustedDevices []TrustedDeviceEntry `json:"trustedDevices"`
+	RingBuffer     RingBufferData       `json:"ringBuffer"`
+}
+
+// RingBufferData represents the ring buffer state
+type RingBufferData struct {
+	Entries   []api.DigestEntry `json:"entries"`
+	NextIndex int               `json:"nextIndex"`
+}
+
+// NewUnifiedPersistence creates a new unified persistence manager
+func NewUnifiedPersistence(filename string) (*UnifiedPersistence, error) {
+	if filename == "" {
+		return nil, fmt.Errorf("persistence filename cannot be empty")
+	}
+
+	p := &UnifiedPersistence{
+		filename:       filename,
+		trustedDevices: make(map[string]api.ServiceIdentity),
+		ringEntries:    nil, // Start empty - library will provide state via SaveRingBuffer()
+		nextIndex:      0,
+	}
+
+	// Load existing data if file exists
+	if err := p.loadFromFile(); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to load persistence data: %w", err)
+	}
+
+	return p, nil
+}
+
+// Trust data methods
+func (p *UnifiedPersistence) SaveTrustedDevice(identity api.ServiceIdentity) error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	p.trustedDevices[identity.SKI] = identity
+	return p.saveToFile()
+}
+
+func (p *UnifiedPersistence) RemoveTrustedDevice(ski string) error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	delete(p.trustedDevices, ski)
+	return p.saveToFile()
+}
+
+func (p *UnifiedPersistence) GetTrustedDevices() []api.ServiceIdentity {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+
+	devices := make([]api.ServiceIdentity, 0, len(p.trustedDevices))
+	for _, device := range p.trustedDevices {
+		devices = append(devices, device)
+	}
+	return devices
+}
+
+// RingBufferPersistence interface implementation
+func (p *UnifiedPersistence) LoadRingBuffer() ([]api.DigestEntry, int, error) {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+
+	// If no previous ring buffer data exists, return empty buffer
+	if len(p.ringEntries) == 0 {
+		// Return empty 100-entry buffer as per SHIP protocol requirement
+		return make([]api.DigestEntry, 100), 0, nil
+	}
+
+	// Return copies to avoid data races
+	entries := make([]api.DigestEntry, len(p.ringEntries))
+	copy(entries, p.ringEntries)
+	return entries, p.nextIndex, nil
+}
+
+func (p *UnifiedPersistence) SaveRingBuffer(entries []api.DigestEntry, nextIndex int) error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	p.ringEntries = make([]api.DigestEntry, len(entries))
+	copy(p.ringEntries, entries)
+	p.nextIndex = nextIndex
+	return p.saveToFile()
+}
+
+// File operations
+func (p *UnifiedPersistence) loadFromFile() error {
+	data, err := os.ReadFile(p.filename)
+	if err != nil {
+		return err
+	}
+
+	var persistenceData PersistenceData
+	if err := json.Unmarshal(data, &persistenceData); err != nil {
+		return fmt.Errorf("failed to parse persistence file: %w", err)
+	}
+
+	// Load trusted devices
+	p.trustedDevices = make(map[string]api.ServiceIdentity)
+	for _, entry := range persistenceData.TrustedDevices {
+		p.trustedDevices[entry.SKI] = entry.ServiceIdentity
+	}
+
+	// Load complete ring buffer as saved by library
+	if len(persistenceData.RingBuffer.Entries) > 0 {
+		p.ringEntries = make([]api.DigestEntry, len(persistenceData.RingBuffer.Entries))
+		copy(p.ringEntries, persistenceData.RingBuffer.Entries)
+		p.nextIndex = persistenceData.RingBuffer.NextIndex
+	} else {
+		// No previous ring buffer data - start empty
+		p.ringEntries = nil
+		p.nextIndex = 0
+	}
+
+	return nil
+}
+
+func (p *UnifiedPersistence) saveToFile() error {
+	// Create trusted devices entries with metadata
+	trustedEntries := make([]TrustedDeviceEntry, 0, len(p.trustedDevices))
+	for _, identity := range p.trustedDevices {
+		entry := TrustedDeviceEntry{
+			ServiceIdentity: identity,
+		}
+		trustedEntries = append(trustedEntries, entry)
+	}
+
+	// Save complete ring buffer as provided by library
+	// Note: Ring buffer contains 100 entries (mostly empty) as per SHIP protocol
+	// The library manages ring buffer algorithm - we just store what it provides
+	persistenceData := PersistenceData{
+		TrustedDevices: trustedEntries,
+		RingBuffer: RingBufferData{
+			Entries:   p.ringEntries, // Complete buffer from library
+			NextIndex: p.nextIndex,
+		},
+	}
+
+	// Marshal to JSON with pretty printing
+	data, err := json.MarshalIndent(persistenceData, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal persistence data: %w", err)
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(p.filename), 0700); err != nil {
+		return fmt.Errorf("failed to create persistence directory: %w", err)
+	}
+
+	// Atomic write pattern
+	tempFile := p.filename + ".tmp"
+	if err := os.WriteFile(tempFile, data, 0600); err != nil {
+		return fmt.Errorf("failed to write persistence file: %w", err)
+	}
+
+	return os.Rename(tempFile, p.filename)
 }
 
 /* Example Ring Buffer Persistence Implementation */
@@ -176,11 +357,12 @@ type PairingHubReader struct {
 	pairingCompleted bool
 	pairingError     error
 	pairedDeviceSKI  string
+	persistence      *UnifiedPersistence // Optional persistence for trust data
 }
 
-// SetupRemoteDevice provides the SPINE layer interface for message handling
-func (p *PairingHubReader) SetupRemoteDevice(
-	ski string,
+// SetupRemoteService provides the SPINE layer interface for message handling
+func (p *PairingHubReader) SetupRemoteService(
+	identity api.ServiceIdentity,
 	writeI api.ShipConnectionDataWriterInterface,
 ) api.ShipConnectionDataReaderInterface {
 	// we would setup the SPINE layer in here
@@ -188,18 +370,19 @@ func (p *PairingHubReader) SetupRemoteDevice(
 	return nil
 }
 
-// VisibleRemoteServicesUpdated is called when mDNS discovers or loses devices
-func (p *PairingHubReader) VisibleRemoteServicesUpdated(entries []api.RemoteService) {
+// VisibleRemoteMdnsServicesUpdated is called when mDNS discovers or loses devices
+func (p *PairingHubReader) VisibleRemoteMdnsServicesUpdated(entries []api.RemoteMdnsService) {
 	// we could show the visible mDNS entries
 }
 
-// ServiceShipIDUpdate is called when service shipID is known
-func (p *PairingHubReader) ServiceShipIDUpdate(ski, shipID string) {
-	fmt.Printf("📋 Device %s has SHIP ID: %s\n", ski, shipID)
+// ServiceUpdated is called when service information is updated
+func (p *PairingHubReader) ServiceUpdated(identity api.ServiceIdentity) {
+	fmt.Printf("📋 Device %s updated - SHIP ID: %s\n", identity.SKI, identity.ShipID)
 }
 
 // ServicePairingDetailUpdate provides pairing process updates
-func (p *PairingHubReader) ServicePairingDetailUpdate(ski string, detail *api.ConnectionStateDetail) {
+func (p *PairingHubReader) ServicePairingDetailUpdate(identity api.ServiceIdentity, detail *api.ConnectionStateDetail) {
+	ski := identity.SKI
 	state := detail.State()
 	timestamp := time.Now().Format("15:04:05")
 
@@ -219,12 +402,13 @@ func (p *PairingHubReader) ServicePairingDetailUpdate(ski string, detail *api.Co
 }
 
 // We can't manually trust a service, so this has to return false
-func (p *PairingHubReader) AllowWaitingForTrust(ski string) bool {
+func (p *PairingHubReader) AllowWaitingForTrust(identity api.ServiceIdentity) bool {
 	return false
 }
 
-// RemoteSKIConnected is called when a new service connects
-func (p *PairingHubReader) RemoteSKIConnected(ski string) {
+// RemoteServiceConnected is called when a new service connects
+func (p *PairingHubReader) RemoteServiceConnected(identity api.ServiceIdentity) {
+	ski := identity.SKI
 	fmt.Printf("✅ Device connected: %s\n", ski)
 
 	// Check if this is the device we just paired with
@@ -238,54 +422,107 @@ func (p *PairingHubReader) RemoteSKIConnected(ski string) {
 	fmt.Printf("✅ Device connected and ready: %s\n", ski)
 }
 
-// RemoteSKIDisconnected is called when a service disconnects
-func (p *PairingHubReader) RemoteSKIDisconnected(ski string) {
-	fmt.Printf("👋 Device disconnected: %s\n", ski)
+// RemoteServiceDisconnected is called when a service disconnects
+func (p *PairingHubReader) RemoteServiceDisconnected(identity api.ServiceIdentity) {
+	fmt.Printf("👋 Device disconnected: %s\n", identity.SKI)
 }
 
 /* api.PairingServiceReaderInterface implementation */
 
 /* ServiceDetails-based methods */
 
-// DeviceAutoTrustedViaServiceDetails is called when device is automatically trusted via pairing service
-func (p *PairingHubReader) DeviceAutoTrustedViaServiceDetails(service *api.ServiceDetails) {
+// ServiceAutoTrusted is called when device is automatically trusted via pairing service
+func (p *PairingHubReader) ServiceAutoTrusted(identity api.ServiceIdentity) {
 	fmt.Printf("\n🔐 *** TRUST ESTABLISHED! ***\n")
-	fmt.Printf("   Device %s has been automatically trusted via SHIP Pairing Service\n", service.SKI())
-	if service.ShipID() != "" {
-		fmt.Printf("   SHIP ID: %s\n", service.ShipID())
+	fmt.Printf("   Device %s has been automatically trusted via SHIP Pairing Service\n", identity.SKI)
+	if identity.ShipID != "" {
+		fmt.Printf("   SHIP ID: %s\n", identity.ShipID)
 	}
-	if service.Fingerprint() != "" {
-		fmt.Printf("   Certificate Fingerprint: %s\n", service.Fingerprint())
+	if identity.Fingerprint != "" {
+		fmt.Printf("   Certificate Fingerprint: %s\n", identity.Fingerprint)
 	}
 	fmt.Printf("   ⏳ Waiting for paired device to establish connection...\n")
+
+	// Persist trust data if persistence is enabled
+	if p.persistence != nil {
+		if err := p.persistence.SaveTrustedDevice(identity); err != nil {
+			fmt.Printf("   ⚠️  Failed to save trust data: %v\n", err)
+		} else {
+			fmt.Printf("   💾 Trust data saved to persistent storage\n")
+		}
+	}
+
 	fmt.Printf("   Trust established - device can now connect when ready\n\n")
-	p.pairedDeviceSKI = service.SKI()
+	p.pairedDeviceSKI = identity.SKI
 }
 
-// DeviceAutoTrustRemovedViaReplacementLogic is called when device trust is removed via replacement logic
-func (p *PairingHubReader) DeviceAutoTrustRemovedViaReplacementLogic(service *api.ServiceDetails, reason string) {
+// ServiceAutoTrustRemoved is called when device trust is removed via replacement logic
+func (p *PairingHubReader) ServiceAutoTrustRemoved(identity api.ServiceIdentity, reason string) {
 	fmt.Printf("\n🔒 *** TRUST REMOVED! ***\n")
-	fmt.Printf("   Device %s has been automatically removed from trusted via SHIP Pairing Service Replacement Logic: %s\n", service.SKI(), reason)
-	if service.ShipID() != "" {
-		fmt.Printf("   SHIP ID: %s\n", service.ShipID())
+	fmt.Printf("   Device %s has been automatically removed from trusted via SHIP Pairing Service Replacement Logic: %s\n", identity.SKI, reason)
+	if identity.ShipID != "" {
+		fmt.Printf("   SHIP ID: %s\n", identity.ShipID)
 	}
-	if service.Fingerprint() != "" {
-		fmt.Printf("   Certificate Fingerprint: %s\n", service.Fingerprint())
+	if identity.Fingerprint != "" {
+		fmt.Printf("   Certificate Fingerprint: %s\n", identity.Fingerprint)
 	}
+
+	// Remove from persistent storage if persistence is enabled
+	if p.persistence != nil {
+		if err := p.persistence.RemoveTrustedDevice(identity.SKI); err != nil {
+			fmt.Printf("   ⚠️  Failed to remove trust data: %v\n", err)
+		} else {
+			fmt.Printf("   🗑️  Trust removed from persistent storage\n")
+		}
+	}
+
 	fmt.Printf("   Device must be re-paired to regain trust\n\n")
 	p.pairingCompleted = false
 }
 
-// PairingServiceFailedForServiceDetails is called when pairing service fails for a service
-func (p *PairingHubReader) PairingServiceFailedForServiceDetails(service *api.ServiceDetails, reason error) {
-	fmt.Printf("\n❌ Pairing failed for device %s: %v\n", service.SKI(), reason)
-	if service.Fingerprint() != "" {
-		fmt.Printf("   Certificate Fingerprint: %s\n", service.Fingerprint())
+// ServiceAutoTrustFailed is called when SHIP pairing fails for a service
+func (p *PairingHubReader) ServiceAutoTrustFailed(identity api.ServiceIdentity, reason error) {
+	fmt.Printf("\n❌ Pairing failed for device %s: %v\n", identity.SKI, reason)
+	if identity.Fingerprint != "" {
+		fmt.Printf("   Certificate Fingerprint: %s\n", identity.Fingerprint)
 	}
-	if service.ShipID() != "" {
-		fmt.Printf("   SHIP ID: %s\n", service.ShipID())
+	if identity.ShipID != "" {
+		fmt.Printf("   SHIP ID: %s\n", identity.ShipID)
 	}
 	p.pairingError = reason
+}
+
+// LoadAndRegisterTrustedDevices loads previously trusted devices from persistence
+// and registers them with the hub for automatic reconnection
+func (p *PairingHubReader) LoadAndRegisterTrustedDevices() error {
+	if p.persistence == nil {
+		return nil // No persistence configured
+	}
+
+	devices := p.persistence.GetTrustedDevices()
+	if len(devices) == 0 {
+		fmt.Printf("📋 No previously trusted devices found\n")
+		return nil
+	}
+
+	fmt.Printf("📋 Loading %d previously trusted devices from storage:\n", len(devices))
+
+	for _, identity := range devices {
+		// Register with hub - hub expects ServiceDetails for registration
+		p.hub.RegisterRemoteService(identity)
+
+		fmt.Printf("   ✅ Restored: %s", identity.SKI)
+		if identity.ShipID != "" {
+			fmt.Printf(" (SHIP ID: %s)", identity.ShipID)
+		}
+		if identity.PairingType == api.PairingTypeAddCu {
+			fmt.Printf(" [AddCu device]")
+		}
+		fmt.Printf("\n")
+	}
+
+	fmt.Printf("📋 All trusted devices restored and registered with hub\n\n")
+	return nil
 }
 
 // parseSecret parses and validates a hex-encoded secret
@@ -418,11 +655,13 @@ func main() {
 	var secretFlag = flag.String("secret", "", "32-character hex string (16 bytes) for pairing secret")
 	var certFile = flag.String("cert", "", "Path to certificate file (PEM format)")
 	var keyFile = flag.String("key", "", "Path to private key file (PEM format)")
+	var persistFile = flag.String("persist", "", "Path to persistence file for trust data and ring buffer (optional)")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [--cert cert.pem --key key.pem] --secret <32-hex-chars>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [--cert cert.pem --key key.pem] [--persist persist.json] --secret <32-hex-chars>\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "\nExample:\n")
 		fmt.Fprintf(os.Stderr, "  %s --secret 1234567890abcdef1234567890abcdef\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --cert cert.pem --key key.pem --secret 1234567890abcdef1234567890abcdef\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --persist ./devices.json --secret 1234567890abcdef1234567890abcdef\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "\nOptions:\n")
 		flag.PrintDefaults()
 	}
@@ -502,14 +741,33 @@ func main() {
 		providerSelection,      // Provider selection (forced Zeroconf for debugging)
 	)
 
-	// Step 4: Create the hub
+	// Step 4: Create the hub with optional persistence
 	hubReader := &PairingHubReader{}
+
+	// Setup persistence if --persist flag was provided
+	var ringBufferPersistence api.RingBufferPersistence
+	if *persistFile != "" {
+		fmt.Printf("🗄️  Setting up persistence file: %s\n", *persistFile)
+
+		// Create unified persistence for both trust data and ring buffer
+		unifiedPersistence, err := NewUnifiedPersistence(*persistFile)
+		if err != nil {
+			log.Fatalf("Failed to create persistence: %v", err)
+		}
+
+		hubReader.persistence = unifiedPersistence
+		ringBufferPersistence = unifiedPersistence // Same instance handles ring buffer
+
+		fmt.Printf("💾 Unified persistence enabled for trust data and ring buffer\n")
+	} else {
+		// No persistence - use example ring buffer (in-memory only)
+		fmt.Printf("📝 No persistence file specified - using in-memory storage only\n")
+		fmt.Printf("   Note: Trust data will be lost when application restarts\n")
+		ringBufferPersistence = NewExampleRingBufferPersistence()
+	}
+
 	// Create pairing configuration for listener
 	pairingConfig := api.NewPairingConfig(api.PairingModeListener, secret)
-
-	// Create example ring buffer persistence (shows implementation pattern)
-	// Real applications should persist data per SHIP specification
-	ringBufferPersistence := NewExampleRingBufferPersistence()
 
 	h, err := hub.NewHub(hubReader, mdnsManager, port, certificate, serviceDetails, pairingConfig, ringBufferPersistence)
 	if err != nil {
@@ -518,6 +776,11 @@ func main() {
 
 	// Store hub reference so callbacks can use it
 	hubReader.hub = h
+
+	// Load and register previously trusted devices if persistence is enabled
+	if err := hubReader.LoadAndRegisterTrustedDevices(); err != nil {
+		fmt.Printf("⚠️  Warning: Failed to load trusted devices: %v\n", err)
+	}
 
 	// Step 5: Hub automatically creates pairing service and starts listening
 	// With PairingModeListener, the hub automatically:

@@ -202,6 +202,9 @@ func (h *Hub) Start() error {
 		}
 
 		h.startPairingService()
+
+		// Start AddCu replacement timers for offline trusted devices
+		h.startAddCuReplacementTimersForOfflineDevices()
 	}
 
 	h.hasStarted = true
@@ -336,9 +339,9 @@ func (h *Hub) Shutdown() {
 	}
 }
 
-// return the service for a SKI, fingerprint, or SHIP ID
-func (h *Hub) ServiceForIdentifier(ski, fingerprint string) *api.ServiceDetails {
-	ski = util.NormalizeSKI(ski)
+// ServiceFor returns the service details for a ServiceIdentity
+func (h *Hub) ServiceFor(identity api.ServiceIdentity) *api.ServiceDetails {
+	ski := util.NormalizeSKI(identity.SKI)
 
 	h.muxReg.Lock()
 	defer h.muxReg.Unlock()
@@ -346,7 +349,7 @@ func (h *Hub) ServiceForIdentifier(ski, fingerprint string) *api.ServiceDetails 
 	for _, service := range h.remoteServices {
 		// Check if any provided identifier contradicts existing ones
 		skiConflict := (ski != "" && service.SKI() != "" && service.SKI() != ski)
-		fpConflict := (fingerprint != "" && service.Fingerprint() != "" && service.Fingerprint() != fingerprint)
+		fpConflict := (identity.Fingerprint != "" && service.Fingerprint() != "" && service.Fingerprint() != identity.Fingerprint)
 
 		if skiConflict || fpConflict {
 			continue // This represents a different device
@@ -354,9 +357,10 @@ func (h *Hub) ServiceForIdentifier(ski, fingerprint string) *api.ServiceDetails 
 
 		// At least one identifier must match
 		skiMatch := (ski != "" && service.SKI() == ski)
-		fpMatch := (fingerprint != "" && service.Fingerprint() == fingerprint)
+		fpMatch := (identity.Fingerprint != "" && service.Fingerprint() == identity.Fingerprint)
+		shipIDMatch := (identity.ShipID != "" && service.ShipID() == identity.ShipID)
 
-		if skiMatch || fpMatch {
+		if skiMatch || fpMatch || shipIDMatch {
 			return service
 		}
 	}
@@ -365,7 +369,15 @@ func (h *Hub) ServiceForIdentifier(ski, fingerprint string) *api.ServiceDetails 
 }
 
 // add a new remote service
-func (h *Hub) AddService(service *api.ServiceDetails) bool {
+//
+// Parameters:
+//   - service: The ServiceDetails instance representing the remote service to add.
+//
+// Returns:
+//   - true if the service was added successfully, false otherwise.
+//
+// Note: The service must have an SKI or fingerprint that is not yet added
+func (h *Hub) addService(service *api.ServiceDetails) bool {
 	if service == nil {
 		return false
 	}
@@ -386,7 +398,11 @@ func (h *Hub) AddService(service *api.ServiceDetails) bool {
 }
 
 // remove a service from remote services
-func (h *Hub) RemoveService(ski, fingerprint string) {
+//
+// Parameters:
+//   - ski: The SKI (Subject Key Identifier) of the service. Required if fingerprint is not provided
+//   - fingerprint: The expected certificate fingerprint of the service. Required if SKI is not provided
+func (h *Hub) removeService(ski, fingerprint string) {
 	h.muxReg.Lock()
 	defer h.muxReg.Unlock()
 
@@ -528,6 +544,44 @@ func (h *Hub) StopAddCuReplacementTimer(service *api.ServiceDetails) {
 	h.addCuReplacementTracker.StopTimer(shipID)
 }
 
+// startAddCuReplacementTimersForOfflineDevices starts replacement timers for AddCu devices
+// that are trusted but not currently connected during hub startup.
+// This ensures the Device Replacement Timing Logic works correctly across application restarts.
+func (h *Hub) startAddCuReplacementTimersForOfflineDevices() {
+	h.muxReg.RLock()
+	defer h.muxReg.RUnlock()
+
+	offlineAddCuCount := 0
+
+	for _, service := range h.remoteServices {
+		// Only process AddCu devices (devices paired via SHIP Pairing Service)
+		if service.PairingType() != api.PairingTypeAddCu {
+			continue
+		}
+
+		// Must be trusted and have a ShipID for timer to work
+		if !service.Trusted() || service.ShipID() == "" {
+			continue
+		}
+
+		// Skip if already connected - use service-based lookup for AddCu devices
+		if conn := h.connectionForService(service); conn != nil {
+			logging.Log().Trace("AddCu device already connected at startup - no timer needed", "shipID", service.ShipID(), "ski", service.SKI())
+			continue
+		}
+
+		// Start replacement timer for offline AddCu device
+		shipID := service.ShipID()
+		logging.Log().Debug("starting AddCu replacement timer for offline device at startup", "shipID", shipID, "ski", service.SKI(), "timeout", "15 minutes")
+		h.addCuReplacementTracker.StartTimer(shipID, h.handleAddCuReplacementTimeout)
+		offlineAddCuCount++
+	}
+
+	if offlineAddCuCount > 0 {
+		logging.Log().Info("started AddCu replacement timers for offline devices", "count", offlineAddCuCount)
+	}
+}
+
 // handleAddCuReplacementTimeout handles timeout callback from AddCu replacement tracker
 // Timeout only reactivates pairing listener - trust removal happens during replacement pairing
 func (h *Hub) handleAddCuReplacementTimeout(expiredShipID string) {
@@ -584,12 +638,47 @@ func (h *Hub) reactivatePairingListener(reason string) {
 func (h *Hub) callDeviceAutoTrustRemovedCallback(service *api.ServiceDetails, reason string) {
 	// Check if hubReader implements PairingServiceReaderInterface
 	if pairingReader, ok := h.hubReader.(api.PairingServiceReaderInterface); ok {
-		logging.Log().Trace("Calling DeviceAutoTrustRemovedViaReplacementLogic callback", "ski", service.SKI(), "reason", reason)
+		logging.Log().Trace("Calling ServiceAutoTrustRemoved callback", "ski", service.SKI(), "reason", reason)
 
-		// Use Copy() to avoid race conditions as per ship-go patterns
-		serviceCopy := service.Copy()
-		pairingReader.DeviceAutoTrustRemovedViaReplacementLogic(serviceCopy, reason)
+		// Convert ServiceDetails to ServiceIdentity - thread-safe, no Copy() needed
+		identity := service.ToServiceIdentity()
+		pairingReader.ServiceAutoTrustRemoved(identity, reason)
 	} else {
 		logging.Log().Trace("Hub reader does not implement PairingServiceReaderInterface, skipping trust removal callback")
 	}
+}
+
+// New ServiceIdentity-based interface implementations
+
+// serviceFor is an internal helper to find ServiceDetails by ServiceIdentity (lowercase = private)
+func (h *Hub) serviceFor(identity api.ServiceIdentity) *api.ServiceDetails {
+	return h.ServiceForIdentifier(identity.SKI, identity.Fingerprint)
+}
+
+// ServiceForIdentifier finds a service by SKI and fingerprint (internal method)
+func (h *Hub) ServiceForIdentifier(ski, fingerprint string) *api.ServiceDetails {
+	ski = util.NormalizeSKI(ski)
+
+	h.muxReg.Lock()
+	defer h.muxReg.Unlock()
+
+	for _, service := range h.remoteServices {
+		// Check if any provided identifier contradicts existing ones
+		skiConflict := (ski != "" && service.SKI() != "" && service.SKI() != ski)
+		fpConflict := (fingerprint != "" && service.Fingerprint() != "" && service.Fingerprint() != fingerprint)
+
+		if skiConflict || fpConflict {
+			continue // This represents a different device
+		}
+
+		// At least one identifier must match
+		skiMatch := (ski != "" && service.SKI() == ski)
+		fpMatch := (fingerprint != "" && service.Fingerprint() == fingerprint)
+
+		if skiMatch || fpMatch {
+			return service
+		}
+	}
+
+	return nil
 }

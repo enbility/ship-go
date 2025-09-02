@@ -49,7 +49,7 @@ func TestHubMutexOrderingDeadlock(t *testing.T) {
 		// Operation 3: Connection lookup (needs muxCon)
 		go func() {
 			defer wg.Done()
-			_ = hub.connectionForSKI("ski-1")
+			_ = hub.connectionForService(api.NewServiceDetails("ski-1", "", ""))
 		}()
 	}
 
@@ -72,7 +72,7 @@ func TestHubMutexOrderingDeadlock(t *testing.T) {
 func TestConnectionRegistrationRace(t *testing.T) {
 	hub := setupTestHub(t)
 
-	const testSKI = "test-ski"
+	const testSKI = "testski"
 	const iterations = 1000
 
 	successfulRegistrations := int64(0)
@@ -101,7 +101,7 @@ func TestConnectionRegistrationRace(t *testing.T) {
 			defer wg.Done()
 
 			// Simulate the pattern from HandleConnectionClosed
-			existingConn := hub.connectionForSKI(testSKI)
+			existingConn := hub.connectionForService(api.NewServiceDetails(testSKI, "", ""))
 			if existingConn == conn1 {
 				// Small delay to increase race probability
 				time.Sleep(time.Microsecond)
@@ -127,7 +127,7 @@ func TestConnectionRegistrationRace(t *testing.T) {
 		wg.Wait()
 
 		// Verify final state
-		finalConn := hub.connectionForSKI(testSKI)
+		finalConn := hub.connectionForService(api.NewServiceDetails(testSKI, "", ""))
 
 		// With the race condition, we might have:
 		// 1. No connection (conn1 deleted, conn2 not registered due to timing)
@@ -157,7 +157,7 @@ func TestConnectionRegistrationRace(t *testing.T) {
 func TestAtomicUnregisterIfMatch(t *testing.T) {
 	hub := setupTestHub(t)
 
-	const testSKI = "test-ski"
+	const testSKI = "testski"
 	const iterations = 1000
 
 	for i := 0; i < iterations; i++ {
@@ -198,7 +198,7 @@ func TestAtomicUnregisterIfMatch(t *testing.T) {
 		wg.Wait()
 
 		// Verify final state is consistent
-		finalConn := hub.connectionForSKI(testSKI)
+		finalConn := hub.connectionForService(api.NewServiceDetails(testSKI, "", ""))
 
 		// With atomic operations, we should have either:
 		// 1. conn2 (if unregister succeeded and register happened after)
@@ -233,7 +233,7 @@ func TestHubStressWithAllOperations(t *testing.T) {
 	skis := make([]string, numSKIs)
 
 	for i := 0; i < numSKIs; i++ {
-		ski := string(rune('a'+i)) + "-ski"
+		ski := string(rune('a'+i)) + "ski"
 		skis[i] = ski
 
 		conn := mocks.NewShipConnectionInterface(t)
@@ -311,7 +311,7 @@ func TestHubStressWithAllOperations(t *testing.T) {
 				default:
 					idx := workerID % numSKIs
 					monitorOperation(func() {
-						_ = hub.connectionForSKI(skis[idx])
+						_ = hub.connectionForService(api.NewServiceDetails(skis[idx], "", ""))
 					}, &lookups)
 					time.Sleep(time.Microsecond * 50)
 				}

@@ -147,7 +147,7 @@ func TestInitateConnectionBasics(t *testing.T) {
 
 		service := api.NewServiceDetails("unpairedski", "", "")
 		entry := &api.MdnsEntry{
-			Identifier: "unpaired-ski",
+			Identifier: "unpairedski",
 			Host:       "localhost",
 			Port:       4729,
 		}
@@ -159,7 +159,7 @@ func TestInitateConnectionBasics(t *testing.T) {
 	t.Run("hostname_connection", func(t *testing.T) {
 		hub := setupTestHubForTimer(t)
 
-		ski := "hostname-ski"
+		ski := "hostnameeski"
 		service := api.NewServiceDetails(ski, "", "")
 		service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 
@@ -176,7 +176,7 @@ func TestInitateConnectionBasics(t *testing.T) {
 	t.Run("ipv4_addresses", func(t *testing.T) {
 		hub := setupTestHubForTimer(t)
 
-		ski := "ipv4-ski"
+		ski := "ipv4ski"
 		service := api.NewServiceDetails(ski, "", "")
 		service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 
@@ -196,7 +196,7 @@ func TestInitateConnectionBasics(t *testing.T) {
 	t.Run("mixed_ipv4_ipv6", func(t *testing.T) {
 		hub := setupTestHubForTimer(t)
 
-		ski := "mixed-ski"
+		ski := "mixedski"
 		service := api.NewServiceDetails(ski, "", "")
 		service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 
@@ -275,7 +275,7 @@ func TestInitateConnectionEdgeCases(t *testing.T) {
 	t.Run("service_already_connected", func(t *testing.T) {
 		hub := setupTestHubForTimer(t)
 
-		ski := "already-connected-ski"
+		ski := "alreadyconnectedski"
 		service := api.NewServiceDetails(ski, "", "")
 
 		// Mock an existing connection
@@ -298,7 +298,7 @@ func TestInitateConnectionEdgeCases(t *testing.T) {
 	t.Run("empty_addresses", func(t *testing.T) {
 		hub := setupTestHubForTimer(t)
 
-		ski := "no-addresses-ski"
+		ski := "noaddressesski"
 		service := api.NewServiceDetails(ski, "", "")
 		service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 
@@ -315,7 +315,7 @@ func TestInitateConnectionEdgeCases(t *testing.T) {
 	t.Run("untrusted_service", func(t *testing.T) {
 		hub := setupTestHubForTimer(t)
 
-		ski := "untrusted-ski"
+		ski := "untrustedski"
 		service := api.NewServiceDetails(ski, "", "")
 		// Service is not trusted, so connection should be queued/skipped
 
@@ -334,12 +334,12 @@ func TestInitateConnectionEdgeCases(t *testing.T) {
 func TestConnectionForSKI(t *testing.T) {
 	hub := setupTestHubForTimer(t)
 
-	ski := "lookup-ski"
+	ski := "lookupski"
 	mockConn := mocks.NewShipConnectionInterface(t)
 	mockConn.EXPECT().RemoteSKI().Return(ski).Maybe()
 
 	// Not found initially
-	conn := hub.connectionForSKI(ski)
+	conn := hub.connectionForService(api.NewServiceDetails(ski, "", ""))
 	assert.Nil(t, conn)
 
 	// Add connection
@@ -348,7 +348,7 @@ func TestConnectionForSKI(t *testing.T) {
 	hub.muxCon.Unlock()
 
 	// Found
-	conn = hub.connectionForSKI(ski)
+	conn = hub.connectionForService(api.NewServiceDetails(ski, "", ""))
 	assert.Equal(t, mockConn, conn)
 }
 
@@ -356,7 +356,7 @@ func TestConnectionForSKI(t *testing.T) {
 func TestUnregisterConnectionIfMatchUnit(t *testing.T) {
 	hub := setupTestHubForTimer(t)
 
-	ski := "unregister-ski"
+	ski := "unregisterski"
 	mockConn1 := mocks.NewShipConnectionInterface(t)
 	mockConn2 := mocks.NewShipConnectionInterface(t)
 
@@ -370,7 +370,7 @@ func TestUnregisterConnectionIfMatchUnit(t *testing.T) {
 	assert.True(t, success)
 
 	// Verify removed
-	assert.Nil(t, hub.connectionForSKI(ski))
+	assert.Nil(t, hub.connectionForService(api.NewServiceDetails(ski, "", "")))
 
 	// Add new connection
 	hub.muxCon.Lock()
@@ -382,7 +382,7 @@ func TestUnregisterConnectionIfMatchUnit(t *testing.T) {
 	assert.False(t, success)
 
 	// Original connection still there
-	assert.Equal(t, mockConn1, hub.connectionForSKI(ski))
+	assert.Equal(t, mockConn1, hub.connectionForService(api.NewServiceDetails(ski, "", "")))
 
 	// Try to unregister non-existent
 	success = hub.UnregisterConnectionIfMatch("non-existent", mockConn1)
@@ -444,7 +444,7 @@ func TestCoordinateConnectionInitiationsBasics(t *testing.T) {
 	t.Run("queued_connection", func(t *testing.T) {
 		hub := setupTestHubForTimer(t)
 
-		ski := "queued-ski"
+		ski := "queuedski"
 		service := api.NewServiceDetails(ski, "", "")
 		service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateQueued, nil))
 
@@ -466,7 +466,7 @@ func TestPrepareConnectionInitiationBasics(t *testing.T) {
 	t.Run("already_connected", func(t *testing.T) {
 		hub := setupTestHubForTimer(t)
 
-		ski := "connected-ski"
+		ski := "connectedski"
 		mockConn := mocks.NewShipConnectionInterface(t)
 		hub.muxCon.Lock()
 		hub.connections[ski] = mockConn
@@ -484,7 +484,7 @@ func TestPrepareConnectionInitiationBasics(t *testing.T) {
 	t.Run("not_paired_not_queued", func(t *testing.T) {
 		hub := setupTestHubForTimer(t)
 
-		ski := "unpaired-ski"
+		ski := "unpairedski"
 		hub.muxConAttempt.Lock()
 		hub.connectionAttemptCounter[ski] = 0
 		hub.muxConAttempt.Unlock()
@@ -503,7 +503,7 @@ func TestPrepareConnectionInitiationBasics(t *testing.T) {
 func TestCancelConnectionDelayTimer(t *testing.T) {
 	hub := setupTestHubForTimer(t)
 
-	ski := "cancel-timer-ski"
+	ski := "canceltimerski"
 
 	// Cancel non-existent timer (should not panic)
 	hub.cancelConnectionDelayTimer(ski)

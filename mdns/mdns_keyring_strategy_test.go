@@ -53,7 +53,7 @@ func (s *MdnsKeyingStrategySuite) AfterTest(suiteName, testName string) {
 }
 
 // createValidShipMdnsEntry creates a valid SHIP mDNS entry for testing
-func (s *MdnsKeyingStrategySuite) createValidShipMdnsEntry(serviceName, ski, identifier, brand, model, serial string, port int, addresses []net.IP) map[string]string {
+func (s *MdnsKeyingStrategySuite) createValidShipMdnsEntry(_, ski, identifier, brand, model, serial string, _ int, _ []net.IP) map[string]string {
 	return map[string]string{
 		"txtvers":  "1",
 		"id":       identifier,

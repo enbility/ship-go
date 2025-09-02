@@ -229,3 +229,56 @@ func (s *ServiceDetailsSuite) TestServiceDetails_PairingType_AtomicOperations() 
 	// Final verification
 	assert.Equal(s.T(), PairingTypeDefault, service.PairingType())
 }
+
+// Step 1: Conversion methods test - RED phase (test first)
+func (s *ServiceDetailsSuite) TestServiceDetails_ToServiceIdentity() {
+	// Test: Convert ServiceDetails to ServiceIdentity
+	details := NewServiceDetails("convert-ski", "convert-fingerprint", "convert-shipid")
+	details.SetPairingType(PairingTypeAddCu)
+	details.SetIPv4("192.168.1.100")
+
+	// Convert to ServiceIdentity
+	identity := details.ToServiceIdentity()
+
+	// Should have same identity data
+	assert.Equal(s.T(), details.SKI(), identity.SKI)
+	assert.Equal(s.T(), details.Fingerprint(), identity.Fingerprint)
+	assert.Equal(s.T(), details.ShipID(), identity.ShipID)
+	assert.Equal(s.T(), details.PairingType(), identity.PairingType)
+	assert.Equal(s.T(), details.IPv4(), identity.IPv4)
+
+	// Should be independent (modifying identity doesn't affect original)
+	identity.SKI = "modified-ski"
+	assert.NotEqual(s.T(), identity.SKI, details.SKI())
+}
+
+
+func (s *ServiceDetailsSuite) TestSKIToServiceIdentity() {
+	// Test: Minimal ServiceIdentity from SKI only
+	ski := "minimal-ski"
+
+	identity := SKIToServiceIdentity(ski)
+
+	assert.Equal(s.T(), ski, identity.SKI)
+	assert.Empty(s.T(), identity.Fingerprint)
+	assert.Empty(s.T(), identity.ShipID)
+	assert.Equal(s.T(), PairingTypeDefault, identity.PairingType)
+	assert.Empty(s.T(), identity.IPv4)
+}
+
+func (s *ServiceDetailsSuite) TestServiceDetails_RoundTripConversion() {
+	// Test: ServiceDetails → ServiceIdentity → ServiceDetails preserves data
+	original := NewServiceDetails("roundtrip-ski", "roundtrip-fingerprint", "roundtrip-shipid")
+	original.SetPairingType(PairingTypeAddCu)
+	original.SetIPv4("203.0.113.1")
+
+	// Test round-trip conversion via ToServiceIdentity
+	identity := original.ToServiceIdentity()
+	
+	// Verify identity extraction preserves data
+	assert.Equal(s.T(), original.SKI(), identity.SKI)
+	assert.Equal(s.T(), original.Fingerprint(), identity.Fingerprint)
+	assert.Equal(s.T(), original.ShipID(), identity.ShipID)
+	assert.Equal(s.T(), original.PairingType(), identity.PairingType)
+	assert.Equal(s.T(), original.IPv4(), identity.IPv4)
+}

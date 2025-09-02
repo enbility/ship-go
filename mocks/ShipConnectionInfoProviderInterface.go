@@ -321,12 +321,12 @@ func (_c *ShipConnectionInfoProviderInterface_ReportServiceShipID_Call) RunAndRe
 	return _c
 }
 
-// SetupRemoteDevice provides a mock function for the type ShipConnectionInfoProviderInterface
-func (_mock *ShipConnectionInfoProviderInterface) SetupRemoteDevice(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
+// SetupRemoteService provides a mock function for the type ShipConnectionInfoProviderInterface
+func (_mock *ShipConnectionInfoProviderInterface) SetupRemoteService(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface {
 	ret := _mock.Called(ski, writeI)
 
 	if len(ret) == 0 {
-		panic("no return value specified for SetupRemoteDevice")
+		panic("no return value specified for SetupRemoteService")
 	}
 
 	var r0 api.ShipConnectionDataReaderInterface
@@ -340,19 +340,19 @@ func (_mock *ShipConnectionInfoProviderInterface) SetupRemoteDevice(ski string, 
 	return r0
 }
 
-// ShipConnectionInfoProviderInterface_SetupRemoteDevice_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetupRemoteDevice'
-type ShipConnectionInfoProviderInterface_SetupRemoteDevice_Call struct {
+// ShipConnectionInfoProviderInterface_SetupRemoteService_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetupRemoteService'
+type ShipConnectionInfoProviderInterface_SetupRemoteService_Call struct {
 	*mock.Call
 }
 
-// SetupRemoteDevice is a helper method to define mock.On call
+// SetupRemoteService is a helper method to define mock.On call
 //   - ski string
 //   - writeI api.ShipConnectionDataWriterInterface
-func (_e *ShipConnectionInfoProviderInterface_Expecter) SetupRemoteDevice(ski interface{}, writeI interface{}) *ShipConnectionInfoProviderInterface_SetupRemoteDevice_Call {
-	return &ShipConnectionInfoProviderInterface_SetupRemoteDevice_Call{Call: _e.mock.On("SetupRemoteDevice", ski, writeI)}
+func (_e *ShipConnectionInfoProviderInterface_Expecter) SetupRemoteService(ski interface{}, writeI interface{}) *ShipConnectionInfoProviderInterface_SetupRemoteService_Call {
+	return &ShipConnectionInfoProviderInterface_SetupRemoteService_Call{Call: _e.mock.On("SetupRemoteService", ski, writeI)}
 }
 
-func (_c *ShipConnectionInfoProviderInterface_SetupRemoteDevice_Call) Run(run func(ski string, writeI api.ShipConnectionDataWriterInterface)) *ShipConnectionInfoProviderInterface_SetupRemoteDevice_Call {
+func (_c *ShipConnectionInfoProviderInterface_SetupRemoteService_Call) Run(run func(ski string, writeI api.ShipConnectionDataWriterInterface)) *ShipConnectionInfoProviderInterface_SetupRemoteService_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 string
 		if args[0] != nil {
@@ -370,12 +370,12 @@ func (_c *ShipConnectionInfoProviderInterface_SetupRemoteDevice_Call) Run(run fu
 	return _c
 }
 
-func (_c *ShipConnectionInfoProviderInterface_SetupRemoteDevice_Call) Return(shipConnectionDataReaderInterface api.ShipConnectionDataReaderInterface) *ShipConnectionInfoProviderInterface_SetupRemoteDevice_Call {
+func (_c *ShipConnectionInfoProviderInterface_SetupRemoteService_Call) Return(shipConnectionDataReaderInterface api.ShipConnectionDataReaderInterface) *ShipConnectionInfoProviderInterface_SetupRemoteService_Call {
 	_c.Call.Return(shipConnectionDataReaderInterface)
 	return _c
 }
 
-func (_c *ShipConnectionInfoProviderInterface_SetupRemoteDevice_Call) RunAndReturn(run func(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface) *ShipConnectionInfoProviderInterface_SetupRemoteDevice_Call {
+func (_c *ShipConnectionInfoProviderInterface_SetupRemoteService_Call) RunAndReturn(run func(ski string, writeI api.ShipConnectionDataWriterInterface) api.ShipConnectionDataReaderInterface) *ShipConnectionInfoProviderInterface_SetupRemoteService_Call {
 	_c.Call.Return(run)
 	return _c
 }
