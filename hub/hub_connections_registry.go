@@ -44,15 +44,16 @@ func (h *Hub) keepThisConnection(conn *websocket.Conn, incomingRequest bool, rem
 		return true
 	}
 
-	// Log the double connection scenario for diagnostics
+	// Log the double connection scenario for diagnostics  
 	logging.Log().Debug("double connection detected with remoteSKI", remoteSKI,
 		"incoming", incomingRequest)
 
 	keep := false
+	localSKI := h.localService.SKI()
 	if incomingRequest {
-		keep = remoteSKI > h.localService.SKI()
+		keep = remoteSKI > localSKI
 	} else {
-		keep = h.localService.SKI() > remoteSKI
+		keep = localSKI > remoteSKI
 	}
 
 	if keep {

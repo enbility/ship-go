@@ -141,11 +141,6 @@ func (h *Hub) RegisterRemoteService(identity api.ServiceIdentity) {
 		return
 	}
 
-	// locally initiated
-	service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
-
-	h.hubReader.ServicePairingDetailUpdate(identity, service.ConnectionStateDetail())
-
 	h.mdns.RequestMdnsEntries()
 }
 

@@ -555,18 +555,6 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ShouldAttemptConnection() {
 			expectAttempt: true,
 		},
 		{
-			name: "queued_service",
-			setupService: func() *api.ServiceDetails {
-				// Use ServiceForIdentifier which handles normalization and creation
-				service := api.NewServiceDetails("queuedski", "", "")
-				service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
-				success := s.hub.addService(service)
-				assert.True(s.T(), success)
-				return service
-			},
-			expectAttempt: true,
-		},
-		{
 			name: "unpaired_unqueued_service",
 			setupService: func() *api.ServiceDetails {
 				// Use ServiceForIdentifier which handles normalization and creation

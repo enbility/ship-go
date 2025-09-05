@@ -32,9 +32,7 @@ func (h *Hub) ReportMdnsEntries(entries map[string]*api.MdnsEntry, newEntries bo
 			continue
 		}
 
-		if !h.IsRemoteServiceForSKIPaired(entry.Ski) &&
-			service.Trusted() &&
-			service.ConnectionStateDetail().State() != api.ConnectionStateQueued {
+		if !h.IsRemoteServiceForSKIPaired(entry.Ski) && service.Trusted() {
 			continue
 		}
 

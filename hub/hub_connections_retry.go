@@ -22,10 +22,6 @@ func (h *Hub) coordinateConnectionInitations(ski string, entry *api.MdnsEntry) {
 	if service == nil {
 		return
 	}
-	if service.ConnectionStateDetail().State() == api.ConnectionStateQueued {
-		go h.prepareConnectionInitation(ski, counter, entry)
-		return
-	}
 
 	logging.Log().Debugf("delaying connection to %s by %s to minimize double connection probability", ski, duration)
 
@@ -41,8 +37,6 @@ func (h *Hub) coordinateConnectionInitations(ski string, entry *api.MdnsEntry) {
 // prepareConnectionInitation is invoked by coordinateConnectionInitations either with a delay or directly
 // when initiating a pairing process
 func (h *Hub) prepareConnectionInitation(ski string, counter int, entry *api.MdnsEntry) {
-	h.setConnectionAttemptRunning(ski, false)
-
 	// check if the current counter is still the same, otherwise this counter is irrelevant
 	currentCounter, exists := h.getCurrentConnectionAttemptCounter(ski)
 	if !exists || currentCounter != counter {
@@ -56,8 +50,7 @@ func (h *Hub) prepareConnectionInitation(ski string, counter int, entry *api.Mdn
 		return
 	}
 
-	pairingState := service.ConnectionStateDetail().State()
-	if !h.IsRemoteServiceForSKIPaired(ski) && pairingState != api.ConnectionStateQueued {
+	if !h.IsRemoteServiceForSKIPaired(ski) {
 		return
 	}
 
