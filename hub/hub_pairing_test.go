@@ -969,7 +969,7 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_NoReplacementSameFinger
 }
 
 func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_AddCuTimerInteraction() {
-	// Test interaction with AddCu replacement timer
+	// Test that pairing announcements are queued when replacement timer is running (security fix)
 
 	// Setup - Create existing AddCu and simulate timer
 	existingAddCu := api.NewServiceDetails("existingski", s.otherFingerprint, s.otherShipID)
@@ -983,13 +983,21 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_AddCuTimerInteraction()
 		// Timer callback - in real scenario this would handle expiration
 	})
 
-	// Act - New device pairs
+	// Act - New device pairs while replacement timer is running
 	s.hub.OnPairingSuccess(s.testShipID, s.testFingerprint)
 
-	// Assert - Timer should be stopped and old service removed
+	// Assert - SECURITY FIX: Pairing should be queued, not processed immediately
+	// No new service should be created while replacement timer is running
 	newService := s.hub.ServiceForIdentifier("", s.testFingerprint)
-	require.NotNil(s.T(), newService, "New service should be created")
-	assert.True(s.T(), newService.Trusted(), "New service should be trusted")
+	assert.Nil(s.T(), newService, "New service should NOT be created while replacement timer is running")
+	
+	// Existing service should remain unchanged
+	existingService := s.hub.ServiceForIdentifier("existingski", s.otherFingerprint)
+	require.NotNil(s.T(), existingService, "Existing service should still exist")
+	assert.True(s.T(), existingService.Trusted(), "Existing service should remain trusted")
+	
+	// Timer should still be tracking the old device
+	assert.True(s.T(), s.hub.addCuReplacementTracker.IsTracking(s.otherShipID), "Replacement timer should still be running")
 }
 
 // Trust Establishment Flow Tests (5 test cases)
@@ -2542,9 +2550,10 @@ func (suite *EnablePairingListenerTestSuite) TestEnablePairingListener_ThreadSaf
 
 	suite.sut.pairingService = suite.mockPairingService
 
-	// Setup expectations for multiple calls
-	suite.mockPairingService.EXPECT().CreateListener(suite.localService).Return(suite.mockListener).Times(3)
-	suite.mockListener.EXPECT().StartListening(mock.Anything, suite.validSecret).Return(nil).Times(3)
+	// Setup expectations for listener reuse behavior:
+	// First call creates listener, subsequent calls reuse it
+	suite.mockPairingService.EXPECT().CreateListener(suite.localService).Return(suite.mockListener).Times(1) // Only first call creates
+	suite.mockListener.EXPECT().StartListening(mock.Anything, suite.validSecret).Return(nil).Times(3)        // All calls start listening
 
 	// Act: Call enablePairingListener from multiple goroutines
 	var wg sync.WaitGroup
@@ -2599,6 +2608,37 @@ func (suite *EnablePairingListenerTestSuite) TestEnablePairingListener_PassesCor
 	// Verify StartListening was called with correct parameters
 	assert.NotNil(suite.T(), capturedContext, "Should pass context to StartListening")
 	assert.Equal(suite.T(), suite.validSecret, capturedSecret, "Should pass config secret to StartListening")
+}
+
+func (suite *EnablePairingListenerTestSuite) TestEnablePairingListener_ReusesExistingListener() {
+	// Test that enablePairingListener reuses an existing active listener instead of creating a new one
+
+	// Setup: Configure Hub with pairing service
+	suite.sut.pairingService = suite.mockPairingService
+
+	// Pre-setup an existing listener in Hub's activePairingListener
+	suite.sut.muxPairingListener.Lock()
+	suite.sut.activePairingListener = suite.mockListener
+	suite.sut.muxPairingListener.Unlock()
+
+	// Setup expectations - NO CreateListener call should happen when reusing
+	// Only StartListening should be called on the existing listener
+	suite.mockListener.EXPECT().StartListening(mock.Anything, suite.validSecret).Return(nil).Once()
+
+	// Act
+	err := suite.sut.enablePairingListener(suite.validConfig)
+
+	// Assert
+	assert.NoError(suite.T(), err, "Should succeed when reusing existing listener")
+
+	// Verify the same listener is still stored after the call
+	suite.sut.muxPairingListener.RLock()
+	storedListener := suite.sut.activePairingListener
+	suite.sut.muxPairingListener.RUnlock()
+	assert.Equal(suite.T(), suite.mockListener, storedListener, "Should keep the same listener instance")
+
+	// Verify mock expectations - CreateListener should NOT have been called
+	// This is implicitly verified by the mock framework since we didn't set that expectation
 }
 
 func (suite *HubPairingCompositionTestSuite) TestSetPairingService() {

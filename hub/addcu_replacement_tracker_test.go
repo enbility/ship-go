@@ -265,6 +265,81 @@ func (s *AddCuReplacementTrackerSuite) TestAddCuReplacementTracker_IsTracking() 
 	})
 }
 
+func (s *AddCuReplacementTrackerSuite) TestAddCuReplacementTracker_IsInReplacementWindow() {
+	s.Run("returns true when replacement timer is active", func() {
+		s.tracker = NewAddCuReplacementTrackerWithTimeout(5 * time.Second)
+		shipID := "device-with-timer"
+
+		// Start tracking
+		s.tracker.StartTimer(shipID, func(expiredShipID string) {})
+
+		// Should return true when timer is active
+		assert.True(s.T(), s.tracker.IsInReplacementWindow())
+	})
+
+	s.Run("returns false when no replacement timer is active", func() {
+		s.tracker = NewAddCuReplacementTrackerWithTimeout(5 * time.Second)
+
+		// No timer started
+		assert.False(s.T(), s.tracker.IsInReplacementWindow())
+	})
+
+	s.Run("returns false after timer is stopped", func() {
+		s.tracker = NewAddCuReplacementTrackerWithTimeout(5 * time.Second)
+		shipID := "stopped-timer-device"
+
+		// Start and stop timer
+		s.tracker.StartTimer(shipID, func(expiredShipID string) {})
+		assert.True(s.T(), s.tracker.IsInReplacementWindow())
+		
+		s.tracker.StopTimer(shipID)
+		assert.False(s.T(), s.tracker.IsInReplacementWindow())
+	})
+
+	s.Run("returns false after timer expires", func() {
+		s.tracker = NewAddCuReplacementTrackerWithTimeout(50 * time.Millisecond)
+		shipID := "expired-timer-device"
+		timerFired := make(chan bool, 1)
+
+		// Start timer with short timeout
+		s.tracker.StartTimer(shipID, func(expiredShipID string) {
+			timerFired <- true
+		})
+
+		// Initially should be true
+		assert.True(s.T(), s.tracker.IsInReplacementWindow())
+
+		// Wait for timer to expire
+		select {
+		case <-timerFired:
+			// Timer expired successfully
+		case <-time.After(200 * time.Millisecond):
+			s.T().Fatal("Timer did not fire within expected time")
+		}
+
+		// Should now be false
+		assert.False(s.T(), s.tracker.IsInReplacementWindow())
+	})
+
+	s.Run("works correctly with device replacement scenarios", func() {
+		s.tracker = NewAddCuReplacementTrackerWithTimeout(2 * time.Second)
+		firstDevice := "first-device"
+		secondDevice := "second-device"
+
+		// Start tracking first device
+		s.tracker.StartTimer(firstDevice, func(expiredShipID string) {})
+		assert.True(s.T(), s.tracker.IsInReplacementWindow())
+
+		// Replace with second device (should still be in window)
+		s.tracker.StartTimer(secondDevice, func(expiredShipID string) {})
+		assert.True(s.T(), s.tracker.IsInReplacementWindow())
+
+		// Stop timer completely
+		s.tracker.StopTimer(secondDevice)
+		assert.False(s.T(), s.tracker.IsInReplacementWindow())
+	})
+}
+
 func (s *AddCuReplacementTrackerSuite) TestAddCuReplacementTracker_SingleDeviceConstraint() {
 	s.Run("only tracks one device at a time", func() {
 		s.tracker = NewAddCuReplacementTrackerWithTimeout(5 * time.Second)

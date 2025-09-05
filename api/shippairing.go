@@ -93,6 +93,23 @@ type PairingListenerInterface interface {
 	// GetListenerStatus returns the current status of the pairing listener.
 	// Provides information about listening activity, requests seen, and any errors.
 	GetListenerStatus() *ListenerStatus
+
+	// ProcessPendingEntries processes a batch of pairing entries that were found
+	// but not yet processed. This is typically used when reactivating after
+	// device replacement timeouts to handle existing mDNS announcements.
+	//
+	// Parameters:
+	//   - entries: Map of service names to ShipPairingTXT records to process
+	//
+	// Returns:
+	//   - error if processing fails (nil for successful processing)
+	//
+	// Behavior:
+	//   - Processes each entry through the same validation pipeline as live discovery
+	//   - Stops processing after first successful pairing (SHIP spec behavior)
+	//   - Handles invalid entries gracefully, continuing with remaining entries
+	//   - No-op if listener is not active or entries is nil/empty
+	ProcessPendingEntries(entries map[string]*ShipPairingTXT) error
 }
 
 /* Integration Interfaces */

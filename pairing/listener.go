@@ -123,6 +123,28 @@ func (l *PairingListener) GetListenerStatus() *api.ListenerStatus {
 	}
 }
 
+// ProcessPendingEntries processes a batch of pairing entries (implements PairingListenerInterface)
+func (l *PairingListener) ProcessPendingEntries(entries map[string]*api.ShipPairingTXT) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	logging.Log().Debug("Processing pending pairing entries", "count", len(entries))
+
+	for _, txtRecord := range entries {
+		// Reuse existing validation logic - this will handle all the validation,
+		// trust decisions, and listener state management
+		shouldContinue := l.handleMdnsDiscovery(txtRecord)
+		if !shouldContinue {
+			// Listener stopped (successful pairing occurred) - stop processing remaining entries
+			logging.Log().Debug("Stopping pending entry processing due to successful pairing")
+			break
+		}
+	}
+
+	return nil
+}
+
 // GetPairingServiceStatus returns current pairing service status
 func (l *PairingListener) GetPairingServiceStatus() *PairingServiceStatus {
 	l.mux.RLock()

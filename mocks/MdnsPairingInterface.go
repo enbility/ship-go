@@ -140,6 +140,61 @@ func (_c *MdnsPairingInterface_IsPairingServiceAnnounced_Call) RunAndReturn(run 
 	return _c
 }
 
+// RequestPairingEntries provides a mock function for the type MdnsPairingInterface
+func (_mock *MdnsPairingInterface) RequestPairingEntries() (map[string]*api.ShipPairingTXT, error) {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for RequestPairingEntries")
+	}
+
+	var r0 map[string]*api.ShipPairingTXT
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func() (map[string]*api.ShipPairingTXT, error)); ok {
+		return returnFunc()
+	}
+	if returnFunc, ok := ret.Get(0).(func() map[string]*api.ShipPairingTXT); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]*api.ShipPairingTXT)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func() error); ok {
+		r1 = returnFunc()
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MdnsPairingInterface_RequestPairingEntries_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RequestPairingEntries'
+type MdnsPairingInterface_RequestPairingEntries_Call struct {
+	*mock.Call
+}
+
+// RequestPairingEntries is a helper method to define mock.On call
+func (_e *MdnsPairingInterface_Expecter) RequestPairingEntries() *MdnsPairingInterface_RequestPairingEntries_Call {
+	return &MdnsPairingInterface_RequestPairingEntries_Call{Call: _e.mock.On("RequestPairingEntries")}
+}
+
+func (_c *MdnsPairingInterface_RequestPairingEntries_Call) Run(run func()) *MdnsPairingInterface_RequestPairingEntries_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MdnsPairingInterface_RequestPairingEntries_Call) Return(stringToShipPairingTXT map[string]*api.ShipPairingTXT, err error) *MdnsPairingInterface_RequestPairingEntries_Call {
+	_c.Call.Return(stringToShipPairingTXT, err)
+	return _c
+}
+
+func (_c *MdnsPairingInterface_RequestPairingEntries_Call) RunAndReturn(run func() (map[string]*api.ShipPairingTXT, error)) *MdnsPairingInterface_RequestPairingEntries_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // SearchPairingServices provides a mock function for the type MdnsPairingInterface
 func (_mock *MdnsPairingInterface) SearchPairingServices(callback func(*api.ShipPairingTXT) bool) error {
 	ret := _mock.Called(callback)

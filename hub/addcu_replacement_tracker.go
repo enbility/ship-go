@@ -176,6 +176,25 @@ func (t *AddCuReplacementTracker) IsTracking(shipID string) bool {
 	return t.pairedDeviceShipID == shipID && t.pairedDeviceShipID != ""
 }
 
+// IsInReplacementWindow returns true if any AddCu device is currently being tracked.
+//
+// This method checks if there is an active replacement timer running, which indicates
+// that SHIP pairing announcements should be ignored during the 15-minute window.
+// When the timer expires, queued announcements will be processed via mDNS polling.
+//
+// Returns:
+// - true if there is an active replacement timer (announcements should be ignored)
+// - false if no replacement timer is active (process announcements normally)
+//
+// Thread-safety: This method is thread-safe and can be called concurrently.
+func (t *AddCuReplacementTracker) IsInReplacementWindow() bool {
+	t.mutex.RLock()
+	defer t.mutex.RUnlock()
+
+	// Check if we have an active timer for any device
+	return t.pairedDeviceShipID != "" && t.timer != nil
+}
+
 // NewAddCuReplacementTracker creates a tracker with default 15-minute timeout.
 //
 // The 15-minute timeout is specified in the SHIP Pairing Service specification

@@ -283,10 +283,23 @@ func (h *Hub) enablePairingListener(config *api.PairingConfig) error {
 		return fmt.Errorf("pairing secret required for autonomous listener")
 	}
 
-	// Create listener through pairing service
-	listener := h.pairingService.CreateListener(h.localService)
-	if listener == nil {
-		return fmt.Errorf("failed to create pairing listener")
+	// Thread-safe check and create listener (double-checked locking pattern)
+	h.muxPairingListener.Lock()
+	defer h.muxPairingListener.Unlock()
+
+	var listener api.PairingListenerInterface
+	if h.activePairingListener != nil {
+		// Reuse existing listener
+		listener = h.activePairingListener
+	} else {
+		// Create new listener through pairing service
+		listener = h.pairingService.CreateListener(h.localService)
+		if listener == nil {
+			return fmt.Errorf("failed to create pairing listener")
+		}
+
+		// Store the listener for future reuse
+		h.activePairingListener = listener
 	}
 
 	// Start listening automatically with configured secret
@@ -462,6 +475,13 @@ func (h *Hub) OnPairingSuccess(remoteShipID, remoteFingerprint string) {
 	existingAddCuFingerprint, existingAddCuShipID := h.HasTrustedAddCuDevice()
 
 	if existingAddCuShipID != "" && existingAddCuFingerprint != remoteFingerprint {
+		// Check if replacement timer is running
+		if h.addCuReplacementTracker.IsInReplacementWindow() {
+			// Timer is running - ignore this announcement (will be processed when timer expires via mDNS polling)
+			logging.Log().Debug("Ignoring pairing announcement during replacement window",
+				"existingShipID", existingAddCuShipID, "newShipID", remoteShipID)
+			return
+		}
 		replacedService = h.ServiceForIdentifier("", existingAddCuFingerprint)
 		// Only replace if the fingerprints are different (different devices)
 		if replacedService != nil && replacedService.ShipID() != remoteShipID {

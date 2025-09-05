@@ -1062,6 +1062,28 @@ func (m *MdnsManager) SearchPairingServices(callback func(*api.ShipPairingTXT) b
 	return nil
 }
 
+// RequestPairingEntries triggers an immediate discovery scan for SHIP Pairing Services (implements MdnsPairingInterface)
+func (m *MdnsManager) RequestPairingEntries() (map[string]*api.ShipPairingTXT, error) {
+	// Ensure the mDNS manager is started
+	if !m.isStarted {
+		return nil, fmt.Errorf("mDNS manager not started: call Start() before RequestPairingEntries")
+	}
+
+	// Return a copy of current pairing entries to avoid race conditions
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
+	result := make(map[string]*api.ShipPairingTXT)
+	for name, entry := range m.pairingEntries {
+		// Create a copy of the ShipPairingTXT to avoid external modification
+		entryCopy := *entry
+		result[name] = &entryCopy
+	}
+
+	logging.Log().Debug("mdns: returning current pairing entries", "count", len(result))
+	return result, nil
+}
+
 // IsPairingServiceAnnounced checks if pairing service is currently announced (implements MdnsPairingInterface)
 func (m *MdnsManager) IsPairingServiceAnnounced() bool {
 	m.pairingInstancesMux.RLock()

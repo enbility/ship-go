@@ -831,6 +831,333 @@ func (suite *ListenerTestSuite) TestAddCuDeviceReplacement_NonAddCuType_ShouldNo
 	assert.True(suite.T(), status.Active, "listener should continue after validation failure")
 }
 
+// ProcessPendingEntries TDD Tests
+
+func (suite *ListenerTestSuite) TestProcessPendingEntries_EmptyEntries_ShouldHandleGracefully() {
+	// Arrange - empty entries map
+	emptyEntries := make(map[string]*api.ShipPairingTXT)
+
+	// Start listener for state consistency
+	ctx := context.Background()
+	suite.mockMdns.EXPECT().SearchPairingServices(mock.AnythingOfType("func(*api.ShipPairingTXT) bool")).Return(nil).Once()
+	err := suite.sut.StartListening(ctx, suite.testSecret)
+	assert.NoError(suite.T(), err)
+
+	// No mock expectations should be set - empty map should not trigger any processing
+
+	// Act
+	result := suite.sut.ProcessPendingEntries(emptyEntries)
+
+	// Assert
+	assert.NoError(suite.T(), result, "empty entries should be handled gracefully")
+
+	// Verify listener remains active
+	status := suite.sut.GetListenerStatus()
+	assert.True(suite.T(), status.Active, "listener should remain active after processing empty entries")
+}
+
+func (suite *ListenerTestSuite) TestProcessPendingEntries_NilEntries_ShouldHandleGracefully() {
+	// Arrange - nil entries
+	var nilEntries map[string]*api.ShipPairingTXT
+
+	// Start listener for state consistency
+	ctx := context.Background()
+	suite.mockMdns.EXPECT().SearchPairingServices(mock.AnythingOfType("func(*api.ShipPairingTXT) bool")).Return(nil).Once()
+	err := suite.sut.StartListening(ctx, suite.testSecret)
+	assert.NoError(suite.T(), err)
+
+	// No mock expectations should be set - nil should not trigger any processing
+
+	// Act
+	result := suite.sut.ProcessPendingEntries(nilEntries)
+
+	// Assert
+	assert.NoError(suite.T(), result, "nil entries should be handled gracefully")
+
+	// Verify listener remains active
+	status := suite.sut.GetListenerStatus()
+	assert.True(suite.T(), status.Active, "listener should remain active after processing nil entries")
+}
+
+func (suite *ListenerTestSuite) TestProcessPendingEntries_SingleValidRecord_ShouldProcessSuccessfully() {
+	// Arrange
+	txtRecord := suite.createValidTestTXTRecord()
+	txtRecord.ForId = suite.localService.ShipID() // Ensure it's for our device
+
+	entries := map[string]*api.ShipPairingTXT{
+		"test-service": txtRecord,
+	}
+
+	// Start listener
+	ctx := context.Background()
+	suite.mockMdns.EXPECT().SearchPairingServices(mock.AnythingOfType("func(*api.ShipPairingTXT) bool")).Return(nil).Once()
+	err := suite.sut.StartListening(ctx, suite.testSecret)
+	assert.NoError(suite.T(), err)
+
+	// Mock successful validation chain
+	suite.mockHub.EXPECT().
+		HasTrustedAddCuDevice().
+		Return("", "").
+		Maybe()
+
+	expectedDigestBytes, _ := hexToBytes(txtRecord.Digest)
+	suite.mockCrypto.EXPECT().
+		ValidateDigest(
+			suite.testSecret,
+			mock.MatchedBy(func(params *api.HMACParams) bool {
+				return params.Algorithm == api.AlgorithmHMACSHA256
+			}),
+			expectedDigestBytes).
+		Return(nil).
+		Once()
+
+	suite.mockHistory.EXPECT().
+		HasSeenDigest(api.AlgorithmHMACSHA256, txtRecord.Digest).
+		Return(false).
+		Once()
+
+	suite.mockHistory.EXPECT().
+		RecordPairing(api.AlgorithmHMACSHA256, txtRecord.Digest).
+		Return().
+		Maybe()
+
+	suite.mockHub.EXPECT().
+		OnPairingSuccess(txtRecord.TrustId, txtRecord.TrustPar).
+		Return().
+		Maybe()
+
+	// Act
+	result := suite.sut.ProcessPendingEntries(entries)
+
+	// Assert
+	assert.NoError(suite.T(), result, "valid entry should be processed successfully")
+
+	// Verify listener stops after successful pairing (SHIP spec behavior)
+	status := suite.sut.GetListenerStatus()
+	assert.False(suite.T(), status.Active, "listener should stop after successful pairing")
+	assert.Equal(suite.T(), 1, status.RequestsSeen, "should have processed one request")
+}
+
+func (suite *ListenerTestSuite) TestProcessPendingEntries_MultipleValidRecords_ShouldProcessUntilSuccess() {
+	// Arrange
+	txtRecord1 := suite.createValidTestTXTRecord()
+	txtRecord1.ForId = suite.localService.ShipID()
+	txtRecord1.TrustId = "device1"
+
+	txtRecord2 := suite.createValidTestTXTRecord()
+	txtRecord2.ForId = suite.localService.ShipID()
+	txtRecord2.TrustId = "device2"
+	txtRecord2.Digest = "DIFFERENT_DIGEST_FOR_SECOND_DEVICE"
+
+	entries := map[string]*api.ShipPairingTXT{
+		"service1": txtRecord1,
+		"service2": txtRecord2,
+	}
+
+	// Start listener
+	ctx := context.Background()
+	suite.mockMdns.EXPECT().SearchPairingServices(mock.AnythingOfType("func(*api.ShipPairingTXT) bool")).Return(nil).Once()
+	err := suite.sut.StartListening(ctx, suite.testSecret)
+	assert.NoError(suite.T(), err)
+
+	// Mock successful validation for first entry (processing should stop after this)
+	suite.mockHub.EXPECT().
+		HasTrustedAddCuDevice().
+		Return("", "").
+		Maybe()
+
+	suite.mockCrypto.EXPECT().
+		ValidateDigest(suite.testSecret, mock.Anything, mock.Anything).
+		Return(nil).
+		Once() // Should only process one entry before stopping
+
+	suite.mockHistory.EXPECT().
+		HasSeenDigest(mock.Anything, mock.Anything).
+		Return(false).
+		Once()
+
+	suite.mockHistory.EXPECT().
+		RecordPairing(api.AlgorithmHMACSHA256, mock.Anything).
+		Return().
+		Maybe()
+
+	suite.mockHub.EXPECT().
+		OnPairingSuccess(mock.Anything, mock.Anything).
+		Return().
+		Maybe()
+
+	// Act
+	result := suite.sut.ProcessPendingEntries(entries)
+
+	// Assert
+	assert.NoError(suite.T(), result, "multiple entries should be processed until first success")
+
+	// Verify listener stops after first successful pairing
+	status := suite.sut.GetListenerStatus()
+	assert.False(suite.T(), status.Active, "listener should stop after first successful pairing")
+}
+
+func (suite *ListenerTestSuite) TestProcessPendingEntries_MixValidInvalidRecords_ShouldHandleGracefully() {
+	// Arrange
+	validRecord := suite.createValidTestTXTRecord()
+	validRecord.ForId = suite.localService.ShipID()
+
+	invalidRecord := suite.createValidTestTXTRecord()
+	invalidRecord.ForId = "different-device" // Not for our device
+	invalidRecord.TrustId = "invalid-device"
+
+	entries := map[string]*api.ShipPairingTXT{
+		"valid":   validRecord,
+		"invalid": invalidRecord,
+	}
+
+	// Start listener
+	ctx := context.Background()
+	suite.mockMdns.EXPECT().SearchPairingServices(mock.AnythingOfType("func(*api.ShipPairingTXT) bool")).Return(nil).Once()
+	err := suite.sut.StartListening(ctx, suite.testSecret)
+	assert.NoError(suite.T(), err)
+
+	// Mock successful validation for valid record
+	suite.mockHub.EXPECT().
+		HasTrustedAddCuDevice().
+		Return("", "").
+		Maybe()
+
+	validRecordDigestBytes, _ := hexToBytes(validRecord.Digest)
+	suite.mockCrypto.EXPECT().
+		ValidateDigest(suite.testSecret, mock.Anything, validRecordDigestBytes).
+		Return(nil).
+		Once()
+
+	suite.mockHistory.EXPECT().
+		HasSeenDigest(api.AlgorithmHMACSHA256, validRecord.Digest).
+		Return(false).
+		Once()
+
+	suite.mockHistory.EXPECT().
+		RecordPairing(api.AlgorithmHMACSHA256, validRecord.Digest).
+		Return().
+		Maybe()
+
+	suite.mockHub.EXPECT().
+		OnPairingSuccess(validRecord.TrustId, validRecord.TrustPar).
+		Return().
+		Maybe()
+
+	// Act
+	result := suite.sut.ProcessPendingEntries(entries)
+
+	// Assert
+	assert.NoError(suite.T(), result, "mixed valid/invalid entries should be handled gracefully")
+
+	// Verify successful pairing occurred
+	status := suite.sut.GetListenerStatus()
+	assert.False(suite.T(), status.Active, "listener should stop after valid pairing despite invalid entries")
+}
+
+func (suite *ListenerTestSuite) TestProcessPendingEntries_AllInvalidRecords_ShouldContinueListening() {
+	// Arrange
+	invalidRecord1 := suite.createValidTestTXTRecord()
+	invalidRecord1.ForId = "different-device-1"
+
+	invalidRecord2 := suite.createValidTestTXTRecord()
+	invalidRecord2.ForId = "different-device-2"
+
+	entries := map[string]*api.ShipPairingTXT{
+		"invalid1": invalidRecord1,
+		"invalid2": invalidRecord2,
+	}
+
+	// Start listener
+	ctx := context.Background()
+	suite.mockMdns.EXPECT().SearchPairingServices(mock.AnythingOfType("func(*api.ShipPairingTXT) bool")).Return(nil).Once()
+	err := suite.sut.StartListening(ctx, suite.testSecret)
+	assert.NoError(suite.T(), err)
+
+	// No validation mocks should be called since records are not for our device
+
+	// Act
+	result := suite.sut.ProcessPendingEntries(entries)
+
+	// Assert
+	assert.NoError(suite.T(), result, "all invalid entries should be handled gracefully")
+
+	// Verify listener continues listening when no valid pairings occur
+	status := suite.sut.GetListenerStatus()
+	assert.True(suite.T(), status.Active, "listener should continue when all entries are invalid")
+}
+
+func (suite *ListenerTestSuite) TestProcessPendingEntries_NotListening_ShouldNoOp() {
+	// Arrange - don't start listener
+	txtRecord := suite.createValidTestTXTRecord()
+	entries := map[string]*api.ShipPairingTXT{
+		"test": txtRecord,
+	}
+
+	// No mock expectations should be set - not listening should prevent processing
+
+	// Act
+	result := suite.sut.ProcessPendingEntries(entries)
+
+	// Assert
+	assert.NoError(suite.T(), result, "should handle gracefully when not listening")
+
+	// Verify no processing occurred
+	status := suite.sut.GetListenerStatus()
+	assert.False(suite.T(), status.Active, "listener should not be active")
+	assert.Equal(suite.T(), 0, status.RequestsSeen, "no requests should have been processed")
+}
+
+func (suite *ListenerTestSuite) TestProcessPendingEntries_ReplayAttack_ShouldDetectAndReject() {
+	// Arrange
+	txtRecord := suite.createValidTestTXTRecord()
+	txtRecord.ForId = suite.localService.ShipID()
+
+	entries := map[string]*api.ShipPairingTXT{
+		"replay": txtRecord,
+	}
+
+	// Start listener
+	ctx := context.Background()
+	suite.mockMdns.EXPECT().SearchPairingServices(mock.AnythingOfType("func(*api.ShipPairingTXT) bool")).Return(nil).Once()
+	err := suite.sut.StartListening(ctx, suite.testSecret)
+	assert.NoError(suite.T(), err)
+
+	// Mock validation chain - detect replay attack
+	suite.mockHub.EXPECT().
+		HasTrustedAddCuDevice().
+		Return("", "").
+		Maybe()
+
+	txtRecordDigestBytes, _ := hexToBytes(txtRecord.Digest)
+	suite.mockCrypto.EXPECT().
+		ValidateDigest(suite.testSecret, mock.Anything, txtRecordDigestBytes).
+		Return(nil).
+		Once()
+
+	// Mock replay attack detection
+	suite.mockHistory.EXPECT().
+		HasSeenDigest(api.AlgorithmHMACSHA256, txtRecord.Digest).
+		Return(true). // Already seen = replay attack
+		Once()
+
+	// Should notify failure for replay attack
+	suite.mockHub.EXPECT().
+		OnPairingFailure(txtRecord.TrustId, txtRecord.TrustPar, api.ErrReplayAttackDetected).
+		Return().
+		Maybe()
+
+	// Act
+	result := suite.sut.ProcessPendingEntries(entries)
+
+	// Assert
+	assert.NoError(suite.T(), result, "replay attack should be handled gracefully")
+
+	// Verify listener continues after detecting replay attack
+	status := suite.sut.GetListenerStatus()
+	assert.True(suite.T(), status.Active, "listener should continue after detecting replay attack")
+}
+
 /* Test Helper Functions */
 
 // createValidTestTXTRecord creates a valid ShipPairingTXT record for testing

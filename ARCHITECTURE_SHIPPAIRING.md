@@ -104,6 +104,33 @@ Key features:
 - HMAC validation of incoming requests
 - Automatic trust establishment on success
 - Graceful context-based cancellation
+- **ProcessPendingEntries method** for batch processing of discovered services
+
+#### ProcessPendingEntries Method
+
+The `ProcessPendingEntries` method enables the hub to process already-discovered pairing services without waiting for new mDNS events:
+
+```go
+// ProcessPendingEntries processes a batch of pairing entries (implements PairingListenerInterface)
+func (l *PairingListener) ProcessPendingEntries(entries map[string]*api.ShipPairingTXT) error {
+    if len(entries) == 0 {
+        return nil
+    }
+    
+    for _, txtRecord := range entries {
+        // Reuse existing handleMdnsDiscovery logic
+        shouldContinue := l.handleMdnsDiscovery(txtRecord)
+        if !shouldContinue {
+            // Successful pairing occurred - stop processing
+            break
+        }
+    }
+    
+    return nil
+}
+```
+
+This method is critical for AddCu replacement scenarios where existing mDNS announcements need immediate processing when the replacement timer expires.
 
 ### HMAC Calculator (hmac.go)
 
@@ -194,16 +221,40 @@ stateDiagram-v2
 
 1. **Single Device Tracking**: Only one AddCu device tracked at a time (typical home scenario)
 2. **Timer Lifecycle**: Automatic cleanup on expiry or reconnection
-3. **Callback Mechanism**: Type-safe callbacks with shipID parameter
-4. **Process Restart Handling**: Applications should persist disconnection timestamps
+3. **Immediate mDNS Processing**: On timer expiry, existing mDNS announcements are checked and processed before reactivating the listener
+4. **Callback Mechanism**: Type-safe callbacks with shipID parameter
+5. **Process Restart Handling**: Applications should persist disconnection timestamps
+
+#### Timer Expiry Flow
+
+When the 15-minute timer expires, the hub performs these steps:
+
+```go
+// handleAddCuReplacementTimeout - called when timer expires
+func (h *Hub) handleAddCuReplacementTimeout(expiredShipID string) {
+    // 1. Check for existing pairing announcements
+    currentPairingServices, _ := h.mdns.RequestPairingEntries()
+    
+    // 2. If announcements exist and listener is available, process immediately
+    if len(currentPairingServices) > 0 && h.activePairingListener != nil {
+        // Process existing entries before reactivating listener
+        h.activePairingListener.ProcessPendingEntries(currentPairingServices)
+    }
+    
+    // 3. Reactivate pairing listener for future announcements
+    h.reactivatePairingListener("AddCu device replacement timeout")
+}
+```
+
+This immediate processing ensures replacement devices that are already announcing can be paired without waiting for another mDNS discovery cycle.
 
 Example implementation:
 ```go
 // When AddCu device disconnects
 tracker.StartTimer(shipID, func(expiredShipID string) {
     log.Printf("Device %s replacement timeout", expiredShipID)
-    // Trust remains but pairing listener reactivates
-    hub.ReactivatePairingListener()
+    // Hub will check for existing announcements and process them
+    hub.handleAddCuReplacementTimeout(expiredShipID)
 })
 
 // When device reconnects
@@ -383,6 +434,54 @@ func (h *Hub) EstablishAutoTrust(request *AutoTrustEstablishmentRequest) *AutoTr
     }
 }
 ```
+
+### Hub Listener Management
+
+The hub implements intelligent listener reuse to optimize resource usage and ensure thread-safe operations:
+
+```go
+// Hub fields for listener management
+type Hub struct {
+    // Thread-safe listener storage and reuse
+    activePairingListener api.PairingListenerInterface
+    muxPairingListener    sync.RWMutex
+    
+    // ... other fields
+}
+
+// StartAutonomousListener with double-checked locking pattern
+func (h *Hub) StartAutonomousListener(config *api.PairingConfig) error {
+    // Thread-safe check and create listener
+    h.muxPairingListener.Lock()
+    defer h.muxPairingListener.Unlock()
+    
+    var listener api.PairingListenerInterface
+    if h.activePairingListener != nil {
+        // Reuse existing listener - important for AddCu replacement scenarios
+        listener = h.activePairingListener
+    } else {
+        // Create new listener through pairing service
+        listener = h.pairingService.CreateListener(h.localService)
+        if listener == nil {
+            return fmt.Errorf("failed to create pairing listener")
+        }
+        
+        // Store the listener for future reuse
+        h.activePairingListener = listener
+    }
+    
+    // Start listening with configured secret
+    return listener.StartListening(h.pairingCtx, config.Secret)
+}
+```
+
+Key features of the listener management pattern:
+1. **Thread-Safe Storage**: Uses RWMutex to protect concurrent access to the active listener
+2. **Listener Reuse**: Reuses existing listener instances when reactivating pairing (e.g., after AddCu timeout)
+3. **Double-Checked Locking**: Ensures thread-safe creation and storage of listeners
+4. **Lifecycle Management**: Maintains listener reference throughout hub lifetime for efficient reuse
+
+This pattern is especially important for AddCu replacement scenarios where the listener needs to be reactivated multiple times without creating new instances.
 
 ## Security Model
 
@@ -798,6 +897,7 @@ sequenceDiagram
     participant Old as Old Device
     participant Hub
     participant Tracker as AddCu Tracker
+    participant mDNS
     participant Listener as Pairing Listener
     participant New as New Device
     participant App as Application
@@ -812,15 +912,28 @@ sequenceDiagram
         Hub->>App: DeviceConnected(old)
     else Timer Expires
         Tracker->>Hub: Timer Expired
-        Hub->>Listener: Reactivate
+        Hub->>mDNS: RequestPairingEntries()
+        mDNS-->>Hub: Existing Announcements
         
-        New->>Listener: Pairing Request
-        Listener->>Listener: Validate HMAC
-        Listener->>Hub: EstablishAutoTrust(new)
-        Hub->>Old: Remove Trust
-        Hub->>App: ServiceAutoTrustRemoved(old)
-        Hub->>New: Connect
-        Hub->>App: DeviceConnected(new)
+        alt Announcements Found
+            Hub->>Listener: ProcessPendingEntries()
+            Listener->>Listener: Validate HMAC
+            Listener->>Hub: EstablishAutoTrust(new)
+            Hub->>Old: Remove Trust
+            Hub->>App: ServiceAutoTrustRemoved(old)
+            Hub->>New: Connect
+            Hub->>App: DeviceConnected(new)
+        else No Announcements
+            Hub->>Listener: Reactivate
+            Note over Listener: Wait for future announcements
+            New->>Listener: Pairing Request
+            Listener->>Listener: Validate HMAC
+            Listener->>Hub: EstablishAutoTrust(new)
+            Hub->>Old: Remove Trust
+            Hub->>App: ServiceAutoTrustRemoved(old)
+            Hub->>New: Connect
+            Hub->>App: DeviceConnected(new)
+        end
     end
 ```
 
@@ -984,3 +1097,17 @@ The latest evolution introduces perfect separation of concerns:
 - **Migration Path**: Applications implementing deprecated PairingHistoryProviderInterface should migrate to simpler RingBufferPersistence
 
 The implementation seamlessly integrates with the existing SHIP 1.0.1 infrastructure while adding powerful new capabilities for modern smart home deployments.
+
+### Recent Architectural Improvements
+
+The latest updates to the SHIP Pairing Service architecture include:
+
+1. **ProcessPendingEntries Method**: New PairingListenerInterface method that enables batch processing of discovered pairing services without waiting for new mDNS events. This is critical for AddCu replacement scenarios where immediate processing is required.
+
+2. **Enhanced AddCu Timer Flow**: When the 15-minute replacement timer expires, the hub now immediately checks for and processes existing mDNS announcements before reactivating the listener. This ensures replacement devices that are already announcing can be paired without additional discovery delays.
+
+3. **Intelligent Listener Reuse**: The hub implements thread-safe storage and reuse of pairing listeners using a double-checked locking pattern. This optimization prevents unnecessary listener recreation during AddCu replacement cycles.
+
+4. **Improved Device Replacement Flow**: The sequence now includes explicit mDNS polling (`RequestPairingEntries`) on timer expiry, with immediate processing of found announcements through `ProcessPendingEntries`. This reduces replacement latency and improves user experience.
+
+These improvements ensure robust and efficient device replacement while maintaining full compliance with the SHIP Pairing Service specification.

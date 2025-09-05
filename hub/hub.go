@@ -92,6 +92,10 @@ type Hub struct {
 	ringBufferPersistence api.RingBufferPersistence
 	muxPairing            sync.RWMutex
 
+	// Active pairing listener management
+	activePairingListener api.PairingListenerInterface
+	muxPairingListener    sync.RWMutex
+
 	// Pairing lifecycle management
 	pairingCtx    context.Context
 	pairingCancel context.CancelFunc
@@ -100,7 +104,7 @@ type Hub struct {
 	activeAnnouncements map[string]*announcementState
 	muxAnnouncements    sync.RWMutex
 
-	// AddCu replacement detection tracker
+	// AddCu replacement detection tracker for 15-minute timing enforcement
 	addCuReplacementTracker *AddCuReplacementTracker
 }
 
@@ -283,6 +287,11 @@ func (h *Hub) Shutdown() {
 		logging.Log().Debug("shutting down pairing service")
 		pairingService.Shutdown()
 	}
+
+	// Clear the active pairing listener reference since pairing service is shutting down
+	h.muxPairingListener.Lock()
+	h.activePairingListener = nil
+	h.muxPairingListener.Unlock()
 
 	// Then shutdown mDNS
 	h.mdns.Shutdown()
@@ -601,13 +610,30 @@ func (h *Hub) handleAddCuReplacementTimeout(expiredShipID string) {
 		return
 	}
 
+	// Check for current pairing announcements
+	if mdnsPairing, ok := h.mdns.(api.MdnsPairingInterface); ok {
+		currentPairingServices, err := mdnsPairing.RequestPairingEntries()
+		if err != nil {
+			logging.Log().Error("Failed to request pairing entries during timeout", "error", err)
+		} else if len(currentPairingServices) > 0 {
+			// Process pending entries through active pairing listener if available
+			h.muxPairingListener.RLock()
+			listener := h.activePairingListener
+			h.muxPairingListener.RUnlock()
+
+			if listener != nil {
+				if err := listener.ProcessPendingEntries(currentPairingServices); err != nil {
+					logging.Log().Error("Failed to process pending pairing entries", "error", err, "expiredShipID", expiredShipID)
+				}
+			}
+		}
+	}
+
 	h.reactivatePairingListener("AddCu device replacement timeout")
 }
 
 // reactivatePairingListener reactivates the pairing listener when AddCu replacement timeout occurs
 func (h *Hub) reactivatePairingListener(reason string) {
-	logging.Log().Trace("Reactivating pairing listener", "reason", reason)
-
 	h.muxPairing.RLock()
 	pairingService := h.pairingService
 	pairingConfig := h.pairingConfig
@@ -638,8 +664,6 @@ func (h *Hub) reactivatePairingListener(reason string) {
 func (h *Hub) callDeviceAutoTrustRemovedCallback(service *api.ServiceDetails, reason string) {
 	// Check if hubReader implements PairingServiceReaderInterface
 	if pairingReader, ok := h.hubReader.(api.PairingServiceReaderInterface); ok {
-		logging.Log().Trace("Calling ServiceAutoTrustRemoved callback", "ski", service.SKI(), "reason", reason)
-
 		// Convert ServiceDetails to ServiceIdentity - thread-safe, no Copy() needed
 		identity := service.ToServiceIdentity()
 		pairingReader.ServiceAutoTrustRemoved(identity, reason)

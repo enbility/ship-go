@@ -90,6 +90,15 @@ func (t *testPairingImplementation) IsPairingServiceAnnounced() bool {
 	return len(t.instances) > 0
 }
 
+func (t *testPairingImplementation) RequestPairingEntries() (map[string]*api.ShipPairingTXT, error) {
+	// Return a copy of current instances for testing
+	result := make(map[string]*api.ShipPairingTXT)
+	for instanceID, txtRecord := range t.instances {
+		result[instanceID] = txtRecord
+	}
+	return result, nil
+}
+
 /* Core Interface Behavior Tests - DESIGNED TO FAIL */
 
 func (suite *MdnsPairingInterfaceTestSuite) TestAnnouncePairingService_ReturnsInstanceID() {

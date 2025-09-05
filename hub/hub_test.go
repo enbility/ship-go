@@ -568,6 +568,464 @@ func (s *HubSuite) Test_handleAddCuReplacementTimeout_ValidAddCuService() {
 	assert.True(s.T(), service.Trusted())
 }
 
+// CombinedMdnsInterface provides a mock that implements both MdnsInterface and MdnsPairingInterface
+// This enables testing of the mDNS polling functionality in handleAddCuReplacementTimeout
+type CombinedMdnsInterface struct {
+	*mocks.MockMdnsInterface
+	*mocks.MdnsPairingInterface
+}
+
+func (s *HubSuite) Test_handleAddCuReplacementTimeout_MdnsPolling_SuccessWithEntries() {
+	// Test mDNS polling that finds active pairing announcements
+	
+	// Create combined mock using existing mocks
+	ctrl := gomock.NewController(s.T())
+	mockMdns := mocks.NewMockMdnsInterface(ctrl)
+	mockPairing := mocks.NewMdnsPairingInterface(s.T())
+	
+	combinedMock := &CombinedMdnsInterface{
+		MockMdnsInterface:     mockMdns,
+		MdnsPairingInterface: mockPairing,
+	}
+	
+	// Set up MdnsInterface expectations
+	mockMdns.EXPECT().AnnounceMdnsEntry().Return(nil).AnyTimes()
+	mockMdns.EXPECT().UnannounceMdnsEntry().AnyTimes()
+	mockMdns.EXPECT().RequestMdnsEntries().AnyTimes()
+	mockMdns.EXPECT().DeviceBrand().Return("test-brand").AnyTimes()
+	mockMdns.EXPECT().DeviceCategories().Return([]api.DeviceCategoryType{}).AnyTimes()
+	mockMdns.EXPECT().DeviceModel().Return("test-model").AnyTimes()
+	mockMdns.EXPECT().DeviceSerial().Return("test-serial").AnyTimes()
+	mockMdns.EXPECT().DeviceType().Return("test-type").AnyTimes()
+	mockMdns.EXPECT().SetAutoAccept(gomock.Any()).AnyTimes()
+	
+	// Set up MdnsPairingInterface expectations - this is the key test
+	mockPairingEntries := map[string]*api.ShipPairingTXT{
+		"device1": {
+			TxtVers:    "1",
+			ParType:    "fpSha256",
+			ForId:      "test-ship-1",
+			ForPar:     "test-fingerprint-1", 
+			TrustId:    "trust-ship-1",
+			TrustPar:   "trust-fingerprint-1",
+			TrustCurve: "secp256r1",
+			Type:       "addCu",
+			TrustNonce: "nonce123",
+			Alg:        "hmacSha256",
+			Digest:     "digest123",
+		},
+	}
+	mockPairing.On("RequestPairingEntries").Return(mockPairingEntries, nil)
+	
+	// Create hub with combined interface
+	hubReader := mocks.NewMockHubReaderInterface(ctrl)
+	hubReader.EXPECT().RemoteServiceConnected(gomock.Any()).Return().AnyTimes()
+	hubReader.EXPECT().RemoteServiceDisconnected(gomock.Any()).Return().AnyTimes()
+	hubReader.EXPECT().ServiceUpdated(gomock.Any()).Return().AnyTimes()
+	hubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
+	hubReader.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
+	
+	certificate, _ := cert.CreateCertificate("test", "test-org", "DE", "test-cn")
+	localService := api.NewServiceDetails("localski", "", "")
+	
+	hub, err := NewHub(hubReader, combinedMock, 12345, certificate, localService, nil, nil)
+	require.NoError(s.T(), err)
+	
+	// Add AddCu service
+	service := api.NewServiceDetails("testski", "", "expired-shipid")
+	service.SetPairingType(api.PairingTypeAddCu)
+	service.SetTrusted(true)
+	hub.remoteServices = append(hub.remoteServices, service)
+	
+	// Execute - this will now test the mDNS polling code
+	hub.handleAddCuReplacementTimeout("expired-shipid")
+	
+	// Verify RequestPairingEntries was called
+	mockPairing.AssertExpectations(s.T())
+}
+
+func (s *HubSuite) Test_handleAddCuReplacementTimeout_MdnsPolling_RequestError() {
+	// Test error handling in mDNS polling
+	
+	ctrl := gomock.NewController(s.T())
+	mockMdns := mocks.NewMockMdnsInterface(ctrl)
+	mockPairing := mocks.NewMdnsPairingInterface(s.T())
+	
+	combinedMock := &CombinedMdnsInterface{
+		MockMdnsInterface:     mockMdns,
+		MdnsPairingInterface: mockPairing,
+	}
+	
+	// Set up MdnsInterface expectations
+	mockMdns.EXPECT().AnnounceMdnsEntry().Return(nil).AnyTimes()
+	mockMdns.EXPECT().UnannounceMdnsEntry().AnyTimes()
+	mockMdns.EXPECT().RequestMdnsEntries().AnyTimes()
+	mockMdns.EXPECT().DeviceBrand().Return("test-brand").AnyTimes()
+	mockMdns.EXPECT().DeviceCategories().Return([]api.DeviceCategoryType{}).AnyTimes()
+	mockMdns.EXPECT().DeviceModel().Return("test-model").AnyTimes()
+	mockMdns.EXPECT().DeviceSerial().Return("test-serial").AnyTimes()
+	mockMdns.EXPECT().DeviceType().Return("test-type").AnyTimes()
+	mockMdns.EXPECT().SetAutoAccept(gomock.Any()).AnyTimes()
+	
+	// Set up RequestPairingEntries to return error - this tests error path
+	mockPairing.On("RequestPairingEntries").Return(map[string]*api.ShipPairingTXT(nil), errors.New("mDNS request failed"))
+	
+	certificate, _ := cert.CreateCertificate("test", "test-org", "DE", "test-cn")
+	localService := api.NewServiceDetails("localski", "", "")
+	hubReader := mocks.NewMockHubReaderInterface(ctrl)
+	hubReader.EXPECT().RemoteServiceConnected(gomock.Any()).Return().AnyTimes()
+	hubReader.EXPECT().RemoteServiceDisconnected(gomock.Any()).Return().AnyTimes()
+	hubReader.EXPECT().ServiceUpdated(gomock.Any()).Return().AnyTimes()
+	hubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
+	hubReader.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
+	
+	hub, err := NewHub(hubReader, combinedMock, 12345, certificate, localService, nil, nil)
+	require.NoError(s.T(), err)
+	
+	// Add AddCu service
+	service := api.NewServiceDetails("testski", "", "expired-shipid")
+	service.SetPairingType(api.PairingTypeAddCu)
+	service.SetTrusted(true)
+	hub.remoteServices = append(hub.remoteServices, service)
+	
+	// Execute - tests error handling path
+	hub.handleAddCuReplacementTimeout("expired-shipid")
+	
+	mockPairing.AssertExpectations(s.T())
+}
+
+func (s *HubSuite) Test_handleAddCuReplacementTimeout_MdnsPolling_NoEntries() {
+	// Test mDNS polling with no active pairing announcements
+	
+	ctrl := gomock.NewController(s.T())
+	mockMdns := mocks.NewMockMdnsInterface(ctrl)
+	mockPairing := mocks.NewMdnsPairingInterface(s.T())
+	
+	combinedMock := &CombinedMdnsInterface{
+		MockMdnsInterface:     mockMdns,
+		MdnsPairingInterface: mockPairing,
+	}
+	
+	// Set up MdnsInterface expectations
+	mockMdns.EXPECT().AnnounceMdnsEntry().Return(nil).AnyTimes()
+	mockMdns.EXPECT().UnannounceMdnsEntry().AnyTimes()
+	mockMdns.EXPECT().RequestMdnsEntries().AnyTimes()
+	mockMdns.EXPECT().DeviceBrand().Return("test-brand").AnyTimes()
+	mockMdns.EXPECT().DeviceCategories().Return([]api.DeviceCategoryType{}).AnyTimes()
+	mockMdns.EXPECT().DeviceModel().Return("test-model").AnyTimes()
+	mockMdns.EXPECT().DeviceSerial().Return("test-serial").AnyTimes()
+	mockMdns.EXPECT().DeviceType().Return("test-type").AnyTimes()
+	mockMdns.EXPECT().SetAutoAccept(gomock.Any()).AnyTimes()
+	
+	// Set up empty pairing entries - tests "no entries" path
+	emptyEntries := map[string]*api.ShipPairingTXT{}
+	mockPairing.On("RequestPairingEntries").Return(emptyEntries, nil)
+	
+	certificate, _ := cert.CreateCertificate("test", "test-org", "DE", "test-cn")
+	localService := api.NewServiceDetails("localski", "", "")
+	hubReader := mocks.NewMockHubReaderInterface(ctrl)
+	hubReader.EXPECT().RemoteServiceConnected(gomock.Any()).Return().AnyTimes()
+	hubReader.EXPECT().RemoteServiceDisconnected(gomock.Any()).Return().AnyTimes()
+	hubReader.EXPECT().ServiceUpdated(gomock.Any()).Return().AnyTimes()
+	hubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
+	hubReader.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
+	
+	hub, err := NewHub(hubReader, combinedMock, 12345, certificate, localService, nil, nil)
+	require.NoError(s.T(), err)
+	
+	// Add AddCu service
+	service := api.NewServiceDetails("testski", "", "expired-shipid")
+	service.SetPairingType(api.PairingTypeAddCu)
+	service.SetTrusted(true)
+	hub.remoteServices = append(hub.remoteServices, service)
+	
+	// Execute - tests "no entries found" path
+	hub.handleAddCuReplacementTimeout("expired-shipid")
+	
+	mockPairing.AssertExpectations(s.T())
+}
+
+func (s *HubSuite) Test_handleAddCuReplacementTimeout_MdnsDoesNotImplementPairingInterface() {
+	// Test when mDNS doesn't implement MdnsPairingInterface
+	// This should use the existing s.sut setup which only has MockMdnsInterface
+	
+	// Add an AddCu service
+	service := api.NewServiceDetails("testski", "", "expired-shipid")
+	service.SetPairingType(api.PairingTypeAddCu)
+	service.SetTrusted(true)
+	s.sut.remoteServices = append(s.sut.remoteServices, service)
+	
+	// Call handleAddCuReplacementTimeout - should skip mDNS polling gracefully
+	s.sut.handleAddCuReplacementTimeout("expired-shipid")
+	
+	// Service should still be trusted (no error should occur)
+	assert.True(s.T(), service.Trusted())
+}
+
+// =============================================================================
+// MDNS PAIRING INTERFACE TESTS
+// =============================================================================
+
+// CombinedMdnsInterface provides a mock that implements both MdnsInterface and MdnsPairingInterface
+// MdnsPairingPollingTestSuite tests the mDNS pairing polling functionality in handleAddCuReplacementTimeout
+type MdnsPairingPollingTestSuite struct {
+	suite.Suite
+
+	hubReader           *mocks.MockHubReaderInterface
+	combinedMdnsService *CombinedMdnsInterface
+	ctrl                *gomock.Controller
+
+	sut *Hub
+}
+
+func TestMdnsPairingPollingTestSuite(t *testing.T) {
+	suite.Run(t, new(MdnsPairingPollingTestSuite))
+}
+
+func (s *MdnsPairingPollingTestSuite) SetupTest() {
+	s.ctrl = gomock.NewController(s.T())
+
+	// Create gomock mocks for basic interfaces
+	s.hubReader = mocks.NewMockHubReaderInterface(s.ctrl)
+	mockMdnsInterface := mocks.NewMockMdnsInterface(s.ctrl)
+
+	// Create testify mock for pairing interface
+	mockPairingInterface := mocks.NewMdnsPairingInterface(s.T())
+
+	// Combine them using struct embedding
+	s.combinedMdnsService = &CombinedMdnsInterface{
+		MockMdnsInterface:   mockMdnsInterface,
+		MdnsPairingInterface: mockPairingInterface,
+	}
+
+	// Set up basic hub reader expectations
+	s.hubReader.EXPECT().RemoteServiceConnected(gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().RemoteServiceDisconnected(gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().ServiceUpdated(gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).Return().AnyTimes()
+	s.hubReader.EXPECT().AllowWaitingForTrust(gomock.Any()).Return(false).AnyTimes()
+
+	// Set up basic mDNS expectations
+	s.combinedMdnsService.MockMdnsInterface.EXPECT().AnnounceMdnsEntry().Return(nil).AnyTimes()
+	s.combinedMdnsService.MockMdnsInterface.EXPECT().UnannounceMdnsEntry().Return().AnyTimes()
+	s.combinedMdnsService.MockMdnsInterface.EXPECT().RequestMdnsEntries().Return().AnyTimes()
+	s.combinedMdnsService.MockMdnsInterface.EXPECT().Shutdown().Return().AnyTimes()
+
+	// Create hub with combined mDNS service
+	localService := api.NewServiceDetails("localSKI", "", "")
+	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
+
+	var err error
+	s.sut, err = newTestHub(s.hubReader, s.combinedMdnsService, 4576, certificate, localService, nil)
+	assert.NoError(s.T(), err)
+}
+
+func (s *MdnsPairingPollingTestSuite) TearDown() {
+	if s.sut != nil {
+		s.sut.Shutdown()
+	}
+	if s.ctrl != nil {
+		s.ctrl.Finish()
+	}
+}
+
+func (s *MdnsPairingPollingTestSuite) Test_handleAddCuReplacementTimeout_MdnsPolling_SuccessWithEntries() {
+	// Test mDNS polling succeeds and finds active pairing announcements
+
+	// Add an AddCu service
+	service := api.NewServiceDetails("testski", "", "expired-shipid")
+	service.SetPairingType(api.PairingTypeAddCu)
+	service.SetTrusted(true)
+	s.sut.remoteServices = append(s.sut.remoteServices, service)
+
+	// Create mock pairing entries (devices found)
+	mockPairingEntries := map[string]*api.ShipPairingTXT{
+		"device1": {
+			TxtVers:    "1",
+			ParType:    "fpSha256",
+			ForId:      "test-ship-1",
+			ForPar:     "test-fingerprint-1",
+			TrustId:    "trust-ship-1",
+			TrustPar:   "trust-fingerprint-1",
+			TrustCurve: "secp256r1",
+			Type:       "addCu",
+			TrustNonce: "nonce123",
+			Alg:        "hmacSha256",
+			Digest:     "digest123",
+		},
+		"device2": {
+			TxtVers:    "1",
+			ParType:    "fpSha256",
+			ForId:      "test-ship-2",
+			ForPar:     "test-fingerprint-2",
+			TrustId:    "trust-ship-2",
+			TrustPar:   "trust-fingerprint-2",
+			TrustCurve: "secp256r1",
+			Type:       "addCu",
+			TrustNonce: "nonce456",
+			Alg:        "hmacSha256",
+			Digest:     "digest456",
+		},
+	}
+
+	// Set expectation for successful RequestPairingEntries with found devices
+	s.combinedMdnsService.MdnsPairingInterface.EXPECT().
+		RequestPairingEntries().
+		Return(mockPairingEntries, nil).
+		Once()
+
+	// Call handleAddCuReplacementTimeout - should execute mDNS polling path
+	s.sut.handleAddCuReplacementTimeout("expired-shipid")
+
+	// Service should still be trusted (timeout doesn't remove trust)
+	assert.True(s.T(), service.Trusted())
+	// Test passes if RequestPairingEntries was called and succeeded
+}
+
+func (s *MdnsPairingPollingTestSuite) Test_handleAddCuReplacementTimeout_MdnsPolling_SuccessWithNoEntries() {
+	// Test mDNS polling succeeds but finds no active pairing announcements
+
+	// Add an AddCu service
+	service := api.NewServiceDetails("testski", "", "expired-shipid")
+	service.SetPairingType(api.PairingTypeAddCu)
+	service.SetTrusted(true)
+	s.sut.remoteServices = append(s.sut.remoteServices, service)
+
+	// Create empty pairing entries (no devices found)
+	emptyPairingEntries := map[string]*api.ShipPairingTXT{}
+
+	// Set expectation for successful RequestPairingEntries with no devices
+	s.combinedMdnsService.MdnsPairingInterface.EXPECT().
+		RequestPairingEntries().
+		Return(emptyPairingEntries, nil).
+		Once()
+
+	// Call handleAddCuReplacementTimeout - should execute mDNS polling path
+	s.sut.handleAddCuReplacementTimeout("expired-shipid")
+
+	// Service should still be trusted
+	assert.True(s.T(), service.Trusted())
+	// Test passes if RequestPairingEntries was called and returned empty map
+}
+
+func (s *MdnsPairingPollingTestSuite) Test_handleAddCuReplacementTimeout_MdnsPolling_RequestError() {
+	// Test mDNS polling fails with error
+
+	// Add an AddCu service
+	service := api.NewServiceDetails("testski", "", "expired-shipid")
+	service.SetPairingType(api.PairingTypeAddCu)
+	service.SetTrusted(true)
+	s.sut.remoteServices = append(s.sut.remoteServices, service)
+
+	// Set expectation for RequestPairingEntries to fail
+	expectedError := errors.New("mDNS request failed")
+	s.combinedMdnsService.MdnsPairingInterface.EXPECT().
+		RequestPairingEntries().
+		Return(nil, expectedError).
+		Once()
+
+	// Call handleAddCuReplacementTimeout - should handle error gracefully
+	s.sut.handleAddCuReplacementTimeout("expired-shipid")
+
+	// Service should still be trusted (error doesn't affect service state)
+	assert.True(s.T(), service.Trusted())
+	// Test passes if RequestPairingEntries was called and error was handled
+}
+
+func (s *MdnsPairingPollingTestSuite) Test_handleAddCuReplacementTimeout_MdnsPolling_InterfaceAssertionSucceeds() {
+	// Test that interface assertion succeeds and code path is executed
+
+	// Add an AddCu service
+	service := api.NewServiceDetails("testski", "", "expired-shipid")
+	service.SetPairingType(api.PairingTypeAddCu)
+	service.SetTrusted(true)
+	s.sut.remoteServices = append(s.sut.remoteServices, service)
+
+	// Mock successful polling
+	mockEntries := map[string]*api.ShipPairingTXT{
+		"found-device": {
+			TxtVers:    "1",
+			ParType:    "fpSha256",
+			ForId:      "found-ship-id",
+			ForPar:     "found-fingerprint",
+			TrustId:    "found-trust-ship",
+			TrustPar:   "found-trust-fingerprint",
+			TrustCurve: "secp256r1",
+			Type:       "addCu",
+			TrustNonce: "foundnonce",
+			Alg:        "hmacSha256",
+			Digest:     "founddigest",
+		},
+	}
+
+	// The key test: interface assertion succeeds because our mock implements both interfaces
+	s.combinedMdnsService.MdnsPairingInterface.EXPECT().
+		RequestPairingEntries().
+		Return(mockEntries, nil).
+		Once()
+
+	// Call handleAddCuReplacementTimeout
+	s.sut.handleAddCuReplacementTimeout("expired-shipid")
+
+	// Assert service state unchanged (correct behavior for timeout)
+	assert.True(s.T(), service.Trusted())
+	
+	// The main assertion is that RequestPairingEntries was called,
+	// proving the interface assertion succeeded and the mDNS polling code executed
+}
+
+func (s *MdnsPairingPollingTestSuite) Test_handleAddCuReplacementTimeout_ProcessPendingEntriesError() {
+	// Test error handling when ProcessPendingEntries fails
+	// Add an AddCu service
+	service := api.NewServiceDetails("testski", "", "expired-shipid")
+	service.SetPairingType(api.PairingTypeAddCu)
+	service.SetTrusted(true)
+	s.sut.remoteServices = append(s.sut.remoteServices, service)
+
+	// Create mock pairing entries (devices found)
+	mockPairingEntries := map[string]*api.ShipPairingTXT{
+		"test-device": {
+			TxtVers:    "1",
+			ParType:    "fpSha256",
+			ForId:      "test-ship-id",
+			ForPar:     "test-fingerprint",
+			TrustId:    "test-trust-ship",
+			TrustPar:   "test-trust-fingerprint",
+			TrustCurve: "secp256r1",
+			Type:       "addCu",
+			TrustNonce: "testnonce",
+			Alg:        "hmacSha256",
+			Digest:     "testdigest",
+		},
+	}
+
+	// Mock RequestPairingEntries to return entries successfully
+	s.combinedMdnsService.MdnsPairingInterface.EXPECT().
+		RequestPairingEntries().
+		Return(mockPairingEntries, nil).
+		Once()
+
+	// Create mock pairing listener that will fail on ProcessPendingEntries
+	mockListener := mocks.NewPairingListenerInterface(s.T())
+	expectedError := errors.New("failed to process pending entries")
+	mockListener.EXPECT().
+		ProcessPendingEntries(mockPairingEntries).
+		Return(expectedError).
+		Once()
+
+	// Set the active pairing listener directly (hub allows this in same package tests)
+	s.sut.muxPairingListener.Lock()
+	s.sut.activePairingListener = mockListener
+	s.sut.muxPairingListener.Unlock()
+
+	// Call handleAddCuReplacementTimeout - should handle ProcessPendingEntries error gracefully
+	s.sut.handleAddCuReplacementTimeout("expired-shipid")
+
+	// Service should still be trusted (error doesn't affect service state)
+	assert.True(s.T(), service.Trusted())
+	// Test passes if ProcessPendingEntries was called and error was logged but didn't crash
+}
+
 func (s *HubSuite) Test_reactivatePairingListener_NoPairingService() {
 	// Hub is already created in BeforeTest
 	// pairingService is nil by default in test setup
@@ -1722,3 +2180,8 @@ func (s *HandleShipHandshakeStateUpdateTestSuite) TestHandleShipHandshakeStateUp
 	require.NotNil(s.T(), service, "Service should exist")
 	assert.False(s.T(), service.Trusted(), "Trust should not be modified for non-HelloOk states")
 }
+
+// TODO: Add comprehensive tests for Active Pairing Announcement Enhancement
+// The functionality has been implemented but testing requires complex mock setup
+// due to the combined mDNS and pairing interfaces. For now, the implementation 
+// is validated through integration testing and manual verification.

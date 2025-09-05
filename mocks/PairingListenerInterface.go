@@ -84,6 +84,57 @@ func (_c *PairingListenerInterface_GetListenerStatus_Call) RunAndReturn(run func
 	return _c
 }
 
+// ProcessPendingEntries provides a mock function for the type PairingListenerInterface
+func (_mock *PairingListenerInterface) ProcessPendingEntries(entries map[string]*api.ShipPairingTXT) error {
+	ret := _mock.Called(entries)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ProcessPendingEntries")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(map[string]*api.ShipPairingTXT) error); ok {
+		r0 = returnFunc(entries)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// PairingListenerInterface_ProcessPendingEntries_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ProcessPendingEntries'
+type PairingListenerInterface_ProcessPendingEntries_Call struct {
+	*mock.Call
+}
+
+// ProcessPendingEntries is a helper method to define mock.On call
+//   - entries map[string]*api.ShipPairingTXT
+func (_e *PairingListenerInterface_Expecter) ProcessPendingEntries(entries interface{}) *PairingListenerInterface_ProcessPendingEntries_Call {
+	return &PairingListenerInterface_ProcessPendingEntries_Call{Call: _e.mock.On("ProcessPendingEntries", entries)}
+}
+
+func (_c *PairingListenerInterface_ProcessPendingEntries_Call) Run(run func(entries map[string]*api.ShipPairingTXT)) *PairingListenerInterface_ProcessPendingEntries_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 map[string]*api.ShipPairingTXT
+		if args[0] != nil {
+			arg0 = args[0].(map[string]*api.ShipPairingTXT)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *PairingListenerInterface_ProcessPendingEntries_Call) Return(err error) *PairingListenerInterface_ProcessPendingEntries_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *PairingListenerInterface_ProcessPendingEntries_Call) RunAndReturn(run func(entries map[string]*api.ShipPairingTXT) error) *PairingListenerInterface_ProcessPendingEntries_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // StartListening provides a mock function for the type PairingListenerInterface
 func (_mock *PairingListenerInterface) StartListening(ctx context.Context, secret api.PairingSecret) error {
 	ret := _mock.Called(ctx, secret)
