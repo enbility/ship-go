@@ -178,8 +178,7 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 func (h *Hub) shouldAttemptConnection(remoteService *api.ServiceDetails) bool {
 	// connection attempt is not relevant if the device is no longer paired
 	// or it is not queued for pairing
-	pairingState := h.ServiceForSKI(remoteService.SKI()).ConnectionStateDetail().State()
-	return h.IsRemoteServiceForSKIPaired(remoteService.SKI()) || pairingState == api.ConnectionStateQueued
+	return h.IsRemoteServiceForSKIPaired(remoteService.SKI())
 }
 
 // tryConnectionViaHost attempts connection using hostname
@@ -219,6 +218,10 @@ func (h *Hub) tryConnectionViaAddresses(remoteService *api.ServiceDetails, entry
 // initateConnection attempts to establish a connection to a remote service
 // returns true if successful
 func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.MdnsEntry) bool {
+	defer func() {
+		h.setConnectionAttemptRunning(remoteService.SKI(), false)
+	}()
+
 	// Check if connection attempt should be made
 	if !h.shouldAttemptConnection(remoteService) {
 		return false

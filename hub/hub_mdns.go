@@ -28,8 +28,7 @@ func (h *Hub) ReportMdnsEntries(entries map[string]*api.MdnsEntry, newEntries bo
 
 		// Check if the remote service is paired or queued for connection
 		service := h.ServiceForSKI(entry.Ski)
-		if !h.IsRemoteServiceForSKIPaired(entry.Ski) &&
-			service.ConnectionStateDetail().State() != api.ConnectionStateQueued {
+		if !h.IsRemoteServiceForSKIPaired(entry.Ski) {
 			continue
 		}
 

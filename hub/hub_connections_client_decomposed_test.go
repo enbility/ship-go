@@ -305,16 +305,6 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ShouldAttemptConnection() {
 			expectAttempt: true,
 		},
 		{
-			name: "queued_service",
-			setupService: func() *api.ServiceDetails {
-				// Use ServiceForSKI which handles normalization and creation
-				service := s.hub.ServiceForSKI("queuedski") // normalized version
-				service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
-				return service
-			},
-			expectAttempt: true,
-		},
-		{
 			name: "unpaired_unqueued_service",
 			setupService: func() *api.ServiceDetails {
 				// Use ServiceForSKI which handles normalization and creation
