@@ -124,11 +124,6 @@ func (h *Hub) RegisterRemoteSKI(ski, shipID string) {
 		return
 	}
 
-	// locally initiated
-	service.ConnectionStateDetail().SetState(api.ConnectionStateQueued)
-
-	h.hubReader.ServicePairingDetailUpdate(ski, service.ConnectionStateDetail())
-
 	h.mdns.RequestMdnsEntries()
 }
 

@@ -68,14 +68,14 @@ func validateRemoteCertificate(remoteCerts []*x509.Certificate, expectedSKI stri
 		}
 	}
 
-	if _, err := cert.SkiFromCertificate(remoteCerts[0]); err != nil {
+	remoteSKI, err := cert.SkiFromCertificate(remoteCerts[0])
+	if err != nil {
 		return CertificateValidationResult{
 			Valid: false,
 			Error: fmt.Errorf("invalid SKI format: %w", err),
 		}
 	}
 
-	remoteSKI := fmt.Sprintf("%0x", remoteCerts[0].SubjectKeyId)
 	if remoteSKI != expectedSKI {
 		return CertificateValidationResult{
 			Valid: false,
@@ -178,8 +178,7 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 func (h *Hub) shouldAttemptConnection(remoteService *api.ServiceDetails) bool {
 	// connection attempt is not relevant if the device is no longer paired
 	// or it is not queued for pairing
-	pairingState := h.ServiceForSKI(remoteService.SKI()).ConnectionStateDetail().State()
-	return h.IsRemoteServiceForSKIPaired(remoteService.SKI()) || pairingState == api.ConnectionStateQueued
+	return h.IsRemoteServiceForSKIPaired(remoteService.SKI())
 }
 
 // tryConnectionViaHost attempts connection using hostname
@@ -197,17 +196,6 @@ func (h *Hub) tryConnectionViaHost(remoteService *api.ServiceDetails, entry *api
 	return true
 }
 
-// formatIPAddress formats an IP address for connection (handles IPv6 brackets)
-// This is a pure function that's easy to test
-func formatIPAddress(address net.IP) string {
-	if address.To4() == nil {
-		// IPv6
-		return "[" + address.String() + "]"
-	}
-	// IPv4
-	return address.String()
-}
-
 // tryConnectionViaAddresses attempts connection using IP addresses
 // This is a focused function that handles IP-based connection attempts
 func (h *Hub) tryConnectionViaAddresses(remoteService *api.ServiceDetails, entry *api.MdnsEntry) bool {
@@ -217,7 +205,7 @@ func (h *Hub) tryConnectionViaAddresses(remoteService *api.ServiceDetails, entry
 	// try connecting via the provided IP addresses
 	for _, address := range entry.Addresses {
 		logging.Log().Debugf("trying to connect to %s at %s", remoteService.SKI(), address)
-		addressValue := formatIPAddress(address)
+		addressValue := address.String()
 		if err := h.connectFoundService(remoteService, addressValue, strconv.Itoa(entry.Port), entry.Path); err != nil {
 			logConnectionError(err, fmt.Sprintf("connection to %s at %s failed:", remoteService.SKI(), addressValue))
 		} else {
@@ -230,6 +218,10 @@ func (h *Hub) tryConnectionViaAddresses(remoteService *api.ServiceDetails, entry
 // initateConnection attempts to establish a connection to a remote service
 // returns true if successful
 func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.MdnsEntry) bool {
+	defer func() {
+		h.setConnectionAttemptRunning(remoteService.SKI(), false)
+	}()
+
 	// Check if connection attempt should be made
 	if !h.shouldAttemptConnection(remoteService) {
 		return false

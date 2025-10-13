@@ -92,9 +92,8 @@ func (c *ShipConnection) CloseConnection(safe bool, code int, reason string) {
 
 			go func() {
 				// wait a bit to let it send
-				<-time.After(500 * time.Millisecond)
+				<-time.After(100 * time.Millisecond)
 
-				//
 				c.dataWriter.CloseDataConnection(4001, "close")
 				c.infoProvider.HandleConnectionClosed(c, handshakeEnd)
 			}()
