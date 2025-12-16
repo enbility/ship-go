@@ -381,12 +381,25 @@ func (m *MdnsManager) SetAutoAccept(accept bool) {
 		return
 	}
 
+	if m.mdnsProvider == nil {
+		return
+	}
+
 	m.mdnsProvider.Unannounce()
 
 	// Update the announcement as autoaccept changed
-	if err := m.AnnounceMdnsEntry(); err != nil {
-		logging.Log().Debug("mdns: changing mdns entry failed", err)
+	err := m.AnnounceMdnsEntry()
+
+	if err == nil {
+		return
 	}
+
+	logging.Log().Debug("mdns: changing mdns entry failed", err)
+
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
+	m.setIsServiceAnnounce(false)
 }
 
 // SetTestProvider injects a mock provider for testing purposes
