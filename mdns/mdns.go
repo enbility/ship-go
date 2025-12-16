@@ -381,6 +381,8 @@ func (m *MdnsManager) SetAutoAccept(accept bool) {
 		return
 	}
 
+	m.mdnsProvider.Unannounce()
+
 	// Update the announcement as autoaccept changed
 	if err := m.AnnounceMdnsEntry(); err != nil {
 		logging.Log().Debug("mdns: changing mdns entry failed", err)

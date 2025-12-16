@@ -823,3 +823,37 @@ func (s *MdnsSuite) Test_Shutdown_DefensiveProgramming() {
 	// Verify provider is cleaned up (defensive shutdown succeeded)
 	assert.Nil(s.T(), manager.mdnsProvider)
 }
+
+func (s *MdnsSuite) Test_AutoAcceptWithServiceUnannounced() {
+	s.sut.mdnsProvider = s.sut.testProvider
+
+	// nothing has been announced yet
+	s.sut.isAnnounced = false
+
+	s.sut.SetAutoAccept(true)
+	assert.True(s.T(), s.sut.autoaccept)
+
+	s.sut.SetAutoAccept(false)
+	assert.False(s.T(), s.sut.autoaccept)
+
+	// no unnancounce and no announce expected
+	s.mdnsProvider.AssertNotCalled(s.T(), "Unannounce")
+	s.mdnsProvider.AssertNotCalled(s.T(), "Announce", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func (s *MdnsSuite) Test_AutoAcceptWithServiceAnnounced() {
+	s.sut.mdnsProvider = s.sut.testProvider
+
+	// something has already been announced
+	s.sut.isAnnounced = true
+
+	s.mdnsProvider.EXPECT().Unannounce()
+	s.mdnsProvider.EXPECT().Announce(mock.Anything, mock.Anything, mock.Anything)
+	s.sut.SetAutoAccept(true)
+	assert.True(s.T(), s.sut.autoaccept)
+
+	s.mdnsProvider.EXPECT().Unannounce()
+	s.mdnsProvider.EXPECT().Announce(mock.Anything, mock.Anything, mock.Anything)
+	s.sut.SetAutoAccept(false)
+	assert.False(s.T(), s.sut.autoaccept)
+}
