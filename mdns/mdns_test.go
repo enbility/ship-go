@@ -825,7 +825,7 @@ func (s *MdnsSuite) Test_Shutdown_DefensiveProgramming() {
 	assert.Nil(s.T(), manager.mdnsProvider)
 }
 
-func (s *MdnsSuite) Test_AutoAccepServiceUnannouncedYet() {
+func (s *MdnsSuite) Test_AutoAcceptServiceUnannouncedYet() {
 	s.sut.mdnsProvider = s.sut.testProvider
 
 	// nothing has been announced yet
