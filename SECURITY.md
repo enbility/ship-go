@@ -196,7 +196,7 @@ SHIP is designed for local networks. While technically possible, internet use is
 Security vulnerabilities should be reported responsibly. If you discover a security vulnerability:
 
 1. **Do NOT** open a public GitHub issue
-2. Email details to: security@enbility.com
+2. Email details to: security@enbility.net
 3. Include:
    - Description of the vulnerability
    - Steps to reproduce

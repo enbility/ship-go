@@ -1161,7 +1161,7 @@ func (s *MdnsSuite) Test_Start_RestartAnnouncementFailure() {
 
 	// Replace the provider with failing one - this simulates provider failure after initial success
 	s.sut.mdnsProvider = failingProvider
-	
+
 	// Reset announced state so the second Start() call will attempt to announce again
 	s.sut.setIsServiceAnnounce(false)
 

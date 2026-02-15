@@ -435,5 +435,4 @@ func TestReportMdnsEntries_CleanupWithNoPreviousEntries(t *testing.T) {
 	mockHubReader.AssertExpectations(t)
 }
 
-
 // Create tests the cover ReportMdnsEntries implementation
