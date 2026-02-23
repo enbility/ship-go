@@ -609,9 +609,9 @@ func (s *OnPairingFailureTestSuite) TestOnPairingFailure_ConcurrentCalls() {
 			defer wg.Done()
 			shipID := fmt.Sprintf("concurrent-ship-%d", index)
 			fingerprint := fmt.Sprintf("concurrent-fp-%d", index)
-			error := api.NewPairingValidationError(fmt.Sprintf("error-%d", index))
+			err := api.NewPairingValidationError(fmt.Sprintf("error-%d", index))
 
-			hub.OnPairingFailure(shipID, fingerprint, error)
+			hub.OnPairingFailure(shipID, fingerprint, err)
 		}(i)
 	}
 
@@ -990,12 +990,12 @@ func (s *OnPairingSuccessTestSuite) TestOnPairingSuccess_AddCuTimerInteraction()
 	// No new service should be created while replacement timer is running
 	newService := s.hub.ServiceForIdentifier("", s.testFingerprint)
 	assert.Nil(s.T(), newService, "New service should NOT be created while replacement timer is running")
-	
+
 	// Existing service should remain unchanged
 	existingService := s.hub.ServiceForIdentifier("existingski", s.otherFingerprint)
 	require.NotNil(s.T(), existingService, "Existing service should still exist")
 	assert.True(s.T(), existingService.Trusted(), "Existing service should remain trusted")
-	
+
 	// Timer should still be tracking the old device
 	assert.True(s.T(), s.hub.addCuReplacementTracker.IsTracking(s.otherShipID), "Replacement timer should still be running")
 }

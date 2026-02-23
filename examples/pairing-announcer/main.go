@@ -245,7 +245,7 @@ func (p *PairingHubReader) ServiceAutoTrustFailed(identity api.ServiceIdentity, 
 	p.pairingError = reason
 }
 
-// ServiceAutoTrustRemoved is called when device trust is removed via replacement logic  
+// ServiceAutoTrustRemoved is called when device trust is removed via replacement logic
 func (p *PairingHubReader) ServiceAutoTrustRemoved(identity api.ServiceIdentity, reason string) {
 	fmt.Printf("\n🔒 *** TRUST REMOVED! ***\n")
 	fmt.Printf("   Device %s trust removed: %s\n", identity.SKI, reason)
@@ -736,8 +736,7 @@ shutdown:
 	} else if completed > 0 {
 		fmt.Printf("⚠️ Partial success: %d/%d devices paired\n", completed, total)
 		os.Exit(2)
-	} else {
-		fmt.Println("❌ No devices were paired")
-		os.Exit(1)
 	}
+	fmt.Println("❌ No devices were paired")
+	os.Exit(1)
 }

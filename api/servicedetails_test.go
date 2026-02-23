@@ -95,34 +95,34 @@ func (s *ServiceDetailsSuite) Test_ServiceDetails_Copy() {
 	original.SetConnectionStateDetail(connectionState)
 
 	// Create copy
-	copy := original.Copy()
+	copyOfService := original.Copy()
 
 	// Verify copy has same values as original
-	assert.Equal(s.T(), original.SKI(), copy.SKI())
-	assert.Equal(s.T(), original.IPv4(), copy.IPv4())
-	assert.Equal(s.T(), original.ShipID(), copy.ShipID())
-	assert.Equal(s.T(), original.AutoAccept(), copy.AutoAccept())
-	assert.Equal(s.T(), original.Trusted(), copy.Trusted())
-	assert.Equal(s.T(), original.Fingerprint(), copy.Fingerprint())
-	assert.Equal(s.T(), original.PairingType(), copy.PairingType())
+	assert.Equal(s.T(), original.SKI(), copyOfService.SKI())
+	assert.Equal(s.T(), original.IPv4(), copyOfService.IPv4())
+	assert.Equal(s.T(), original.ShipID(), copyOfService.ShipID())
+	assert.Equal(s.T(), original.AutoAccept(), copyOfService.AutoAccept())
+	assert.Equal(s.T(), original.Trusted(), copyOfService.Trusted())
+	assert.Equal(s.T(), original.Fingerprint(), copyOfService.Fingerprint())
+	assert.Equal(s.T(), original.PairingType(), copyOfService.PairingType())
 
 	// Verify ConnectionStateDetail is copied
-	assert.NotNil(s.T(), copy.ConnectionStateDetail())
-	assert.Equal(s.T(), original.ConnectionStateDetail().State(), copy.ConnectionStateDetail().State())
-	assert.Equal(s.T(), original.ConnectionStateDetail().Error().Error(), copy.ConnectionStateDetail().Error().Error())
+	assert.NotNil(s.T(), copyOfService.ConnectionStateDetail())
+	assert.Equal(s.T(), original.ConnectionStateDetail().State(), copyOfService.ConnectionStateDetail().State())
+	assert.Equal(s.T(), original.ConnectionStateDetail().Error().Error(), copyOfService.ConnectionStateDetail().Error().Error())
 
 	// Verify copy is independent (not same instance)
-	assert.NotSame(s.T(), original, copy)
-	assert.NotSame(s.T(), original.ConnectionStateDetail(), copy.ConnectionStateDetail())
+	assert.NotSame(s.T(), original, copyOfService)
+	assert.NotSame(s.T(), original.ConnectionStateDetail(), copyOfService.ConnectionStateDetail())
 
 	// Verify modifying copy doesn't affect original
-	copy.SetTrusted(false)
-	copy.SetPairingType(PairingTypeDefault)
-	copy.ConnectionStateDetail().SetState(ConnectionStateCompleted)
+	copyOfService.SetTrusted(false)
+	copyOfService.SetPairingType(PairingTypeDefault)
+	copyOfService.ConnectionStateDetail().SetState(ConnectionStateCompleted)
 
-	assert.NotEqual(s.T(), original.Trusted(), copy.Trusted())
-	assert.NotEqual(s.T(), original.PairingType(), copy.PairingType())
-	assert.NotEqual(s.T(), original.ConnectionStateDetail().State(), copy.ConnectionStateDetail().State())
+	assert.NotEqual(s.T(), original.Trusted(), copyOfService.Trusted())
+	assert.NotEqual(s.T(), original.PairingType(), copyOfService.PairingType())
+	assert.NotEqual(s.T(), original.ConnectionStateDetail().State(), copyOfService.ConnectionStateDetail().State())
 }
 
 // Test that uninitialized PairingType defaults to PairingTypeDefault
@@ -252,7 +252,6 @@ func (s *ServiceDetailsSuite) TestServiceDetails_ToServiceIdentity() {
 	assert.NotEqual(s.T(), identity.SKI, details.SKI())
 }
 
-
 func (s *ServiceDetailsSuite) TestSKIToServiceIdentity() {
 	// Test: Minimal ServiceIdentity from SKI only
 	ski := "minimal-ski"
@@ -274,7 +273,7 @@ func (s *ServiceDetailsSuite) TestServiceDetails_RoundTripConversion() {
 
 	// Test round-trip conversion via ToServiceIdentity
 	identity := original.ToServiceIdentity()
-	
+
 	// Verify identity extraction preserves data
 	assert.Equal(s.T(), original.SKI(), identity.SKI)
 	assert.Equal(s.T(), original.Fingerprint(), identity.Fingerprint)
