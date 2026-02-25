@@ -478,9 +478,9 @@ func (r *ProductionHubReader) Shutdown() {
 func loadOrCreateCertificate(config *Configuration) (tls.Certificate, string, error) {
 	// Try to load existing certificate
 	if config.CertificateFile != "" && config.PrivateKeyFile != "" {
-		if _, err := os.Stat(config.CertificateFile); err == nil {
-			if _, err := os.Stat(config.PrivateKeyFile); err == nil {
-				log.Printf("📂 Loading existing certificate from %s", config.CertificateFile)
+		if _, err := os.Stat(config.CertificateFile); err == nil { //nolint:gosec // G703: config paths are from trusted configuration
+			if _, err := os.Stat(config.PrivateKeyFile); err == nil { //nolint:gosec // G703: config paths are from trusted configuration
+				log.Printf("📂 Loading existing certificate from %s", config.CertificateFile) //nolint:gosec // G706: config paths are from trusted configuration
 
 				tlsCert, err := tls.LoadX509KeyPair(config.CertificateFile, config.PrivateKeyFile)
 				if err != nil {
@@ -501,7 +501,7 @@ func loadOrCreateCertificate(config *Configuration) (tls.Certificate, string, er
 				// Check certificate expiration
 				timeToExpiry := time.Until(x509Cert.NotAfter)
 				if timeToExpiry < 30*24*time.Hour {
-					log.Printf("⚠️  Certificate expires in %v - consider renewal", timeToExpiry)
+					log.Printf("⚠️  Certificate expires in %v - consider renewal", timeToExpiry) //nolint:gosec // G706: computed duration, not user input
 				}
 
 				return tlsCert, ski, nil
@@ -539,7 +539,7 @@ func loadOrCreateCertificate(config *Configuration) (tls.Certificate, string, er
 		if err := saveCertificate(tlsCert, config.CertificateFile, config.PrivateKeyFile); err != nil {
 			log.Printf("⚠️  Warning: Could not save certificate: %v", err)
 		} else {
-			log.Printf("💾 Certificate saved to %s", config.CertificateFile)
+			log.Printf("💾 Certificate saved to %s", config.CertificateFile) //nolint:gosec // G706: config paths are from trusted configuration
 		}
 	}
 
@@ -548,14 +548,14 @@ func loadOrCreateCertificate(config *Configuration) (tls.Certificate, string, er
 
 func saveCertificate(cert tls.Certificate, certFile, keyFile string) error {
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(certFile), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(certFile), 0700); err != nil { //nolint:gosec // G703: certFile is from trusted configuration
 		return fmt.Errorf("failed to create certificate directory: %w", err)
 	}
 
 	// Save certificate (this is a simplified implementation)
 	// In production, you'd use proper PEM encoding
 	certData := cert.Certificate[0]
-	if err := os.WriteFile(certFile, certData, 0600); err != nil {
+	if err := os.WriteFile(certFile, certData, 0600); err != nil { //nolint:gosec // G703: certFile is from trusted configuration
 		return fmt.Errorf("failed to save certificate: %w", err)
 	}
 
@@ -589,7 +589,7 @@ func loadConfiguration(configFile string) (*Configuration, error) {
 
 	// Load from file if provided
 	if configFile != "" {
-		data, err := os.ReadFile(configFile) // #nosec G304 - configFile comes from command line argument in example code
+		data, err := os.ReadFile(configFile) //nolint:gosec // G304,G703: configFile comes from command line argument in example code
 		if err != nil {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
 		}
@@ -598,7 +598,7 @@ func loadConfiguration(configFile string) (*Configuration, error) {
 			return nil, fmt.Errorf("failed to parse config file: %w", err)
 		}
 
-		log.Printf("📂 Loaded configuration from %s", configFile)
+		log.Printf("📂 Loaded configuration from %s", configFile) //nolint:gosec // G706: configFile is from command line argument in example code
 	}
 
 	// Validate critical settings

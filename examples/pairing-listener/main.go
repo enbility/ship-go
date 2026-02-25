@@ -657,11 +657,11 @@ func main() {
 	var keyFile = flag.String("key", "", "Path to private key file (PEM format)")
 	var persistFile = flag.String("persist", "", "Path to persistence file for trust data and ring buffer (optional)")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [--cert cert.pem --key key.pem] [--persist persist.json] --secret <32-hex-chars>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [--cert cert.pem --key key.pem] [--persist persist.json] --secret <32-hex-chars>\n", os.Args[0])                //nolint:gosec // G705: example binary, stderr output with controlled args
 		fmt.Fprintf(os.Stderr, "\nExample:\n")
-		fmt.Fprintf(os.Stderr, "  %s --secret 1234567890abcdef1234567890abcdef\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s --cert cert.pem --key key.pem --secret 1234567890abcdef1234567890abcdef\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s --persist ./devices.json --secret 1234567890abcdef1234567890abcdef\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --secret 1234567890abcdef1234567890abcdef\n", os.Args[0])                                                     //nolint:gosec // G705: example binary, stderr output with controlled args
+		fmt.Fprintf(os.Stderr, "  %s --cert cert.pem --key key.pem --secret 1234567890abcdef1234567890abcdef\n", os.Args[0])                        //nolint:gosec // G705: example binary, stderr output with controlled args
+		fmt.Fprintf(os.Stderr, "  %s --persist ./devices.json --secret 1234567890abcdef1234567890abcdef\n", os.Args[0]) //nolint:gosec // G705: example binary, stderr output with controlled args
 		fmt.Fprintf(os.Stderr, "\nOptions:\n")
 		flag.PrintDefaults()
 	}

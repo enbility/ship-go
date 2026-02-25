@@ -560,7 +560,7 @@ type PairingTarget struct {
 	SKI         string // Target device SKI
 	Fingerprint string // Target device certificate fingerprint (SHA-256)
 	ShipID      string // Target device SHIP ID (for connection)
-	Secret      []byte // Secret for pairing (from QR code SPSEC field)
+	Secret      []byte `json:"-"` // Secret for pairing (from QR code SPSEC field), excluded from JSON serialization
 }
 
 // DigestEntry represents a ring buffer entry per SHIP spec section 11

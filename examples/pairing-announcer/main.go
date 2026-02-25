@@ -180,7 +180,7 @@ func (p *PairingHubReader) ServicePairingDetailUpdate(identity api.ServiceIdenti
 		fmt.Printf("[%s] ❌ Connection error with %s: %v\n", timestamp, ski, detail.Error())
 
 		// Set pairing error for connection failures (thread-safe)
-		p.setError(ski, fmt.Errorf("connection error with %s: %v", ski, detail.Error()))
+		p.setError(ski, fmt.Errorf("connection error with %s: %w", ski, detail.Error()))
 	}
 }
 
@@ -480,11 +480,11 @@ func main() {
 	var certFile = flag.String("cert", "", "Path to certificate file (PEM format)")
 	var keyFile = flag.String("key", "", "Path to private key file (PEM format)")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [--cert cert.pem --key key.pem] \"<QR-string>\" [\"<QR-string>\"...]\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [--cert cert.pem --key key.pem] \"<QR-string>\" [\"<QR-string>\"...]\n", os.Args[0]) //nolint:gosec // G705: example binary, stderr output with controlled args
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  Single: %s \"SHIP;SKI:device1;ID:id1;FPH256:fp1;SPSEC:secret1;ENDSHIP;\"\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  Multiple: %s \"SHIP;SKI:device1;...\" \"SHIP;SKI:device2;...\" \"SHIP;SKI:device3;...\"\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  With certs: %s --cert cert.pem --key key.pem \"SHIP;SKI:device1;...\" \"SHIP;SKI:device2;...\"\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  Single: %s \"SHIP;SKI:device1;ID:id1;FPH256:fp1;SPSEC:secret1;ENDSHIP;\"\n", os.Args[0])       //nolint:gosec // G705: example binary, stderr output with controlled args
+		fmt.Fprintf(os.Stderr, "  Multiple: %s \"SHIP;SKI:device1;...\" \"SHIP;SKI:device2;...\" \"SHIP;SKI:device3;...\"\n", os.Args[0]) //nolint:gosec // G705: example binary, stderr output with controlled args
+		fmt.Fprintf(os.Stderr, "  With certs: %s --cert cert.pem --key key.pem \"SHIP;SKI:device1;...\" \"SHIP;SKI:device2;...\"\n", os.Args[0]) //nolint:gosec // G705: example binary, stderr output with controlled args
 		fmt.Fprintf(os.Stderr, "\nThe QR string should be in SHIP pairing format:\n")
 		fmt.Fprintf(os.Stderr, "  SHIP;SKI:<ski>;ID:<shipID>;FPH256:<fingerprint>;SPSEC:<secret>;ENDSHIP;\n")
 		fmt.Fprintf(os.Stderr, "\nOptions:\n")
