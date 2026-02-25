@@ -30,18 +30,6 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-// File to contain race detection via build tags
-// Use go:build race tag file approach - create separate files
-
-// skipIfRace skips tests that create real connections to avoid race conditions
-// Following CLAUDE.md guidance: tests with real concurrent connections should be skipped
-func skipIfRace(t *testing.T) {
-	// Per CLAUDE.md: "Some tests that create actual WebSocket connections and trigger real handshakes
-	// cannot be safely run with mocks, even with type-specific matchers. The concurrent handshake
-	// callbacks will always race with mock inspection. These tests should be skipped entirely"
-	t.Skip("Skipping test due to unavoidable race conditions with mocks and real connections")
-}
-
 // HubConnectionsClientCoverageSuite tests hub connections client functionality
 type HubConnectionsClientCoverageSuite struct {
 	suite.Suite
@@ -201,7 +189,6 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_Comprehensive
 
 // Test_InitateConnection_WithMockServer tests connection with a mock server
 func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_WithMockServer() {
-	skipIfRace(s.T())
 	// Create a test WebSocket server
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
@@ -231,9 +218,11 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_WithMockServe
 	host, portStr, _ := net.SplitHostPort(server.Listener.Addr().String())
 	port, _ := strconv.Atoi(portStr)
 
-	// Setup paired service
+	// Setup paired service - must register before lookup
 	ski := "testserverski"
+	s.hub.addService(api.NewServiceDetails(ski, "", ""))
 	service := s.hub.ServiceForIdentifier(ski, "")
+	require.NotNil(s.T(), service, "Service should be registered")
 	service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 
 	// Test successful connection via hostname
@@ -331,6 +320,11 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_SkiAlreadyC
 	assert.Equal(s.T(), connectionCountBefore, connectionCountAfter, "Connection count should be unchanged")
 	assert.Equal(s.T(), mockConnection, existingConnection, "Existing connection should be unchanged")
 	assert.True(s.T(), s.hub.isSkiConnected(normalizedSKI), "SKI should still be connected after test")
+
+	// Clean up mock connection to avoid CloseConnection panic during Shutdown
+	s.hub.muxCon.Lock()
+	delete(s.hub.connections, normalizedSKI)
+	s.hub.muxCon.Unlock()
 }
 
 // Test_SortIPAddresses_Comprehensive tests IP address sorting
@@ -419,7 +413,6 @@ func (s *HubConnectionsClientCoverageSuite) Test_SortIPAddresses_Comprehensive()
 // This test specifically covers lines 79-84 in connectFoundService where cert.SkiFromCertificate fails
 // due to an invalid SKI length, ensuring proper error handling and connection cleanup.
 func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_CertificateSkiValidationError() {
-	skipIfRace(s.T())
 	// Create a certificate with an invalid SKI length to trigger the error path
 	invalidCert, err := s.createCertificateWithInvalidSKI()
 	require.NoError(s.T(), err)
@@ -459,9 +452,11 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_Certificate
 	host, portStr, err := net.SplitHostPort(server.Listener.Addr().String())
 	require.NoError(s.T(), err)
 
-	// Setup paired service
+	// Setup paired service - must register before lookup
 	ski := "testinvalidski"
+	s.hub.addService(api.NewServiceDetails(ski, "", ""))
 	service := s.hub.ServiceForIdentifier(ski, "")
+	require.NotNil(s.T(), service, "Service should be registered")
 	service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 
 	// Track connections before the test
@@ -586,7 +581,7 @@ func (l *TestLogger) Reset() {
 func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_CertificateExpirationLogging() {
 	// Test the case that actually works: certificate expiring soon (TLS allows these connections)
 	s.Run("certificate_expiring_soon_via_connection", func() {
-		skipIfRace(s.T())
+		s.T().Skip("Integration test: requires real SHIP protocol server for certificate expiration logging via live TLS handshake")
 		// Set up test logger to capture log output
 		logger := NewTestLogger()
 		logging.SetLogging(logger)
@@ -631,8 +626,10 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_Certificate
 		host, portStr, err := net.SplitHostPort(server.Listener.Addr().String())
 		require.NoError(s.T(), err)
 
-		// Setup paired service with matching SKI
+		// Setup paired service with matching SKI - must register before lookup
+		s.hub.addService(api.NewServiceDetails(expectedSKI, "", ""))
 		service := s.hub.ServiceForIdentifier(expectedSKI, "")
+		require.NotNil(s.T(), service, "Service should be registered")
 		service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 
 		// Call connectFoundService - this will trigger the certificate expiration logging
@@ -647,7 +644,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_Certificate
 
 	// Test valid certificates don't generate logs via connection
 	s.Run("certificate_valid_no_logging_via_connection", func() {
-		skipIfRace(s.T())
+		s.T().Skip("Integration test: requires real SHIP protocol server for certificate validation via live TLS handshake")
 		// Set up test logger to capture log output
 		logger := NewTestLogger()
 		logging.SetLogging(logger)
@@ -688,8 +685,10 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_Certificate
 		host, portStr, err := net.SplitHostPort(server.Listener.Addr().String())
 		require.NoError(s.T(), err)
 
-		// Setup paired service
+		// Setup paired service - must register before lookup
+		s.hub.addService(api.NewServiceDetails(expectedSKI, "", ""))
 		service := s.hub.ServiceForIdentifier(expectedSKI, "")
+		require.NotNil(s.T(), service, "Service should be registered")
 		service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 
 		// Call connectFoundService
@@ -963,6 +962,11 @@ func (s *HubConnectionsClientCoverageSuite) Test_KeepThisConnection_DirectTest()
 
 		assert.Equal(s.T(), connectionCountBefore, connectionCountAfter, "Connection count should remain the same")
 		assert.Equal(s.T(), mockExistingConnection, existingConnection, "Existing connection should remain unchanged")
+
+		// Clean up mock connection to avoid CloseConnection panic during Shutdown
+		s.hub.muxCon.Lock()
+		delete(s.hub.connections, normalizedRemoteSKI)
+		s.hub.muxCon.Unlock()
 	})
 
 	// Test case 4: Existing connection, incoming request, remote SKI > local SKI - should return true
@@ -1041,6 +1045,11 @@ func (s *HubConnectionsClientCoverageSuite) Test_KeepThisConnection_DirectTest()
 
 		assert.Equal(s.T(), connectionCountBefore, connectionCountAfter, "Connection count should remain the same")
 		assert.Equal(s.T(), mockExistingConnection, existingConnection, "Existing connection should remain unchanged")
+
+		// Clean up mock connection to avoid CloseConnection panic during Shutdown
+		s.hub.muxCon.Lock()
+		delete(s.hub.connections, normalizedRemoteSKI)
+		s.hub.muxCon.Unlock()
 	})
 }
 
@@ -1049,7 +1058,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_KeepThisConnection_DirectTest()
 // established, the WebSocket handler is created, the SHIP connection is created and run, and the
 // connection is registered in the hub.
 func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_SuccessfulConnection() {
-	skipIfRace(s.T())
+	s.T().Skip("Integration test: requires real SHIP protocol server for successful connection registration")
 	// Create a test WebSocket server that properly handles SHIP connections
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
@@ -1097,8 +1106,10 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_SuccessfulC
 	host, portStr, err := net.SplitHostPort(server.Listener.Addr().String())
 	require.NoError(s.T(), err)
 
-	// Setup paired service with matching SKI
+	// Setup paired service with matching SKI - must register before lookup
+	s.hub.addService(api.NewServiceDetails(expectedSKI, "", ""))
 	service := s.hub.ServiceForIdentifier(expectedSKI, "")
+	require.NotNil(s.T(), service, "Service should be registered")
 	service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 
 	// Track initial connection count
@@ -1142,7 +1153,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_SuccessfulC
 // This test specifically covers lines 133-135 in initateConnection where a hostname-based
 // connection succeeds and returns true.
 func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_SuccessfulHostnameConnection() {
-	skipIfRace(s.T())
+	s.T().Skip("Integration test: requires real SHIP protocol server for successful hostname connection")
 	// Create a test WebSocket server for successful connection
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
@@ -1184,8 +1195,10 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_SuccessfulHos
 	port, err := strconv.Atoi(portStr)
 	require.NoError(s.T(), err)
 
-	// Setup paired service
+	// Setup paired service - must register before lookup
+	s.hub.addService(api.NewServiceDetails(expectedSKI, "", ""))
 	service := s.hub.ServiceForIdentifier(expectedSKI, "")
+	require.NotNil(s.T(), service, "Service should be registered")
 	service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 	service.SetTrusted(true) // This is required for IsRemoteServiceForSKIPaired to return true
 
@@ -1222,7 +1235,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_SuccessfulHos
 // This test specifically covers lines 152-154 in initateConnection where an IP-based
 // connection succeeds and returns true.
 func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_SuccessfulIPConnection() {
-	skipIfRace(s.T())
+	s.T().Skip("Integration test: requires real SHIP protocol server for successful IP connection")
 	// Create a test WebSocket server for successful connection
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
@@ -1264,8 +1277,10 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_SuccessfulIPC
 	port, err := strconv.Atoi(portStr)
 	require.NoError(s.T(), err)
 
-	// Setup paired service
+	// Setup paired service - must register before lookup
+	s.hub.addService(api.NewServiceDetails(expectedSKI, "", ""))
 	service := s.hub.ServiceForIdentifier(expectedSKI, "")
+	require.NotNil(s.T(), service, "Service should be registered")
 	service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 	service.SetTrusted(true) // This is required for IsRemoteServiceForSKIPaired to return true
 
@@ -1303,7 +1318,7 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_SuccessfulIPC
 // Test_InitateConnection_HostnameFailsIPSucceeds tests the fallback scenario
 // This test covers the case where hostname connection fails but IP connection succeeds
 func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_HostnameFailsIPSucceeds() {
-	skipIfRace(s.T())
+	s.T().Skip("Integration test: requires real SHIP protocol server for hostname-to-IP fallback")
 	// Create a test WebSocket server for successful connection
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
@@ -1345,8 +1360,10 @@ func (s *HubConnectionsClientCoverageSuite) Test_InitateConnection_HostnameFails
 	port, err := strconv.Atoi(portStr)
 	require.NoError(s.T(), err)
 
-	// Setup paired service
+	// Setup paired service - must register before lookup
+	s.hub.addService(api.NewServiceDetails(expectedSKI, "", ""))
 	service := s.hub.ServiceForIdentifier(expectedSKI, "")
+	require.NotNil(s.T(), service, "Service should be registered")
 	service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateTrusted, nil))
 	service.SetTrusted(true) // This is required for IsRemoteServiceForSKIPaired to return true
 
