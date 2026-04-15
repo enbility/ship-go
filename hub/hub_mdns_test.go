@@ -161,4 +161,162 @@ func TestReportMdnsEntries_CleanupWithNoPreviousEntries(t *testing.T) {
 	mockHubReader.AssertExpectations(t)
 }
 
-// Create tests the cover ReportMdnsEntries implementation
+// Test for issue #73: cleanupRemovedMdnsEntries must reset connectionAttemptRunning flag
+// When a device disappears from mDNS and later reappears, the stale "running" flag
+// would block coordinateConnectionInitations from initiating a new connection.
+func TestCleanupRemovedMdnsEntries_ResetsConnectionAttemptRunning(t *testing.T) {
+	mockMdns := mocks.NewMdnsInterface(t)
+	hub := &Hub{
+		connections:              make(map[string]api.ShipConnectionInterface),
+		remoteServices:           make(map[string]*api.ServiceDetails, 0),
+		connectionAttemptCounter: make(map[string]int),
+		connectionAttemptRunning: make(map[string]bool),
+		connectionDelayTimers:    make(map[string]*connectionDelayTimer),
+		knownMdnsEntries:         make([]*api.MdnsEntry, 0),
+		muxMdns:                  sync.Mutex{},
+		muxTimers:                sync.RWMutex{},
+		muxConAttempt:            sync.RWMutex{},
+		mdns:                     mockMdns,
+	}
+
+	mockHubReader := mocks.NewHubReaderInterface(t)
+	mockHubReader.EXPECT().VisibleRemoteServicesUpdated(mock.AnythingOfType("[]api.RemoteService")).Times(2)
+	hub.hubReader = mockHubReader
+
+	ski := "test-ski-73"
+
+	// Step 1: Device is visible, a connection attempt is in progress
+	initialEntries := map[string]*api.MdnsEntry{
+		"evse": {Name: "EVSE", Ski: ski, Identifier: "EVSE1"},
+	}
+	hub.connectionAttemptRunning[ski] = true
+	hub.connectionAttemptCounter[ski] = 1
+	hub.connectionDelayTimers[ski] = newConnectionDelayTimer(time.Millisecond, func() {})
+
+	hub.ReportMdnsEntries(initialEntries, true)
+
+	// Flag should still be true since the device is still visible
+	assert.True(t, hub.isConnectionAttemptRunning(ski), "flag should remain true while device is visible")
+
+	// Step 2: Device disappears from mDNS
+	emptyEntries := map[string]*api.MdnsEntry{}
+	hub.ReportMdnsEntries(emptyEntries, true)
+
+	// The flag MUST be reset to false so future connection attempts aren't blocked.
+	// Note: setConnectionAttemptRunning(ski, false) sets the map value to false
+	// rather than deleting the key. This means map entries accumulate over
+	// appear/disappear cycles (unlike the counter and timer which are deleted).
+	// The tests assert on isConnectionAttemptRunning (which returns false for
+	// both missing and false entries), matching the current production behavior.
+	assert.False(t, hub.isConnectionAttemptRunning(ski),
+		"connectionAttemptRunning must be reset when device disappears from mDNS (issue #73)")
+}
+
+// Test for issue #73: full reconnection scenario
+// Simulates: device paired -> device offline -> cleanup -> device back online -> reconnection must be possible
+func TestIssue73_ReconnectionAfterMdnsExpiry(t *testing.T) {
+	mockMdns := mocks.NewMdnsInterface(t)
+	hub := &Hub{
+		connections:              make(map[string]api.ShipConnectionInterface),
+		remoteServices:           make(map[string]*api.ServiceDetails, 0),
+		connectionAttemptCounter: make(map[string]int),
+		connectionAttemptRunning: make(map[string]bool),
+		connectionDelayTimers:    make(map[string]*connectionDelayTimer),
+		knownMdnsEntries:         make([]*api.MdnsEntry, 0),
+		muxMdns:                  sync.Mutex{},
+		muxTimers:                sync.RWMutex{},
+		muxConAttempt:            sync.RWMutex{},
+		mdns:                     mockMdns,
+	}
+
+	mockHubReader := mocks.NewHubReaderInterface(t)
+	mockHubReader.EXPECT().VisibleRemoteServicesUpdated(mock.AnythingOfType("[]api.RemoteService")).Times(3)
+	hub.hubReader = mockHubReader
+
+	ski := "evse-ski"
+	entry := &api.MdnsEntry{Name: "EVSE", Ski: ski, Identifier: "EVSE1"}
+
+	// Phase 1: Device is online and a connection attempt was started
+	hub.connectionAttemptRunning[ski] = true
+	hub.connectionAttemptCounter[ski] = 2
+	hub.connectionDelayTimers[ski] = newConnectionDelayTimer(time.Hour, func() {})
+
+	hub.ReportMdnsEntries(map[string]*api.MdnsEntry{"evse": entry}, true)
+
+	// Phase 2: Device goes offline - mDNS entry expires
+	hub.ReportMdnsEntries(map[string]*api.MdnsEntry{}, true)
+
+	// All connection state for the SKI must be fully cleaned up
+	assert.False(t, hub.isConnectionAttemptRunning(ski),
+		"connectionAttemptRunning must be false after device disappears")
+	assert.NotContains(t, hub.connectionAttemptCounter, ski,
+		"connectionAttemptCounter must be removed after device disappears")
+	assert.NotContains(t, hub.connectionDelayTimers, ski,
+		"connectionDelayTimer must be removed after device disappears")
+
+	// Phase 3: Device comes back online
+	// coordinateConnectionInitations should NOT be blocked by stale state
+	// Note: this assertion is identical to the Phase 2 check above — it's
+	// repeated here to document the Phase 3 precondition explicitly.
+	assert.False(t, hub.isConnectionAttemptRunning(ski),
+		"isConnectionAttemptRunning must return false so coordinateConnectionInitations can proceed (issue #73)")
+
+	hub.ReportMdnsEntries(map[string]*api.MdnsEntry{"evse": entry}, true)
+}
+
+// Test for issue #73: only the disappeared device's flag is reset, others are untouched
+func TestCleanupRemovedMdnsEntries_OnlyResetsDisappearedDevice(t *testing.T) {
+	mockMdns := mocks.NewMdnsInterface(t)
+	hub := &Hub{
+		connections:              make(map[string]api.ShipConnectionInterface),
+		remoteServices:           make(map[string]*api.ServiceDetails, 0),
+		connectionAttemptCounter: make(map[string]int),
+		connectionAttemptRunning: make(map[string]bool),
+		connectionDelayTimers:    make(map[string]*connectionDelayTimer),
+		knownMdnsEntries:         make([]*api.MdnsEntry, 0),
+		muxMdns:                  sync.Mutex{},
+		muxTimers:                sync.RWMutex{},
+		muxConAttempt:            sync.RWMutex{},
+		mdns:                     mockMdns,
+	}
+
+	mockHubReader := mocks.NewHubReaderInterface(t)
+	mockHubReader.EXPECT().VisibleRemoteServicesUpdated(mock.AnythingOfType("[]api.RemoteService")).Times(2)
+	hub.hubReader = mockHubReader
+
+	skiStays := "device-stays"
+	skiLeaves := "device-leaves"
+
+	// Both devices visible, both have active connection attempts
+	initialEntries := map[string]*api.MdnsEntry{
+		"stays":  {Name: "Stays", Ski: skiStays, Identifier: "S1"},
+		"leaves": {Name: "Leaves", Ski: skiLeaves, Identifier: "L1"},
+	}
+	hub.connectionAttemptRunning[skiStays] = true
+	hub.connectionAttemptRunning[skiLeaves] = true
+	hub.connectionAttemptCounter[skiStays] = 1
+	hub.connectionAttemptCounter[skiLeaves] = 1
+
+	hub.ReportMdnsEntries(initialEntries, true)
+
+	// One device disappears
+	updatedEntries := map[string]*api.MdnsEntry{
+		"stays": {Name: "Stays", Ski: skiStays, Identifier: "S1"},
+	}
+
+	hub.ReportMdnsEntries(updatedEntries, true)
+
+	// The device that stayed should keep its flag
+	assert.True(t, hub.isConnectionAttemptRunning(skiStays),
+		"device that remains visible should keep its connectionAttemptRunning flag")
+	assert.Equal(t, 1, hub.connectionAttemptCounter[skiStays],
+		"device that remains visible should keep its counter")
+
+	// The device that left must have its flag reset
+	assert.False(t, hub.isConnectionAttemptRunning(skiLeaves),
+		"device that disappeared must have connectionAttemptRunning reset (issue #73)")
+	assert.NotContains(t, hub.connectionAttemptCounter, skiLeaves,
+		"device that disappeared must have counter removed")
+
+	mockHubReader.AssertExpectations(t)
+}
