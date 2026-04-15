@@ -218,10 +218,6 @@ func (h *Hub) tryConnectionViaAddresses(remoteService *api.ServiceDetails, entry
 // initateConnection attempts to establish a connection to a remote service
 // returns true if successful
 func (h *Hub) initateConnection(remoteService *api.ServiceDetails, entry *api.MdnsEntry) bool {
-	defer func() {
-		h.setConnectionAttemptRunning(remoteService.SKI(), false)
-	}()
-
 	// Check if connection attempt should be made
 	if !h.shouldAttemptConnection(remoteService) {
 		return false

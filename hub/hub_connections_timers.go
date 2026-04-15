@@ -30,7 +30,10 @@ func newConnectionDelayTimer(duration time.Duration, f func()) *connectionDelayT
 	return cdt
 }
 
-// Stop cancels the timer if it hasn't fired yet
+// Stop cancels the timer if it hasn't fired yet.
+// When Stop returns false (timer already fired), the done channel is NOT closed,
+// so the timer callback will still execute. Callers must ensure the callback
+// handles this gracefully (e.g. via early-return guards that reset any flags).
 func (cdt *connectionDelayTimer) Stop() bool {
 	if cdt.timer.Stop() {
 		// Timer was stopped before firing

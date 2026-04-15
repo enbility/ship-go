@@ -97,6 +97,7 @@ func (h *Hub) cleanupRemovedMdnsEntries(currentEntries map[string]*api.MdnsEntry
 			logging.Log().Debugf("hub: cleaning up connection attempts for SKI %s (no longer in mDNS)", prevEntry.Ski)
 			h.cancelConnectionDelayTimer(prevEntry.Ski)
 			h.removeConnectionAttemptCounter(prevEntry.Ski)
+			h.setConnectionAttemptRunning(prevEntry.Ski, false)
 		}
 	}
 }

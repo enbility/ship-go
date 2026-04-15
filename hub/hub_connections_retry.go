@@ -32,6 +32,8 @@ func (h *Hub) coordinateConnectionInitations(ski string, entry *api.MdnsEntry) {
 // prepareConnectionInitation is invoked by coordinateConnectionInitations either with a delay or directly
 // when initiating a pairing process
 func (h *Hub) prepareConnectionInitation(ski string, counter int, entry *api.MdnsEntry) {
+	defer h.setConnectionAttemptRunning(ski, false)
+
 	// check if the current counter is still the same, otherwise this counter is irrelevant
 	currentCounter, exists := h.getCurrentConnectionAttemptCounter(ski)
 	if !exists || currentCounter != counter {
