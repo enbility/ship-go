@@ -36,6 +36,7 @@ type Hub struct {
 	connectionAttemptCounter    map[string]int
 	connectionAttemptRunning    map[string]bool
 	connectionAttemptGeneration map[string]uint64
+	connectionAttemptGenCounter uint64 // global monotonic counter for unique generation values
 
 	port        int
 	certifciate tls.Certificate

@@ -131,9 +131,12 @@ func (h *Hub) isConnectionAttemptRunning(ski string) bool {
 
 // tryBeginConnectionAttempt atomically checks whether a connection attempt is
 // already running for the given SKI and, only if not, sets the running flag and
-// bumps the generation. Performing the check and the set under a single lock
-// eliminates the TOCTOU window that would exist if the check and set were
-// separate lock acquisitions.
+// assigns a globally unique generation. Performing the check and the set under
+// a single lock eliminates the TOCTOU window that would exist if the check and
+// set were separate lock acquisitions.
+//
+// The generation is drawn from a hub-wide monotonic counter so that values are
+// never reused, even after a SKI's map entries have been deleted by cleanup.
 //
 // Returns (generation, true) if this caller won the race and should proceed,
 // or (0, false) if an attempt is already running.
@@ -145,21 +148,24 @@ func (h *Hub) tryBeginConnectionAttempt(ski string) (uint64, bool) {
 		return 0, false
 	}
 
+	h.connectionAttemptGenCounter++
 	h.connectionAttemptRunning[ski] = true
-	h.connectionAttemptGeneration[ski]++
-	return h.connectionAttemptGeneration[ski], true
+	h.connectionAttemptGeneration[ski] = h.connectionAttemptGenCounter
+	return h.connectionAttemptGenCounter, true
 }
 
-// forceResetConnectionAttempt unconditionally resets the running flag and bumps
-// the generation so that any in-flight stale timer callback (which carries an
-// older generation) cannot reset the flag after this point. Use this in cleanup
-// paths where the timer has been cancelled but may have already fired.
+// forceResetConnectionAttempt deletes the running flag and generation for the
+// given SKI. Any in-flight stale timer callback (which carries an older,
+// non-zero generation) will see generation 0 (missing key) and no-op in
+// compareAndResetConnectionAttempt. If the SKI reappears later,
+// tryBeginConnectionAttempt draws from the global monotonic counter, so the new
+// generation is guaranteed to differ from any stale callback's generation.
 func (h *Hub) forceResetConnectionAttempt(ski string) {
 	h.muxConAttempt.Lock()
 	defer h.muxConAttempt.Unlock()
 
-	h.connectionAttemptRunning[ski] = false
-	h.connectionAttemptGeneration[ski]++
+	delete(h.connectionAttemptRunning, ski)
+	delete(h.connectionAttemptGeneration, ski)
 }
 
 // compareAndResetConnectionAttempt atomically checks whether the given
@@ -171,6 +177,7 @@ func (h *Hub) compareAndResetConnectionAttempt(ski string, generation uint64) {
 	defer h.muxConAttempt.Unlock()
 
 	if h.connectionAttemptGeneration[ski] == generation {
-		h.connectionAttemptRunning[ski] = false
+		delete(h.connectionAttemptRunning, ski)
+		delete(h.connectionAttemptGeneration, ski)
 	}
 }

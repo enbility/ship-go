@@ -207,11 +207,8 @@ func TestCleanupRemovedMdnsEntries_ResetsConnectionAttemptRunning(t *testing.T) 
 	hub.ReportMdnsEntries(emptyEntries, true)
 
 	// The flag MUST be reset to false so future connection attempts aren't blocked.
-	// Note: forceResetConnectionAttempt(ski) sets the map value to false
-	// rather than deleting the key. This means map entries accumulate over
-	// appear/disappear cycles (unlike the counter and timer which are deleted).
-	// The tests assert on isConnectionAttemptRunning (which returns false for
-	// both missing and false entries), matching the current production behavior.
+	// forceResetConnectionAttempt deletes both the running and generation map
+	// entries, consistent with how the counter and timer are cleaned up.
 	assert.False(t, hub.isConnectionAttemptRunning(ski),
 		"connectionAttemptRunning must be reset when device disappears from mDNS (issue #73)")
 }

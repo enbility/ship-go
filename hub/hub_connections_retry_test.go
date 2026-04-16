@@ -112,6 +112,54 @@ func (s *HubConnectionsRetrySuite) Test_ConnectionAttemptRunning() {
 	assert.Equal(s.T(), false, status)
 }
 
+// Test_CompareAndResetConnectionAttempt_CleansUpMapEntries verifies that
+// compareAndResetConnectionAttempt deletes the map entries for the SKI rather
+// than leaving them with a zero/false value. This prevents unbounded map growth
+// when many transient SKIs connect and disconnect over the hub's lifetime.
+func (s *HubConnectionsRetrySuite) Test_CompareAndResetConnectionAttempt_CleansUpMapEntries() {
+	generation, ok := s.sut.tryBeginConnectionAttempt(s.remoteSki)
+	assert.True(s.T(), ok)
+
+	// Precondition: keys exist
+	s.sut.muxConAttempt.RLock()
+	_, runningExists := s.sut.connectionAttemptRunning[s.remoteSki]
+	_, genExists := s.sut.connectionAttemptGeneration[s.remoteSki]
+	s.sut.muxConAttempt.RUnlock()
+	assert.True(s.T(), runningExists, "running key must exist after tryBeginConnectionAttempt")
+	assert.True(s.T(), genExists, "generation key must exist after tryBeginConnectionAttempt")
+
+	// Matching generation → should delete both keys
+	s.sut.compareAndResetConnectionAttempt(s.remoteSki, generation)
+
+	s.sut.muxConAttempt.RLock()
+	_, runningExists = s.sut.connectionAttemptRunning[s.remoteSki]
+	_, genExists = s.sut.connectionAttemptGeneration[s.remoteSki]
+	s.sut.muxConAttempt.RUnlock()
+	assert.False(s.T(), runningExists, "running key must be deleted, not just set to false")
+	assert.False(s.T(), genExists, "generation key must be deleted after reset")
+}
+
+// Test_CompareAndResetConnectionAttempt_MismatchLeavesState verifies that
+// compareAndResetConnectionAttempt with a non-matching generation leaves
+// the existing map entries untouched.
+func (s *HubConnectionsRetrySuite) Test_CompareAndResetConnectionAttempt_MismatchLeavesState() {
+	generation, ok := s.sut.tryBeginConnectionAttempt(s.remoteSki)
+	assert.True(s.T(), ok)
+
+	// Call with wrong generation
+	s.sut.compareAndResetConnectionAttempt(s.remoteSki, generation+999)
+
+	// Keys must still exist and be unchanged
+	assert.True(s.T(), s.sut.isConnectionAttemptRunning(s.remoteSki),
+		"running flag must remain true when generation mismatches")
+
+	s.sut.muxConAttempt.RLock()
+	storedGen := s.sut.connectionAttemptGeneration[s.remoteSki]
+	s.sut.muxConAttempt.RUnlock()
+	assert.Equal(s.T(), generation, storedGen,
+		"generation must remain unchanged when compareAndReset mismatches")
+}
+
 // Test_PrepareConnectionInitation_CounterMismatch_NoCounter_ResetsFlag verifies that
 // when prepareConnectionInitation returns early due to a counter mismatch
 // (counter was removed or changed), the connectionAttemptRunning flag is
@@ -370,9 +418,10 @@ func (s *HubConnectionsRetrySuite) Test_CoordinateConnectionInitations_TOCTOU_On
 	for iter := 0; iter < iterations; iter++ {
 		// Reset state for this iteration
 		s.sut.muxConAttempt.Lock()
-		s.sut.connectionAttemptRunning[ski] = false
-		s.sut.connectionAttemptGeneration[ski] = 0
+		delete(s.sut.connectionAttemptRunning, ski)
+		delete(s.sut.connectionAttemptGeneration, ski)
 		delete(s.sut.connectionAttemptCounter, ski)
+		genBefore := s.sut.connectionAttemptGenCounter
 		s.sut.muxConAttempt.Unlock()
 		s.sut.cancelConnectionDelayTimer(ski)
 
@@ -398,16 +447,17 @@ func (s *HubConnectionsRetrySuite) Test_CoordinateConnectionInitations_TOCTOU_On
 		wg.Wait()    // wait for all goroutines to finish
 
 		s.sut.muxConAttempt.RLock()
-		gen := s.sut.connectionAttemptGeneration[ski]
+		genAfter := s.sut.connectionAttemptGenCounter
 		s.sut.muxConAttempt.RUnlock()
 
 		// Exactly one goroutine should have started an attempt.
-		// generation > 1 means multiple goroutines passed the guard.
-		if gen > 1 {
+		// A delta > 1 means multiple goroutines called tryBeginConnectionAttempt.
+		bumps := genAfter - genBefore
+		if bumps > 1 {
 			s.sut.cancelConnectionDelayTimer(ski)
-			s.T().Fatalf("iteration %d: generation=%d — %d goroutines passed through "+
+			s.T().Fatalf("iteration %d: global counter bumped %d times — %d goroutines passed through "+
 				"coordinateConnectionInitations concurrently for the same SKI; "+
-				"expected exactly 1", iter, gen, gen)
+				"expected exactly 1", iter, bumps, bumps)
 		}
 
 		s.sut.cancelConnectionDelayTimer(ski)
