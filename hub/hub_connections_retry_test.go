@@ -82,18 +82,18 @@ func (s *HubConnectionsRetrySuite) Test_IncreaseConnectionAttemptCounter() {
 
 func (s *HubConnectionsRetrySuite) Test_RemoveConnectionAttemptCounter() {
 	s.sut.increaseConnectionAttemptCounter(s.remoteSki)
-	_, exists := s.sut.connectionAttemptCounter[s.remoteSki]
+	_, exists := s.sut.getCurrentConnectionAttemptCounter(s.remoteSki)
 	assert.Equal(s.T(), true, exists)
 
 	s.sut.removeConnectionAttemptCounter(s.remoteSki)
-	_, exists = s.sut.connectionAttemptCounter[s.remoteSki]
+	_, exists = s.sut.getCurrentConnectionAttemptCounter(s.remoteSki)
 	assert.Equal(s.T(), false, exists)
 }
 
 func (s *HubConnectionsRetrySuite) Test_GetCurrentConnectionAttemptCounter() {
 	s.sut.increaseConnectionAttemptCounter(s.remoteSki)
 	_, exists := s.sut.connectionAttemptCounter[s.remoteSki]
-	assert.Equal(s.T(), exists, true)
+	assert.True(s.T(), exists)
 	s.sut.increaseConnectionAttemptCounter(s.remoteSki)
 
 	value, exists := s.sut.getCurrentConnectionAttemptCounter(s.remoteSki)
@@ -142,7 +142,9 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_CounterMismat
 	s.sut.setConnectionAttemptRunning(s.remoteSki, true)
 
 	// Counter exists but has a different value than what the timer was created with
+	s.sut.muxConAttempt.Lock()
 	s.sut.connectionAttemptCounter[s.remoteSki] = 5
+	s.sut.muxConAttempt.Unlock()
 
 	// Call with stale counter=2 — will mismatch
 	s.sut.prepareConnectionInitation(s.remoteSki, 2, entry)
@@ -165,7 +167,7 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_NotPaired_Res
 	s.sut.setConnectionAttemptRunning(s.remoteSki, true)
 
 	// Set a matching counter so we pass the counter check
-	s.sut.connectionAttemptCounter[s.remoteSki] = 0
+	s.sut.increaseConnectionAttemptCounter(s.remoteSki)
 
 	// Ensure the device is NOT paired (ServiceForSKI creates a new untrusted service)
 	// The default ServiceDetails has trusted=false, so IsRemoteServiceForSKIPaired returns false
@@ -194,7 +196,7 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_AlreadyConnec
 	s.sut.setConnectionAttemptRunning(s.remoteSki, true)
 
 	// Set a matching counter so we pass the counter check
-	s.sut.connectionAttemptCounter[s.remoteSki] = 0
+	s.sut.increaseConnectionAttemptCounter(s.remoteSki)
 
 	// Device IS paired (so we pass the pairing check)
 	service := s.sut.ServiceForSKI(s.remoteSki)
@@ -262,6 +264,56 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_TimerRace_Cou
 	// The flag MUST be reset despite the race
 	assert.False(s.T(), s.sut.isConnectionAttemptRunning(s.remoteSki),
 		"connectionAttemptRunning must be reset even when counter was removed by concurrent cleanup")
+}
+
+// Test_StaleCallback_Resets_NewAttempt_Flag reproduces the race condition where
+// a stale timer callback (T1) from a previous connection attempt incorrectly
+// resets the connectionAttemptRunning flag that was set by a new, legitimate
+// attempt (T2).
+//
+// Sequence:
+//  1. Device appears → flag=true, counter=0, timer T1 created
+//  2. Device disappears → cleanup: removes counter, resets flag
+//  3. Device reappears → flag=true, counter=0 (same value!), timer T2 created
+//  4. Stale T1 callback runs prepareConnectionInitation(ski, 0, oldEntry):
+//     - Counter matches (both 0) → passes the counter guard
+//     - Device not paired → early return
+//     - defer sets flag=false → INCORRECTLY cancels T2's attempt
+//
+// This test FAILS with the current code because:
+//   - removeConnectionAttemptCounter deletes the key, so the new attempt
+//     restarts at 0 — identical to the stale callback's counter
+//   - The defer in prepareConnectionInitation unconditionally resets the flag
+func (s *HubConnectionsRetrySuite) Test_StaleCallback_Resets_NewAttempt_Flag() {
+	ski := s.remoteSki
+	entry := &api.MdnsEntry{Name: "EVSE", Ski: ski, Identifier: "EVSE1"}
+
+	// Ensure the device is NOT paired so the stale callback hits the
+	// "not paired" early return (avoids actually initiating a connection)
+	service := s.sut.ServiceForSKI(ski)
+	service.SetTrusted(false)
+
+	// Step 1: First connection attempt (simulates coordinateConnectionInitations)
+	s.sut.setConnectionAttemptRunning(ski, true)
+	staleCounter := s.sut.increaseConnectionAttemptCounter(ski) // returns 0
+
+	// Step 2: Device disappears — cleanup runs
+	// (simulates cleanupRemovedMdnsEntries)
+	s.sut.removeConnectionAttemptCounter(ski)
+	s.sut.setConnectionAttemptRunning(ski, false)
+
+	// Step 3: Device reappears — new connection attempt starts
+	s.sut.setConnectionAttemptRunning(ski, true)
+	_ = s.sut.increaseConnectionAttemptCounter(ski) // returns 0 again (counter was deleted)
+
+	// Step 4: Stale T1 callback finally executes
+	// With current code: counter matches (both 0), defer unconditionally resets flag
+	s.sut.prepareConnectionInitation(ski, staleCounter, entry)
+
+	// The flag MUST still be true — the new T2 attempt is active and must not
+	// be cancelled by a stale callback from a previous attempt.
+	assert.True(s.T(), s.sut.isConnectionAttemptRunning(ski),
+		"stale callback must NOT reset the flag belonging to a newer connection attempt")
 }
 
 // Test_PrepareConnectionInitation_FullLifecycle_TimerFires_EarlyReturn_ResetsFlag verifies the full
