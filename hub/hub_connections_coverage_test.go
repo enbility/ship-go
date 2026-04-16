@@ -182,7 +182,7 @@ func TestPrepareConnectionInitiationCounterMismatch(t *testing.T) {
 
 	// Call prepareConnectionInitation with old counter value
 	// It should exit early due to counter mismatch
-	hub.prepareConnectionInitation(ski, 0, entry) // old counter = 0, current = 1
+	hub.prepareConnectionInitation(ski, 0, 0, entry) // old counter = 0, current = 1
 
 	// Verify no connection was initiated (would require more mocking to fully test)
 	// The key is that the function returns early due to counter mismatch

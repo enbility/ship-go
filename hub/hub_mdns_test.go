@@ -17,9 +17,10 @@ func TestReportMdnsEntries_CleanupRemovedEntries(t *testing.T) {
 	hub := &Hub{
 		connections:              make(map[string]api.ShipConnectionInterface),
 		remoteServices:           make(map[string]*api.ServiceDetails, 0),
-		connectionAttemptCounter: make(map[string]int),
-		connectionAttemptRunning: make(map[string]bool),
-		connectionDelayTimers:    make(map[string]*connectionDelayTimer),
+		connectionAttemptCounter:    make(map[string]int),
+		connectionAttemptRunning:    make(map[string]bool),
+		connectionAttemptGeneration: make(map[string]uint64),
+		connectionDelayTimers:       make(map[string]*connectionDelayTimer),
 		knownMdnsEntries:         make([]*api.MdnsEntry, 0),
 		muxMdns:                  sync.Mutex{},
 		muxTimers:                sync.RWMutex{},
@@ -86,9 +87,10 @@ func TestReportMdnsEntries_CleanupWithNewEntries(t *testing.T) {
 	hub := &Hub{
 		connections:              make(map[string]api.ShipConnectionInterface),
 		remoteServices:           make(map[string]*api.ServiceDetails, 0),
-		connectionAttemptCounter: make(map[string]int),
-		connectionAttemptRunning: make(map[string]bool),
-		connectionDelayTimers:    make(map[string]*connectionDelayTimer),
+		connectionAttemptCounter:    make(map[string]int),
+		connectionAttemptRunning:    make(map[string]bool),
+		connectionAttemptGeneration: make(map[string]uint64),
+		connectionDelayTimers:       make(map[string]*connectionDelayTimer),
 		knownMdnsEntries:         make([]*api.MdnsEntry, 0),
 		muxMdns:                  sync.Mutex{},
 		muxTimers:                sync.RWMutex{},
@@ -132,9 +134,10 @@ func TestReportMdnsEntries_CleanupWithNoPreviousEntries(t *testing.T) {
 	hub := &Hub{
 		connections:              make(map[string]api.ShipConnectionInterface),
 		remoteServices:           make(map[string]*api.ServiceDetails, 0),
-		connectionAttemptCounter: make(map[string]int),
-		connectionAttemptRunning: make(map[string]bool),
-		connectionDelayTimers:    make(map[string]*connectionDelayTimer),
+		connectionAttemptCounter:    make(map[string]int),
+		connectionAttemptRunning:    make(map[string]bool),
+		connectionAttemptGeneration: make(map[string]uint64),
+		connectionDelayTimers:       make(map[string]*connectionDelayTimer),
 		knownMdnsEntries:         make([]*api.MdnsEntry, 0), // No previous entries
 		muxMdns:                  sync.Mutex{},
 		muxTimers:                sync.RWMutex{},
@@ -169,9 +172,10 @@ func TestCleanupRemovedMdnsEntries_ResetsConnectionAttemptRunning(t *testing.T) 
 	hub := &Hub{
 		connections:              make(map[string]api.ShipConnectionInterface),
 		remoteServices:           make(map[string]*api.ServiceDetails, 0),
-		connectionAttemptCounter: make(map[string]int),
-		connectionAttemptRunning: make(map[string]bool),
-		connectionDelayTimers:    make(map[string]*connectionDelayTimer),
+		connectionAttemptCounter:    make(map[string]int),
+		connectionAttemptRunning:    make(map[string]bool),
+		connectionAttemptGeneration: make(map[string]uint64),
+		connectionDelayTimers:       make(map[string]*connectionDelayTimer),
 		knownMdnsEntries:         make([]*api.MdnsEntry, 0),
 		muxMdns:                  sync.Mutex{},
 		muxTimers:                sync.RWMutex{},
@@ -203,7 +207,7 @@ func TestCleanupRemovedMdnsEntries_ResetsConnectionAttemptRunning(t *testing.T) 
 	hub.ReportMdnsEntries(emptyEntries, true)
 
 	// The flag MUST be reset to false so future connection attempts aren't blocked.
-	// Note: setConnectionAttemptRunning(ski, false) sets the map value to false
+	// Note: forceResetConnectionAttempt(ski) sets the map value to false
 	// rather than deleting the key. This means map entries accumulate over
 	// appear/disappear cycles (unlike the counter and timer which are deleted).
 	// The tests assert on isConnectionAttemptRunning (which returns false for
@@ -219,9 +223,10 @@ func TestIssue73_ReconnectionAfterMdnsExpiry(t *testing.T) {
 	hub := &Hub{
 		connections:              make(map[string]api.ShipConnectionInterface),
 		remoteServices:           make(map[string]*api.ServiceDetails, 0),
-		connectionAttemptCounter: make(map[string]int),
-		connectionAttemptRunning: make(map[string]bool),
-		connectionDelayTimers:    make(map[string]*connectionDelayTimer),
+		connectionAttemptCounter:    make(map[string]int),
+		connectionAttemptRunning:    make(map[string]bool),
+		connectionAttemptGeneration: make(map[string]uint64),
+		connectionDelayTimers:       make(map[string]*connectionDelayTimer),
 		knownMdnsEntries:         make([]*api.MdnsEntry, 0),
 		muxMdns:                  sync.Mutex{},
 		muxTimers:                sync.RWMutex{},
@@ -270,9 +275,10 @@ func TestCleanupRemovedMdnsEntries_OnlyResetsDisappearedDevice(t *testing.T) {
 	hub := &Hub{
 		connections:              make(map[string]api.ShipConnectionInterface),
 		remoteServices:           make(map[string]*api.ServiceDetails, 0),
-		connectionAttemptCounter: make(map[string]int),
-		connectionAttemptRunning: make(map[string]bool),
-		connectionDelayTimers:    make(map[string]*connectionDelayTimer),
+		connectionAttemptCounter:    make(map[string]int),
+		connectionAttemptRunning:    make(map[string]bool),
+		connectionAttemptGeneration: make(map[string]uint64),
+		connectionDelayTimers:       make(map[string]*connectionDelayTimer),
 		knownMdnsEntries:         make([]*api.MdnsEntry, 0),
 		muxMdns:                  sync.Mutex{},
 		muxTimers:                sync.RWMutex{},

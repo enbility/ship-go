@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ func (s *HubConnectionsRetrySuite) BeforeTest(suiteName, testName string) {
 	s.remoteSki = "remotetestski"
 
 	ctrl := gomock.NewController(s.T())
-	
+
 	s.hubReader = mocks.NewMockHubReaderInterface(ctrl)
 	s.hubReader.EXPECT().RemoteSKIConnected(gomock.Any()).Return().AnyTimes()
 	s.hubReader.EXPECT().RemoteSKIDisconnected(gomock.Any()).Return().AnyTimes()
@@ -102,10 +103,11 @@ func (s *HubConnectionsRetrySuite) Test_GetCurrentConnectionAttemptCounter() {
 }
 
 func (s *HubConnectionsRetrySuite) Test_ConnectionAttemptRunning() {
-	s.sut.setConnectionAttemptRunning(s.remoteSki, true)
+	_, ok := s.sut.tryBeginConnectionAttempt(s.remoteSki)
+	assert.True(s.T(), ok)
 	status := s.sut.isConnectionAttemptRunning(s.remoteSki)
 	assert.Equal(s.T(), true, status)
-	s.sut.setConnectionAttemptRunning(s.remoteSki, false)
+	s.sut.forceResetConnectionAttempt(s.remoteSki)
 	status = s.sut.isConnectionAttemptRunning(s.remoteSki)
 	assert.Equal(s.T(), false, status)
 }
@@ -121,11 +123,11 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_CounterMismat
 	entry := &api.MdnsEntry{Name: "EVSE", Ski: s.remoteSki, Identifier: "EVSE1"}
 
 	// Simulate: coordinateConnectionInitations set the flag to true
-	s.sut.setConnectionAttemptRunning(s.remoteSki, true)
+	generation, _ := s.sut.tryBeginConnectionAttempt(s.remoteSki)
 
 	// Counter does NOT exist (was removed by cleanup)
 	// Call prepareConnectionInitation with counter=0 — will mismatch since no counter exists
-	s.sut.prepareConnectionInitation(s.remoteSki, 0, entry)
+	s.sut.prepareConnectionInitation(s.remoteSki, 0, generation, entry)
 
 	// The flag MUST be reset to false after early return
 	assert.False(s.T(), s.sut.isConnectionAttemptRunning(s.remoteSki),
@@ -139,7 +141,7 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_CounterMismat
 	entry := &api.MdnsEntry{Name: "EVSE", Ski: s.remoteSki, Identifier: "EVSE1"}
 
 	// Simulate: coordinateConnectionInitations set the flag to true
-	s.sut.setConnectionAttemptRunning(s.remoteSki, true)
+	generation, _ := s.sut.tryBeginConnectionAttempt(s.remoteSki)
 
 	// Counter exists but has a different value than what the timer was created with
 	s.sut.muxConAttempt.Lock()
@@ -147,7 +149,7 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_CounterMismat
 	s.sut.muxConAttempt.Unlock()
 
 	// Call with stale counter=2 — will mismatch
-	s.sut.prepareConnectionInitation(s.remoteSki, 2, entry)
+	s.sut.prepareConnectionInitation(s.remoteSki, 2, generation, entry)
 
 	// The flag MUST be reset to false after early return
 	assert.False(s.T(), s.sut.isConnectionAttemptRunning(s.remoteSki),
@@ -164,7 +166,7 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_NotPaired_Res
 	entry := &api.MdnsEntry{Name: "EVSE", Ski: s.remoteSki, Identifier: "EVSE1"}
 
 	// Simulate: coordinateConnectionInitations set the flag to true
-	s.sut.setConnectionAttemptRunning(s.remoteSki, true)
+	generation, _ := s.sut.tryBeginConnectionAttempt(s.remoteSki)
 
 	// Set a matching counter so we pass the counter check
 	s.sut.increaseConnectionAttemptCounter(s.remoteSki)
@@ -175,7 +177,7 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_NotPaired_Res
 	service.SetTrusted(false)
 
 	// Call prepareConnectionInitation — should return early at the "not paired" check
-	s.sut.prepareConnectionInitation(s.remoteSki, 0, entry)
+	s.sut.prepareConnectionInitation(s.remoteSki, 0, generation, entry)
 
 	// The flag MUST be reset to false after early return
 	assert.False(s.T(), s.sut.isConnectionAttemptRunning(s.remoteSki),
@@ -193,7 +195,7 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_AlreadyConnec
 	entry := &api.MdnsEntry{Name: "EVSE", Ski: s.remoteSki, Identifier: "EVSE1"}
 
 	// Simulate: coordinateConnectionInitations set the flag to true
-	s.sut.setConnectionAttemptRunning(s.remoteSki, true)
+	generation, _ := s.sut.tryBeginConnectionAttempt(s.remoteSki)
 
 	// Set a matching counter so we pass the counter check
 	s.sut.increaseConnectionAttemptCounter(s.remoteSki)
@@ -208,7 +210,7 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_AlreadyConnec
 	s.sut.muxCon.Unlock()
 
 	// Call prepareConnectionInitation — should return early at the "already connected" check
-	s.sut.prepareConnectionInitation(s.remoteSki, 0, entry)
+	s.sut.prepareConnectionInitation(s.remoteSki, 0, generation, entry)
 
 	// The flag MUST be reset to false after early return
 	assert.False(s.T(), s.sut.isConnectionAttemptRunning(s.remoteSki),
@@ -223,10 +225,10 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_EarlyReturn_D
 	entry := &api.MdnsEntry{Name: "EVSE", Ski: s.remoteSki, Identifier: "EVSE1"}
 
 	// Simulate a connection attempt that will hit the counter-mismatch early return
-	s.sut.setConnectionAttemptRunning(s.remoteSki, true)
+	generation, _ := s.sut.tryBeginConnectionAttempt(s.remoteSki)
 	// No counter set — will cause mismatch
 
-	s.sut.prepareConnectionInitation(s.remoteSki, 0, entry)
+	s.sut.prepareConnectionInitation(s.remoteSki, 0, generation, entry)
 
 	// After the early return, coordinateConnectionInitations must NOT be blocked
 	// It checks isConnectionAttemptRunning — which must be false now
@@ -252,14 +254,14 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_TimerRace_Cou
 	entry := &api.MdnsEntry{Name: "EVSE", Ski: s.remoteSki, Identifier: "EVSE1"}
 
 	// Step 1: Start a connection attempt (simulating coordinateConnectionInitations)
-	s.sut.setConnectionAttemptRunning(s.remoteSki, true)
+	generation, _ := s.sut.tryBeginConnectionAttempt(s.remoteSki)
 	counter := s.sut.increaseConnectionAttemptCounter(s.remoteSki)
 
 	// Step 2: Simulate cleanup removing the counter (as cleanupRemovedMdnsEntries would)
 	s.sut.removeConnectionAttemptCounter(s.remoteSki)
 
 	// Step 3: Timer fires — prepareConnectionInitation runs with the original counter
-	s.sut.prepareConnectionInitation(s.remoteSki, counter, entry)
+	s.sut.prepareConnectionInitation(s.remoteSki, counter, generation, entry)
 
 	// The flag MUST be reset despite the race
 	assert.False(s.T(), s.sut.isConnectionAttemptRunning(s.remoteSki),
@@ -294,21 +296,20 @@ func (s *HubConnectionsRetrySuite) Test_StaleCallback_Resets_NewAttempt_Flag() {
 	service.SetTrusted(false)
 
 	// Step 1: First connection attempt (simulates coordinateConnectionInitations)
-	s.sut.setConnectionAttemptRunning(ski, true)
+	staleGeneration, _ := s.sut.tryBeginConnectionAttempt(ski)
 	staleCounter := s.sut.increaseConnectionAttemptCounter(ski) // returns 0
 
 	// Step 2: Device disappears — cleanup runs
 	// (simulates cleanupRemovedMdnsEntries)
 	s.sut.removeConnectionAttemptCounter(ski)
-	s.sut.setConnectionAttemptRunning(ski, false)
+	s.sut.forceResetConnectionAttempt(ski)
 
 	// Step 3: Device reappears — new connection attempt starts
-	s.sut.setConnectionAttemptRunning(ski, true)
+	_, _ = s.sut.tryBeginConnectionAttempt(ski)
 	_ = s.sut.increaseConnectionAttemptCounter(ski) // returns 0 again (counter was deleted)
 
-	// Step 4: Stale T1 callback finally executes
-	// With current code: counter matches (both 0), defer unconditionally resets flag
-	s.sut.prepareConnectionInitation(ski, staleCounter, entry)
+	// Step 4: Stale T1 callback finally executes with old generation
+	s.sut.prepareConnectionInitation(ski, staleCounter, staleGeneration, entry)
 
 	// The flag MUST still be true — the new T2 attempt is active and must not
 	// be cancelled by a stale callback from a previous attempt.
@@ -340,4 +341,75 @@ func (s *HubConnectionsRetrySuite) Test_PrepareConnectionInitation_FullLifecycle
 		return !s.sut.isConnectionAttemptRunning(s.remoteSki)
 	}, 5*time.Second, 100*time.Millisecond,
 		"connectionAttemptRunning must be reset to false after timer fires and prepareConnectionInitation returns early (not paired)")
+}
+
+// Test_CoordinateConnectionInitations_TOCTOU_OnlyOneAttemptAllowed tests that
+// concurrent calls to coordinateConnectionInitations for the same SKI result in
+// exactly ONE connection attempt being started.
+//
+// The TOCTOU vulnerability in coordinateConnectionInitations:
+//
+//	if h.isConnectionAttemptRunning(ski) {          // RLock, check, RUnlock  ← CHECK
+//	    return
+//	}
+//	generation := h.tryBeginConnectionAttempt(ski)  // Lock, set, Unlock    ← USE
+//
+// Between CHECK and USE, another goroutine can also see running=false and proceed.
+// This results in multiple tryBeginConnectionAttempt calls, observable via generation > 1.
+//
+// This test FAILS with the current code because the check-then-set is not atomic.
+// It should PASS once coordinateConnectionInitations uses an atomic
+// tryBeginConnectionAttempt that checks and sets under a single lock.
+func (s *HubConnectionsRetrySuite) Test_CoordinateConnectionInitations_TOCTOU_OnlyOneAttemptAllowed() {
+	ski := s.remoteSki
+	entry := &api.MdnsEntry{Name: "EVSE", Ski: ski, Identifier: "EVSE1"}
+
+	const goroutines = 20
+	const iterations = 200
+
+	for iter := 0; iter < iterations; iter++ {
+		// Reset state for this iteration
+		s.sut.muxConAttempt.Lock()
+		s.sut.connectionAttemptRunning[ski] = false
+		s.sut.connectionAttemptGeneration[ski] = 0
+		delete(s.sut.connectionAttemptCounter, ski)
+		s.sut.muxConAttempt.Unlock()
+		s.sut.cancelConnectionDelayTimer(ski)
+
+		// Barrier: all goroutines start at the same instant
+		var ready sync.WaitGroup
+		ready.Add(goroutines)
+		start := make(chan struct{})
+
+		var wg sync.WaitGroup
+		wg.Add(goroutines)
+
+		for g := 0; g < goroutines; g++ {
+			go func() {
+				defer wg.Done()
+				ready.Done()
+				<-start // all goroutines block here until the barrier is released
+				s.sut.coordinateConnectionInitations(ski, entry)
+			}()
+		}
+
+		ready.Wait() // wait for all goroutines to reach the barrier
+		close(start) // release all goroutines simultaneously
+		wg.Wait()    // wait for all goroutines to finish
+
+		s.sut.muxConAttempt.RLock()
+		gen := s.sut.connectionAttemptGeneration[ski]
+		s.sut.muxConAttempt.RUnlock()
+
+		// Exactly one goroutine should have started an attempt.
+		// generation > 1 means multiple goroutines passed the guard.
+		if gen > 1 {
+			s.sut.cancelConnectionDelayTimer(ski)
+			s.T().Fatalf("iteration %d: generation=%d — %d goroutines passed through "+
+				"coordinateConnectionInitations concurrently for the same SKI; "+
+				"expected exactly 1", iter, gen, gen)
+		}
+
+		s.sut.cancelConnectionDelayTimer(ski)
+	}
 }

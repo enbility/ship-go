@@ -332,7 +332,7 @@ func TestCoordinateConnectionInitiationsBasics(t *testing.T) {
 		hub := setupTestHubForTimer(t)
 
 		ski := "running-ski"
-		hub.setConnectionAttemptRunning(ski, true)
+		hub.tryBeginConnectionAttempt(ski)
 
 		entry := &api.MdnsEntry{Identifier: ski}
 
@@ -383,7 +383,8 @@ func TestPrepareConnectionInitiationBasics(t *testing.T) {
 		entry := &api.MdnsEntry{Identifier: ski}
 
 		// Should return early for connected
-		hub.prepareConnectionInitation(ski, 0, entry)
+		generation, _ := hub.tryBeginConnectionAttempt(ski)
+		hub.prepareConnectionInitation(ski, 0, generation, entry)
 
 		// Attempt running should be cleared
 		assert.False(t, hub.isConnectionAttemptRunning(ski))
@@ -400,7 +401,8 @@ func TestPrepareConnectionInitiationBasics(t *testing.T) {
 		entry := &api.MdnsEntry{Identifier: ski}
 
 		// Should return early
-		hub.prepareConnectionInitation(ski, 0, entry)
+		generation, _ := hub.tryBeginConnectionAttempt(ski)
+		hub.prepareConnectionInitation(ski, 0, generation, entry)
 
 		// Attempt running should be cleared
 		assert.False(t, hub.isConnectionAttemptRunning(ski))
