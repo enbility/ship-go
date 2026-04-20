@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"slices"
 	"sync"
 	"time"
 
@@ -230,99 +229,86 @@ func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) err
 		btxt = append(btxt, []byte(t))
 	}
 
-	// Compare-and-retry loop: snapshot ifaceIndexes, perform DBus calls
-	// without holding a.mux (to avoid deadlock with chanListener), then
-	// verify the snapshot is still current. If interfaces changed during
-	// the DBus phase, discard the work and retry once with fresh data.
-	// The announceMux guarantees no external Announce can interleave, so
-	// a single retry suffices — further changes are left to the existing
-	// reannounceWithNewInterfaces mechanism.
-	for attempt := 0; ; attempt++ {
-		// Snapshot ifaceIndexes under the lock, then release immediately.
-		// DBus calls must not execute while holding a.mux: chanListener
-		// (the goroutine that consumes the DBus signal stream delivering
-		// replies to these calls) needs a.mux via processService →
-		// getIfaceIndexes. Holding a.mux across a DBus round-trip blocks
-		// chanListener, preventing the reply from arriving — hard deadlock.
-		a.mux.Lock()
-		if a.manualShutdown {
-			a.mux.Unlock()
-			return fmt.Errorf("mdns: avahi provider is shut down")
-		}
-		ifaceIndexes := make([]int32, len(a.ifaceIndexes))
-		copy(ifaceIndexes, a.ifaceIndexes)
+	// Snapshot ifaceIndexes under the lock, then release immediately.
+	// DBus calls must not execute while holding a.mux: chanListener
+	// (the goroutine that consumes the DBus signal stream delivering
+	// replies to these calls) needs a.mux via processService →
+	// getIfaceIndexes. Holding a.mux across a DBus round-trip blocks
+	// chanListener, preventing the reply from arriving — hard deadlock.
+	//
+	// If UpdateInterfaces mutates a.ifaceIndexes during the DBus phase
+	// below, we commit with the stale snapshot. That's acceptable: the
+	// only caller of UpdateInterfaces is reannounceWithNewInterfaces,
+	// which pairs every UpdateInterfaces with a follow-up Announce.
+	// That follow-up is serialized behind announceMux and will overwrite
+	// this commit with fresh data before any peer can observe the gap.
+	a.mux.Lock()
+	if a.manualShutdown {
 		a.mux.Unlock()
-
-		// All DBus calls happen without holding a.mux.
-		newEntryGroup, err := a.avServer.EntryGroupNew()
-		if err != nil {
-			return err
-		}
-
-		for _, iface := range ifaceIndexes {
-			// conversion is safe, as port values are always positive
-			err = newEntryGroup.AddService(iface, avahi.ProtoUnspec, 0, serviceName, shipZeroConfServiceType, shipZeroConfDomain, "", uint16(port), btxt) // #nosec G115
-			if err != nil {
-				a.avServer.EntryGroupFree(newEntryGroup)
-				return err
-			}
-		}
-
-		err = newEntryGroup.Commit()
-		if err != nil {
-			a.avServer.EntryGroupFree(newEntryGroup)
-			return err
-		}
-
-		// Re-acquire the lock to update struct state only.
-		// Only store the data for reconnection after a successful commit,
-		// so avahiCallback never re-announces with parameters that were
-		// never successfully committed.
-		a.mux.Lock()
-
-		// Shutdown may have set manualShutdown while we were performing
-		// DBus calls without holding a.mux. Shutdown is blocked on
-		// announceMux so the server is still alive, but storing a new
-		// entry group is pointless — Shutdown's unannounce will free it
-		// immediately. Short-circuit here to avoid the unnecessary state
-		// mutation.
-		if a.manualShutdown {
-			a.mux.Unlock()
-			a.avServer.EntryGroupFree(newEntryGroup)
-			return fmt.Errorf("mdns: avahi provider is shut down")
-		}
-
-		// Only retry once to avoid infinite loops under interface churn.
-		// On the second attempt we proceed regardless — the MdnsManager's
-		// reannounceWithNewInterfaces cycle will reconcile any further drift.
-		if attempt < 1 && !slices.Equal(ifaceIndexes, a.ifaceIndexes) {
-			// Interfaces changed during DBus calls; discard and retry once
-			// with fresh data.
-			a.mux.Unlock()
-			a.avServer.EntryGroupFree(newEntryGroup)
-			continue
-		}
-
-		a.mdnsServiceData = &mdnsServiceData{
-			Name: serviceName,
-			Port: port,
-			Txt:  txt,
-		}
-
-		// Free the old entry group AFTER the new one is committed.
-		// This avoids a window where the service is completely unannounced,
-		// which would cause remote devices to think we left the network.
-		oldEntryGroup := a.avEntryGroup
-		a.avEntryGroup = newEntryGroup
-
-		a.mux.Unlock()
-
-		if oldEntryGroup != nil {
-			a.avServer.EntryGroupFree(oldEntryGroup)
-		}
-
-		return nil
+		return fmt.Errorf("mdns: avahi provider is shut down")
 	}
+	ifaceIndexes := make([]int32, len(a.ifaceIndexes))
+	copy(ifaceIndexes, a.ifaceIndexes)
+	a.mux.Unlock()
+
+	// All DBus calls happen without holding a.mux.
+	newEntryGroup, err := a.avServer.EntryGroupNew()
+	if err != nil {
+		return err
+	}
+
+	for _, iface := range ifaceIndexes {
+		// conversion is safe, as port values are always positive
+		err = newEntryGroup.AddService(iface, avahi.ProtoUnspec, 0, serviceName, shipZeroConfServiceType, shipZeroConfDomain, "", uint16(port), btxt) // #nosec G115
+		if err != nil {
+			a.avServer.EntryGroupFree(newEntryGroup)
+			return err
+		}
+	}
+
+	err = newEntryGroup.Commit()
+	if err != nil {
+		a.avServer.EntryGroupFree(newEntryGroup)
+		return err
+	}
+
+	// Re-acquire the lock to update struct state only.
+	// Only store the data for reconnection after a successful commit,
+	// so avahiCallback never re-announces with parameters that were
+	// never successfully committed.
+	a.mux.Lock()
+
+	// Shutdown may have set manualShutdown while we were performing
+	// DBus calls without holding a.mux. Shutdown is blocked on
+	// announceMux so the server is still alive, but storing a new
+	// entry group is pointless — Shutdown's unannounce will free it
+	// immediately. Short-circuit here to avoid the unnecessary state
+	// mutation.
+	if a.manualShutdown {
+		a.mux.Unlock()
+		a.avServer.EntryGroupFree(newEntryGroup)
+		return fmt.Errorf("mdns: avahi provider is shut down")
+	}
+
+	a.mdnsServiceData = &mdnsServiceData{
+		Name: serviceName,
+		Port: port,
+		Txt:  txt,
+	}
+
+	// Free the old entry group AFTER the new one is committed.
+	// This avoids a window where the service is completely unannounced,
+	// which would cause remote devices to think we left the network.
+	oldEntryGroup := a.avEntryGroup
+	a.avEntryGroup = newEntryGroup
+
+	a.mux.Unlock()
+
+	if oldEntryGroup != nil {
+		a.avServer.EntryGroupFree(oldEntryGroup)
+	}
+
+	return nil
 }
 
 func (a *AvahiProvider) Unannounce() {

@@ -894,11 +894,19 @@ func (s *IssuesSuite) Test_AnnounceDuringActiveServiceDiscoveryDoesNotDeadlock()
 
 // Test 5: Announce must not block UpdateInterfaces.
 // UpdateInterfaces (line 66) acquires a.mux. A caller updating network
-// interfaces while Announce is mid-DBus would stall.
+// interfaces while Announce is mid-DBus would stall. Announce releases
+// a.mux across its DBus phase precisely so that UpdateInterfaces (and
+// chanListener) can proceed in parallel.
+//
+// If UpdateInterfaces mutates a.ifaceIndexes during the DBus phase, the
+// in-flight Announce commits with the stale snapshot. That is acceptable
+// because the only production caller of UpdateInterfaces is
+// reannounceWithNewInterfaces, which pairs every UpdateInterfaces with a
+// follow-up Announce (serialized behind announceMux) that overwrites the
+// stale commit with fresh data.
 func (s *IssuesSuite) Test_AnnounceDoesNotBlockUpdateInterfaces() {
 	avahiMock := avahiMocks.NewServerInterface(s.T())
-	firstEntryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
-	secondEntryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
+	entryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
 
 	sut := NewAvahiProvider([]int32{1})
 	sut.avServer = avahiMock
@@ -906,26 +914,17 @@ func (s *IssuesSuite) Test_AnnounceDoesNotBlockUpdateInterfaces() {
 	entryGroupNewEntered := make(chan struct{})
 	releaseEntryGroupNew := make(chan struct{})
 
-	// First attempt: blocks in EntryGroupNew while UpdateInterfaces changes ifaceIndexes.
-	// After the DBus phase completes, the compare-and-retry logic detects the
-	// stale snapshot and discards this entry group.
+	// Announce snapshots ifaceIndexes=[1], releases a.mux, then blocks in
+	// EntryGroupNew (simulating a DBus round-trip). UpdateInterfaces must
+	// not stall while Announce is parked here.
 	avahiMock.On("EntryGroupNew").Run(func(_ mock.Arguments) {
 		close(entryGroupNewEntered)
 		<-releaseEntryGroupNew
-	}).Return(firstEntryGroupMock, nil).Once()
-	firstEntryGroupMock.On("AddService", mock.Anything, mock.Anything, mock.Anything,
+	}).Return(entryGroupMock, nil).Once()
+	entryGroupMock.On("AddService", mock.Anything, mock.Anything, mock.Anything,
 		"test", shipZeroConfServiceType, shipZeroConfDomain,
 		"", mock.Anything, mock.Anything).Return(nil).Once()
-	firstEntryGroupMock.On("Commit").Return(nil).Once()
-	// First entry group is freed when the stale snapshot is detected
-	avahiMock.On("EntryGroupFree", firstEntryGroupMock).Return()
-
-	// Second attempt: uses fresh ifaceIndexes {1, 2} — two AddService calls.
-	avahiMock.On("EntryGroupNew").Return(secondEntryGroupMock, nil).Once()
-	secondEntryGroupMock.On("AddService", mock.Anything, mock.Anything, mock.Anything,
-		"test", shipZeroConfServiceType, shipZeroConfDomain,
-		"", mock.Anything, mock.Anything).Return(nil).Twice()
-	secondEntryGroupMock.On("Commit").Return(nil).Once()
+	entryGroupMock.On("Commit").Return(nil).Once()
 
 	announceDone := make(chan error, 1)
 	go func() { announceDone <- sut.Announce("test", 4729, []string{"txt=1"}) }()
@@ -961,7 +960,8 @@ func (s *IssuesSuite) Test_AnnounceDoesNotBlockUpdateInterfaces() {
 		s.T().Fatal("Announce did not complete")
 	}
 
-	// Verify the provider ended up with the fresh interfaces
+	// UpdateInterfaces mutated a.ifaceIndexes directly and independently of
+	// Announce's snapshot — confirm the post-state reflects that mutation.
 	s.Equal([]int32{1, 2}, sut.getIfaceIndexes())
 }
 
