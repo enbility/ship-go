@@ -229,12 +229,12 @@ func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) err
 		btxt = append(btxt, []byte(t))
 	}
 
-	// Snapshot ifaceIndexes under the lock, then release immediately.
-	// DBus calls must not execute while holding a.mux: chanListener
-	// (the goroutine that consumes the DBus signal stream delivering
-	// replies to these calls) needs a.mux via processService →
-	// getIfaceIndexes. Holding a.mux across a DBus round-trip blocks
-	// chanListener, preventing the reply from arriving — hard deadlock.
+	// Snapshot ifaceIndexes before the DBus phase. DBus calls must not
+	// execute while holding a.mux: chanListener (the goroutine that
+	// consumes the DBus signal stream delivering replies to these calls)
+	// needs a.mux via processService → getIfaceIndexes. Holding a.mux
+	// across a DBus round-trip blocks chanListener, preventing the reply
+	// from arriving — hard deadlock.
 	//
 	// If UpdateInterfaces mutates a.ifaceIndexes during the DBus phase
 	// below, we commit with the stale snapshot. That's acceptable: the
@@ -242,14 +242,7 @@ func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) err
 	// which pairs every UpdateInterfaces with a follow-up Announce.
 	// That follow-up is serialized behind announceMux and will overwrite
 	// this commit with fresh data before any peer can observe the gap.
-	a.mux.Lock()
-	if a.manualShutdown {
-		a.mux.Unlock()
-		return fmt.Errorf("mdns: avahi provider is shut down")
-	}
-	ifaceIndexes := make([]int32, len(a.ifaceIndexes))
-	copy(ifaceIndexes, a.ifaceIndexes)
-	a.mux.Unlock()
+	ifaceIndexes := a.getIfaceIndexes()
 
 	// All DBus calls happen without holding a.mux.
 	newEntryGroup, err := a.avServer.EntryGroupNew()
