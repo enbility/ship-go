@@ -621,7 +621,8 @@ func (s *IssuesSuite) Test_AnnounceDoesNotBlockGetIfaceIndexesDuringEntryGroupNe
 		"", mock.Anything, mock.Anything).Return(nil).Once()
 	entryGroupMock.On("Commit").Return(nil).Once()
 
-	go func() { _ = sut.Announce("test", 4729, []string{"txt=1"}) }()
+	announceDone := make(chan error, 1)
+	go func() { announceDone <- sut.Announce("test", 4729, []string{"txt=1"}) }()
 
 	select {
 	case <-entryGroupNewEntered:
@@ -651,8 +652,12 @@ func (s *IssuesSuite) Test_AnnounceDoesNotBlockGetIfaceIndexesDuringEntryGroupNe
 	}
 
 	close(releaseEntryGroupNew)
-	// Let Announce finish cleanly.
-	time.Sleep(100 * time.Millisecond)
+
+	select {
+	case <-announceDone:
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("Announce did not complete")
+	}
 }
 
 // Test 2: a.mux held across AddService blocks getIfaceIndexes.
@@ -676,7 +681,8 @@ func (s *IssuesSuite) Test_AnnounceDoesNotBlockGetIfaceIndexesDuringAddService()
 		}).Return(nil).Once()
 	entryGroupMock.On("Commit").Return(nil).Once()
 
-	go func() { _ = sut.Announce("test", 4729, []string{"txt=1"}) }()
+	announceDone := make(chan error, 1)
+	go func() { announceDone <- sut.Announce("test", 4729, []string{"txt=1"}) }()
 
 	select {
 	case <-addServiceEntered:
@@ -700,7 +706,12 @@ func (s *IssuesSuite) Test_AnnounceDoesNotBlockGetIfaceIndexesDuringAddService()
 	}
 
 	close(releaseAddService)
-	time.Sleep(100 * time.Millisecond)
+
+	select {
+	case <-announceDone:
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("Announce did not complete")
+	}
 }
 
 // Test 3: a.mux held across Commit blocks getIfaceIndexes.
@@ -724,7 +735,8 @@ func (s *IssuesSuite) Test_AnnounceDoesNotBlockGetIfaceIndexesDuringCommit() {
 			<-releaseCommit
 		}).Return(nil).Once()
 
-	go func() { _ = sut.Announce("test", 4729, []string{"txt=1"}) }()
+	announceDone := make(chan error, 1)
+	go func() { announceDone <- sut.Announce("test", 4729, []string{"txt=1"}) }()
 
 	select {
 	case <-commitEntered:
@@ -748,7 +760,12 @@ func (s *IssuesSuite) Test_AnnounceDoesNotBlockGetIfaceIndexesDuringCommit() {
 	}
 
 	close(releaseCommit)
-	time.Sleep(100 * time.Millisecond)
+
+	select {
+	case <-announceDone:
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("Announce did not complete")
+	}
 }
 
 // Test 4 (crown jewel): Full chanListener deadlock simulation.
@@ -868,6 +885,8 @@ func (s *IssuesSuite) Test_AnnounceDuringActiveServiceDiscoveryDoesNotDeadlock()
 	}
 
 	// Clean shutdown.
+	// Shutdown → Unannounce frees the entry group that Announce stored.
+	avahiMock.EXPECT().EntryGroupFree(entryGroupMock).Return().Once()
 	avahiMock.EXPECT().ServiceBrowserFree(serviceBrowserMock).Return().Once()
 	avahiMock.EXPECT().Shutdown().Return().Once()
 	sut.Shutdown()
@@ -878,7 +897,8 @@ func (s *IssuesSuite) Test_AnnounceDuringActiveServiceDiscoveryDoesNotDeadlock()
 // interfaces while Announce is mid-DBus would stall.
 func (s *IssuesSuite) Test_AnnounceDoesNotBlockUpdateInterfaces() {
 	avahiMock := avahiMocks.NewServerInterface(s.T())
-	entryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
+	firstEntryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
+	secondEntryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
 
 	sut := NewAvahiProvider([]int32{1})
 	sut.avServer = avahiMock
@@ -886,16 +906,29 @@ func (s *IssuesSuite) Test_AnnounceDoesNotBlockUpdateInterfaces() {
 	entryGroupNewEntered := make(chan struct{})
 	releaseEntryGroupNew := make(chan struct{})
 
+	// First attempt: blocks in EntryGroupNew while UpdateInterfaces changes ifaceIndexes.
+	// After the DBus phase completes, the compare-and-retry logic detects the
+	// stale snapshot and discards this entry group.
 	avahiMock.On("EntryGroupNew").Run(func(_ mock.Arguments) {
 		close(entryGroupNewEntered)
 		<-releaseEntryGroupNew
-	}).Return(entryGroupMock, nil).Once()
-	entryGroupMock.On("AddService", mock.Anything, mock.Anything, mock.Anything,
+	}).Return(firstEntryGroupMock, nil).Once()
+	firstEntryGroupMock.On("AddService", mock.Anything, mock.Anything, mock.Anything,
 		"test", shipZeroConfServiceType, shipZeroConfDomain,
 		"", mock.Anything, mock.Anything).Return(nil).Once()
-	entryGroupMock.On("Commit").Return(nil).Once()
+	firstEntryGroupMock.On("Commit").Return(nil).Once()
+	// First entry group is freed when the stale snapshot is detected
+	avahiMock.On("EntryGroupFree", firstEntryGroupMock).Return()
 
-	go func() { _ = sut.Announce("test", 4729, []string{"txt=1"}) }()
+	// Second attempt: uses fresh ifaceIndexes {1, 2} — two AddService calls.
+	avahiMock.On("EntryGroupNew").Return(secondEntryGroupMock, nil).Once()
+	secondEntryGroupMock.On("AddService", mock.Anything, mock.Anything, mock.Anything,
+		"test", shipZeroConfServiceType, shipZeroConfDomain,
+		"", mock.Anything, mock.Anything).Return(nil).Twice()
+	secondEntryGroupMock.On("Commit").Return(nil).Once()
+
+	announceDone := make(chan error, 1)
+	go func() { announceDone <- sut.Announce("test", 4729, []string{"txt=1"}) }()
 
 	select {
 	case <-entryGroupNewEntered:
@@ -920,14 +953,24 @@ func (s *IssuesSuite) Test_AnnounceDoesNotBlockUpdateInterfaces() {
 	}
 
 	close(releaseEntryGroupNew)
-	time.Sleep(100 * time.Millisecond)
+
+	select {
+	case err := <-announceDone:
+		s.Require().NoError(err)
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("Announce did not complete")
+	}
+
+	// Verify the provider ended up with the fresh interfaces
+	s.Equal([]int32{1, 2}, sut.getIfaceIndexes())
 }
 
-// Test 6: Announce must not block Shutdown.
-// Shutdown (line 151) acquires a.mux. If called while Announce is
-// mid-DBus, the entire provider is wedged — can't shut down, can't
-// discover, can't announce.
-func (s *IssuesSuite) Test_AnnounceDoesNotBlockShutdown() {
+// Test 6: Shutdown waits for in-flight Announce via announceMux, then
+// proceeds with orderly teardown. Shutdown must not deadlock on a.mux
+// (the original bug), but it SHOULD wait for the in-flight Announce to
+// finish so that no zombie entry group is left referencing a shut-down
+// server.
+func (s *IssuesSuite) Test_ShutdownWaitsForInflightAnnounce() {
 	avahiMock := avahiMocks.NewServerInterface(s.T())
 	entryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
 
@@ -947,8 +990,12 @@ func (s *IssuesSuite) Test_AnnounceDoesNotBlockShutdown() {
 			close(commitEntered)
 			<-releaseCommit
 		}).Return(nil).Once()
+	// Shutdown's Unannounce frees the entry group that Announce stored.
+	avahiMock.On("EntryGroupFree", entryGroupMock).Return().Once()
+	avahiMock.On("Shutdown").Return().Once()
 
-	go func() { _ = sut.Announce("test", 4729, []string{"txt=1"}) }()
+	announceDone := make(chan error, 1)
+	go func() { announceDone <- sut.Announce("test", 4729, []string{"txt=1"}) }()
 
 	select {
 	case <-commitEntered:
@@ -957,27 +1004,40 @@ func (s *IssuesSuite) Test_AnnounceDoesNotBlockShutdown() {
 		s.T().Fatal("Commit was never entered")
 	}
 
-	avahiMock.EXPECT().Shutdown().Return().Maybe()
-
 	shutdownDone := make(chan struct{})
 	go func() {
 		sut.Shutdown()
 		close(shutdownDone)
 	}()
 
+	// Shutdown should NOT complete while Announce is still blocked in
+	// Commit, because Shutdown acquires announceMux to wait for it.
 	select {
 	case <-shutdownDone:
-		// PASS: Shutdown is not blocked by Announce's lock.
-	case <-time.After(500 * time.Millisecond):
+		close(releaseCommit)
 		s.T().Fatal(
-			"CONTENTION: Shutdown blocked for >500ms while Announce held " +
-				"a.mux inside Commit. If the system decides to shut down " +
-				"during announcement (e.g. user-initiated or avahi disconnect), " +
-				"it must not wait for a DBus round-trip to complete.")
+			"Shutdown completed while Announce was still in-flight. " +
+				"announceMux should make Shutdown wait for the in-flight " +
+				"Announce to finish before tearing down the server.")
+	case <-time.After(200 * time.Millisecond):
+		// PASS: Shutdown is correctly waiting for Announce.
 	}
 
+	// Release Announce — both should now complete.
 	close(releaseCommit)
-	time.Sleep(100 * time.Millisecond)
+
+	select {
+	case <-announceDone:
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("Announce did not complete after Commit was released")
+	}
+
+	select {
+	case <-shutdownDone:
+		// PASS: Shutdown completed after Announce finished.
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("Shutdown did not complete after Announce finished")
+	}
 }
 
 // Helper: verify avahi.InterfaceUnspec is what we expect
