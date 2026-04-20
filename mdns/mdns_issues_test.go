@@ -586,6 +586,460 @@ func (s *IssuesSuite) Test_SetAutoAcceptDoesNotCallUnannounce() {
 		"SetAutoAccept must not call Unannounce — use create-then-swap like reannounceWithNewInterfaces")
 }
 
+// ---------------------------------------------------------------------
+// Issue #2: AvahiProvider.Announce() holds a.mux across DBus calls
+// (EntryGroupNew, AddService, Commit). chanListener — the goroutine
+// that consumes the DBus signal stream delivering replies to those
+// calls — needs a.mux via processService → getIfaceIndexes. Blocking
+// chanListener prevents DBus reply delivery: hard deadlock.
+//
+// Tests 1-3 isolate the contention to each individual DBus call.
+// Test 4 reproduces the full deadlock chain with a live chanListener.
+// Tests 5-6 show collateral damage to other a.mux callers.
+//
+// All tests assert CORRECT (fixed) behavior: they FAIL against the
+// current code and PASS once the fix is applied.
+// ---------------------------------------------------------------------
+
+// Test 1: a.mux held across EntryGroupNew blocks getIfaceIndexes.
+func (s *IssuesSuite) Test_AnnounceDoesNotBlockGetIfaceIndexesDuringEntryGroupNew() {
+	avahiMock := avahiMocks.NewServerInterface(s.T())
+	entryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
+
+	sut := NewAvahiProvider([]int32{1})
+	sut.avServer = avahiMock
+
+	entryGroupNewEntered := make(chan struct{})
+	releaseEntryGroupNew := make(chan struct{})
+
+	avahiMock.On("EntryGroupNew").Run(func(_ mock.Arguments) {
+		close(entryGroupNewEntered)
+		<-releaseEntryGroupNew
+	}).Return(entryGroupMock, nil).Once()
+	entryGroupMock.On("AddService", mock.Anything, mock.Anything, mock.Anything,
+		"test", shipZeroConfServiceType, shipZeroConfDomain,
+		"", mock.Anything, mock.Anything).Return(nil).Once()
+	entryGroupMock.On("Commit").Return(nil).Once()
+
+	announceDone := make(chan error, 1)
+	go func() { announceDone <- sut.Announce("test", 4729, []string{"txt=1"}) }()
+
+	select {
+	case <-entryGroupNewEntered:
+	case <-time.After(2 * time.Second):
+		close(releaseEntryGroupNew)
+		s.T().Fatal("EntryGroupNew was never entered")
+	}
+
+	// a.mux is now held by Announce, inside EntryGroupNew.
+	// getIfaceIndexes must complete promptly — it must not contend on a.mux.
+	ifacesDone := make(chan struct{})
+	go func() {
+		_ = sut.getIfaceIndexes()
+		close(ifacesDone)
+	}()
+
+	select {
+	case <-ifacesDone:
+		// PASS: a.mux is not held across the DBus call.
+	case <-time.After(500 * time.Millisecond):
+		s.T().Fatal(
+			"CONTENTION: getIfaceIndexes blocked for >500ms while Announce " +
+				"held a.mux inside EntryGroupNew. In production, chanListener " +
+				"calls getIfaceIndexes — blocking it prevents DBus reply " +
+				"delivery, causing a hard deadlock. Fix: release a.mux before " +
+				"DBus calls (EntryGroupNew, AddService, Commit).")
+	}
+
+	close(releaseEntryGroupNew)
+
+	select {
+	case <-announceDone:
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("Announce did not complete")
+	}
+}
+
+// Test 2: a.mux held across AddService blocks getIfaceIndexes.
+func (s *IssuesSuite) Test_AnnounceDoesNotBlockGetIfaceIndexesDuringAddService() {
+	avahiMock := avahiMocks.NewServerInterface(s.T())
+	entryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
+
+	sut := NewAvahiProvider([]int32{1})
+	sut.avServer = avahiMock
+
+	addServiceEntered := make(chan struct{})
+	releaseAddService := make(chan struct{})
+
+	avahiMock.On("EntryGroupNew").Return(entryGroupMock, nil).Once()
+	entryGroupMock.On("AddService", mock.Anything, mock.Anything, mock.Anything,
+		"test", shipZeroConfServiceType, shipZeroConfDomain,
+		"", mock.Anything, mock.Anything).
+		Run(func(_ mock.Arguments) {
+			close(addServiceEntered)
+			<-releaseAddService
+		}).Return(nil).Once()
+	entryGroupMock.On("Commit").Return(nil).Once()
+
+	announceDone := make(chan error, 1)
+	go func() { announceDone <- sut.Announce("test", 4729, []string{"txt=1"}) }()
+
+	select {
+	case <-addServiceEntered:
+	case <-time.After(2 * time.Second):
+		close(releaseAddService)
+		s.T().Fatal("AddService was never entered")
+	}
+
+	ifacesDone := make(chan struct{})
+	go func() {
+		_ = sut.getIfaceIndexes()
+		close(ifacesDone)
+	}()
+
+	select {
+	case <-ifacesDone:
+	case <-time.After(500 * time.Millisecond):
+		s.T().Fatal(
+			"CONTENTION: getIfaceIndexes blocked while Announce held a.mux " +
+				"inside AddService. Same deadlock vector as EntryGroupNew.")
+	}
+
+	close(releaseAddService)
+
+	select {
+	case <-announceDone:
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("Announce did not complete")
+	}
+}
+
+// Test 3: a.mux held across Commit blocks getIfaceIndexes.
+func (s *IssuesSuite) Test_AnnounceDoesNotBlockGetIfaceIndexesDuringCommit() {
+	avahiMock := avahiMocks.NewServerInterface(s.T())
+	entryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
+
+	sut := NewAvahiProvider([]int32{1})
+	sut.avServer = avahiMock
+
+	commitEntered := make(chan struct{})
+	releaseCommit := make(chan struct{})
+
+	avahiMock.On("EntryGroupNew").Return(entryGroupMock, nil).Once()
+	entryGroupMock.On("AddService", mock.Anything, mock.Anything, mock.Anything,
+		"test", shipZeroConfServiceType, shipZeroConfDomain,
+		"", mock.Anything, mock.Anything).Return(nil).Once()
+	entryGroupMock.On("Commit").
+		Run(func(_ mock.Arguments) {
+			close(commitEntered)
+			<-releaseCommit
+		}).Return(nil).Once()
+
+	announceDone := make(chan error, 1)
+	go func() { announceDone <- sut.Announce("test", 4729, []string{"txt=1"}) }()
+
+	select {
+	case <-commitEntered:
+	case <-time.After(2 * time.Second):
+		close(releaseCommit)
+		s.T().Fatal("Commit was never entered")
+	}
+
+	ifacesDone := make(chan struct{})
+	go func() {
+		_ = sut.getIfaceIndexes()
+		close(ifacesDone)
+	}()
+
+	select {
+	case <-ifacesDone:
+	case <-time.After(500 * time.Millisecond):
+		s.T().Fatal(
+			"CONTENTION: getIfaceIndexes blocked while Announce held a.mux " +
+				"inside Commit.")
+	}
+
+	close(releaseCommit)
+
+	select {
+	case <-announceDone:
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("Announce did not complete")
+	}
+}
+
+// Test 4 (crown jewel): Full chanListener deadlock simulation.
+//
+// Start the provider so chanListener is running. Block EntryGroupNew
+// (simulating a DBus round-trip) while Announce holds a.mux. Inject a
+// service event on addServiceChan. chanListener picks it up but blocks
+// in getIfaceIndexes on a.mux. In production the DBus reply to
+// EntryGroupNew is delivered through chanListener — with it blocked,
+// the reply never arrives. Neither goroutine can proceed: hard deadlock.
+func (s *IssuesSuite) Test_AnnounceDuringActiveServiceDiscoveryDoesNotDeadlock() {
+	avahiMock := avahiMocks.NewServerInterface(s.T())
+	serviceBrowserMock := avahiMocks.NewServiceBrowserInterface(s.T())
+	entryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
+
+	sut := NewAvahiProvider([]int32{1})
+	sut.avServer = avahiMock
+
+	// Start the provider — spawns chanListener goroutine.
+	avahiMock.EXPECT().Setup(mock.Anything).Return(nil).Once()
+	avahiMock.EXPECT().Start().Return().Once()
+	avahiMock.EXPECT().GetAPIVersion().Return(int32(0), nil).Once()
+	avahiMock.EXPECT().ServiceBrowserNew(
+		mock.AnythingOfType("chan avahi.Service"),
+		mock.AnythingOfType("chan avahi.Service"),
+		int32(-1), int32(-1),
+		shipZeroConfServiceType, shipZeroConfDomain,
+		uint32(0)).Return(serviceBrowserMock, nil).Once()
+
+	noopCB := func(map[string]string, string, string, []net.IP, int, bool) {}
+	assert.True(s.T(), sut.Start(true, noopCB))
+
+	// Give chanListener time to enter its select loop.
+	time.Sleep(50 * time.Millisecond)
+
+	// Mock EntryGroupNew to block, simulating a DBus round-trip.
+	entryGroupNewEntered := make(chan struct{})
+	releaseEntryGroupNew := make(chan struct{})
+	avahiMock.On("EntryGroupNew").
+		Run(func(_ mock.Arguments) {
+			close(entryGroupNewEntered)
+			<-releaseEntryGroupNew
+		}).Return(entryGroupMock, nil).Once()
+	entryGroupMock.On("AddService", mock.Anything, mock.Anything, mock.Anything,
+		"test", shipZeroConfServiceType, shipZeroConfDomain,
+		"", mock.Anything, mock.Anything).Return(nil).Once()
+	entryGroupMock.On("Commit").Return(nil).Once()
+
+	// Start Announce — acquires a.mux and enters the blocked EntryGroupNew.
+	announceDone := make(chan error, 1)
+	go func() {
+		announceDone <- sut.Announce("test", 4729, []string{"txt=1"})
+	}()
+
+	select {
+	case <-entryGroupNewEntered:
+	case <-time.After(2 * time.Second):
+		close(releaseEntryGroupNew)
+		s.T().Fatal("EntryGroupNew was never entered")
+	}
+
+	// Announce now holds a.mux inside EntryGroupNew.
+	// Inject a service event — chanListener will pick it up and enter
+	// processService → getIfaceIndexes → a.mux.Lock() → BLOCKED.
+	//
+	// In production this creates a hard deadlock: chanListener is the
+	// DBus signal consumer, and with it blocked, the reply to
+	// EntryGroupNew can never be delivered.
+	testService := avahi.Service{
+		Interface: 1,
+		Name:      "DiscoveredDuringAnnounce",
+		Type:      "_ship._tcp",
+		Domain:    "local",
+		Aprotocol: -1,
+	}
+
+	// ResolveService mock — chanListener calls this if it gets past
+	// getIfaceIndexes. With the bug, it never reaches this point.
+	resolveReached := make(chan struct{}, 1)
+	avahiMock.On("ResolveService",
+		mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+	).Run(func(_ mock.Arguments) {
+		select {
+		case resolveReached <- struct{}{}:
+		default:
+		}
+	}).Return(avahi.Service{Address: "127.0.0.1"}, nil).Maybe()
+
+	// Send the service. chanListener reads it from addServiceChan,
+	// enters processService, and (with the bug) blocks on getIfaceIndexes.
+	sut.addServiceChan <- testService
+
+	// EXPECTED (correct behavior): chanListener should fully process the
+	// service because a.mux is NOT held during EntryGroupNew.
+	select {
+	case <-resolveReached:
+		// PASS: chanListener was not blocked by Announce's lock.
+	case <-time.After(500 * time.Millisecond):
+		s.T().Fatal(
+			"DEADLOCK: chanListener is blocked in getIfaceIndexes on a.mux " +
+				"while Announce holds a.mux inside EntryGroupNew. In production " +
+				"chanListener is the DBus signal consumer — blocking it prevents " +
+				"the EntryGroupNew reply from being delivered. Neither goroutine " +
+				"can make progress. This is the exact deadlock described in the " +
+				"goroutine dump. Fix: release a.mux before calling EntryGroupNew, " +
+				"AddService, and Commit — the mutex should protect struct-state " +
+				"updates only, not span DBus round-trips.")
+	}
+
+	close(releaseEntryGroupNew)
+
+	select {
+	case <-announceDone:
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("Announce did not complete")
+	}
+
+	// Clean shutdown.
+	// Shutdown → Unannounce frees the entry group that Announce stored.
+	avahiMock.EXPECT().EntryGroupFree(entryGroupMock).Return().Once()
+	avahiMock.EXPECT().ServiceBrowserFree(serviceBrowserMock).Return().Once()
+	avahiMock.EXPECT().Shutdown().Return().Once()
+	sut.Shutdown()
+}
+
+// Test 5: Announce must not block UpdateInterfaces.
+// UpdateInterfaces (line 66) acquires a.mux. A caller updating network
+// interfaces while Announce is mid-DBus would stall. Announce releases
+// a.mux across its DBus phase precisely so that UpdateInterfaces (and
+// chanListener) can proceed in parallel.
+//
+// If UpdateInterfaces mutates a.ifaceIndexes during the DBus phase, the
+// in-flight Announce commits with the stale snapshot. That is acceptable
+// because the only production caller of UpdateInterfaces is
+// reannounceWithNewInterfaces, which pairs every UpdateInterfaces with a
+// follow-up Announce (serialized behind announceMux) that overwrites the
+// stale commit with fresh data.
+func (s *IssuesSuite) Test_AnnounceDoesNotBlockUpdateInterfaces() {
+	avahiMock := avahiMocks.NewServerInterface(s.T())
+	entryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
+
+	sut := NewAvahiProvider([]int32{1})
+	sut.avServer = avahiMock
+
+	entryGroupNewEntered := make(chan struct{})
+	releaseEntryGroupNew := make(chan struct{})
+
+	// Announce snapshots ifaceIndexes=[1], releases a.mux, then blocks in
+	// EntryGroupNew (simulating a DBus round-trip). UpdateInterfaces must
+	// not stall while Announce is parked here.
+	avahiMock.On("EntryGroupNew").Run(func(_ mock.Arguments) {
+		close(entryGroupNewEntered)
+		<-releaseEntryGroupNew
+	}).Return(entryGroupMock, nil).Once()
+	entryGroupMock.On("AddService", mock.Anything, mock.Anything, mock.Anything,
+		"test", shipZeroConfServiceType, shipZeroConfDomain,
+		"", mock.Anything, mock.Anything).Return(nil).Once()
+	entryGroupMock.On("Commit").Return(nil).Once()
+
+	announceDone := make(chan error, 1)
+	go func() { announceDone <- sut.Announce("test", 4729, []string{"txt=1"}) }()
+
+	select {
+	case <-entryGroupNewEntered:
+	case <-time.After(2 * time.Second):
+		close(releaseEntryGroupNew)
+		s.T().Fatal("EntryGroupNew was never entered")
+	}
+
+	updateDone := make(chan struct{})
+	go func() {
+		sut.UpdateInterfaces(nil, []int32{1, 2})
+		close(updateDone)
+	}()
+
+	select {
+	case <-updateDone:
+	case <-time.After(500 * time.Millisecond):
+		s.T().Fatal(
+			"CONTENTION: UpdateInterfaces blocked for >500ms while Announce " +
+				"held a.mux inside EntryGroupNew. Interface updates (e.g. from " +
+				"the refresh goroutine) must not stall on DBus round-trip latency.")
+	}
+
+	close(releaseEntryGroupNew)
+
+	select {
+	case err := <-announceDone:
+		s.Require().NoError(err)
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("Announce did not complete")
+	}
+
+	// UpdateInterfaces mutated a.ifaceIndexes directly and independently of
+	// Announce's snapshot — confirm the post-state reflects that mutation.
+	s.Equal([]int32{1, 2}, sut.getIfaceIndexes())
+}
+
+// Test 6: Shutdown waits for in-flight Announce via announceMux, then
+// proceeds with orderly teardown. Shutdown must not deadlock on a.mux
+// (the original bug), but it SHOULD wait for the in-flight Announce to
+// finish so that no zombie entry group is left referencing a shut-down
+// server.
+func (s *IssuesSuite) Test_ShutdownWaitsForInflightAnnounce() {
+	avahiMock := avahiMocks.NewServerInterface(s.T())
+	entryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
+
+	sut := NewAvahiProvider([]int32{1})
+	sut.avServer = avahiMock
+	sut.setupSuccessful = true
+
+	commitEntered := make(chan struct{})
+	releaseCommit := make(chan struct{})
+
+	avahiMock.On("EntryGroupNew").Return(entryGroupMock, nil).Once()
+	entryGroupMock.On("AddService", mock.Anything, mock.Anything, mock.Anything,
+		"test", shipZeroConfServiceType, shipZeroConfDomain,
+		"", mock.Anything, mock.Anything).Return(nil).Once()
+	entryGroupMock.On("Commit").
+		Run(func(_ mock.Arguments) {
+			close(commitEntered)
+			<-releaseCommit
+		}).Return(nil).Once()
+	// Shutdown's Unannounce frees the entry group that Announce stored.
+	avahiMock.On("EntryGroupFree", entryGroupMock).Return().Once()
+	avahiMock.On("Shutdown").Return().Once()
+
+	announceDone := make(chan error, 1)
+	go func() { announceDone <- sut.Announce("test", 4729, []string{"txt=1"}) }()
+
+	select {
+	case <-commitEntered:
+	case <-time.After(2 * time.Second):
+		close(releaseCommit)
+		s.T().Fatal("Commit was never entered")
+	}
+
+	shutdownDone := make(chan struct{})
+	go func() {
+		sut.Shutdown()
+		close(shutdownDone)
+	}()
+
+	// Shutdown should NOT complete while Announce is still blocked in
+	// Commit, because Shutdown acquires announceMux to wait for it.
+	select {
+	case <-shutdownDone:
+		close(releaseCommit)
+		s.T().Fatal(
+			"Shutdown completed while Announce was still in-flight. " +
+				"announceMux should make Shutdown wait for the in-flight " +
+				"Announce to finish before tearing down the server.")
+	case <-time.After(200 * time.Millisecond):
+		// PASS: Shutdown is correctly waiting for Announce.
+	}
+
+	// Release Announce — both should now complete.
+	close(releaseCommit)
+
+	select {
+	case <-announceDone:
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("Announce did not complete after Commit was released")
+	}
+
+	select {
+	case <-shutdownDone:
+		// PASS: Shutdown completed after Announce finished.
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("Shutdown did not complete after Announce finished")
+	}
+}
+
 // Helper: verify avahi.InterfaceUnspec is what we expect
 func init() {
 	_ = avahi.InterfaceUnspec // ensure import is used

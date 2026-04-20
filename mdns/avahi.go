@@ -43,9 +43,10 @@ type AvahiProvider struct {
 	shutdownChan                      chan struct{}
 	addServiceChan, removeServiceChan chan avahi.Service
 
-	mux   sync.Mutex
-	muxEl sync.RWMutex // used for serviceElements
-	
+	mux          sync.Mutex
+	announceMux  sync.Mutex   // serializes Announce calls and excludes Shutdown's teardown phase
+	muxEl        sync.RWMutex // used for serviceElements
+
 	// Prevent multiple reconnection goroutines
 	reconnectInProgress bool
 	reconnectMux        sync.Mutex
@@ -196,8 +197,15 @@ func (a *AvahiProvider) Shutdown() {
 		time.Sleep(100 * time.Millisecond)
 	}
 
+	// Wait for any in-flight Announce to finish before tearing down the
+	// server. Without this, an Announce that already passed its snapshot
+	// phase could re-acquire a.mux after Unannounce and store a zombie
+	// entry group referencing the shut-down server.
+	a.announceMux.Lock()
+	defer a.announceMux.Unlock()
+
 	// Unannounce the service
-	a.Unannounce()
+	a.unannounce()
 
 	a.mux.Lock()
 	defer a.mux.Unlock()
@@ -207,27 +215,45 @@ func (a *AvahiProvider) Shutdown() {
 }
 
 func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) error {
-	a.mux.Lock()
-
 	logging.Log().Debug("mdns: using avahi")
+
+	// Serialize concurrent Announce calls so that only one entry group
+	// is created and committed at a time. Without this, two concurrent
+	// callers could each commit a group on the Avahi daemon and then
+	// race to update struct state, orphaning the loser's group.
+	a.announceMux.Lock()
+	defer a.announceMux.Unlock()
 
 	var btxt [][]byte
 	for _, t := range txt {
 		btxt = append(btxt, []byte(t))
 	}
 
+	// Snapshot ifaceIndexes before the DBus phase. DBus calls must not
+	// execute while holding a.mux: chanListener (the goroutine that
+	// consumes the DBus signal stream delivering replies to these calls)
+	// needs a.mux via processService → getIfaceIndexes. Holding a.mux
+	// across a DBus round-trip blocks chanListener, preventing the reply
+	// from arriving — hard deadlock.
+	//
+	// If UpdateInterfaces mutates a.ifaceIndexes during the DBus phase
+	// below, we commit with the stale snapshot. That's acceptable: the
+	// only caller of UpdateInterfaces is reannounceWithNewInterfaces,
+	// which pairs every UpdateInterfaces with a follow-up Announce.
+	// That follow-up is serialized behind announceMux and will overwrite
+	// this commit with fresh data before any peer can observe the gap.
+	ifaceIndexes := a.getIfaceIndexes()
+
+	// All DBus calls happen without holding a.mux.
 	newEntryGroup, err := a.avServer.EntryGroupNew()
 	if err != nil {
-		a.mux.Unlock()
 		return err
 	}
 
-	// We already hold a.mux lock, so access ifaceIndexes directly
-	for _, iface := range a.ifaceIndexes {
+	for _, iface := range ifaceIndexes {
 		// conversion is safe, as port values are always positive
 		err = newEntryGroup.AddService(iface, avahi.ProtoUnspec, 0, serviceName, shipZeroConfServiceType, shipZeroConfDomain, "", uint16(port), btxt) // #nosec G115
 		if err != nil {
-			a.mux.Unlock()
 			a.avServer.EntryGroupFree(newEntryGroup)
 			return err
 		}
@@ -235,14 +261,28 @@ func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) err
 
 	err = newEntryGroup.Commit()
 	if err != nil {
-		a.mux.Unlock()
 		a.avServer.EntryGroupFree(newEntryGroup)
 		return err
 	}
 
+	// Re-acquire the lock to update struct state only.
 	// Only store the data for reconnection after a successful commit,
 	// so avahiCallback never re-announces with parameters that were
 	// never successfully committed.
+	a.mux.Lock()
+
+	// Shutdown may have set manualShutdown while we were performing
+	// DBus calls without holding a.mux. Shutdown is blocked on
+	// announceMux so the server is still alive, but storing a new
+	// entry group is pointless — Shutdown's unannounce will free it
+	// immediately. Short-circuit here to avoid the unnecessary state
+	// mutation.
+	if a.manualShutdown {
+		a.mux.Unlock()
+		a.avServer.EntryGroupFree(newEntryGroup)
+		return fmt.Errorf("mdns: avahi provider is shut down")
+	}
+
 	a.mdnsServiceData = &mdnsServiceData{
 		Name: serviceName,
 		Port: port,
@@ -268,6 +308,19 @@ func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) err
 }
 
 func (a *AvahiProvider) Unannounce() {
+	// Serialize with Announce so we don't race its DBus phase.
+	// Without this, Unannounce can clear avEntryGroup while Announce
+	// is between Commit and storing the new group — the caller
+	// thinks the service is unannounced, but Announce re-stores it.
+	a.announceMux.Lock()
+	defer a.announceMux.Unlock()
+	a.unannounce()
+}
+
+// unannounce does the actual work without acquiring announceMux.
+// Called by Unannounce (which holds announceMux) and Shutdown
+// (which also holds announceMux).
+func (a *AvahiProvider) unannounce() {
 	a.mux.Lock()
 
 	// clean up the reconnection data
