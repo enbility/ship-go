@@ -302,6 +302,9 @@ func (a *AvahiProvider) Announce(serviceName string, port int, txt []string) err
 	oldEntryGroup := a.avEntryGroup
 	a.avEntryGroup = newEntryGroup
 
+	// Release the lock before freeing the old entry group, as
+	// EntryGroupFree may block on dBUS and we don't want to hold
+	// the mutex during that time.
 	a.mux.Unlock()
 
 	if oldEntryGroup != nil {
