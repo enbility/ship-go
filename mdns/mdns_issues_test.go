@@ -539,6 +539,53 @@ func (s *IssuesSuite) Test_AvahiShutdownDoesNotDeadlockOnBusyChanListener() {
 	}
 }
 
+// ---------------------------------------------------------------------
+// MdnsManager.SetAutoAccept() calls Unannounce() before re-announcing,
+// unlike reannounceWithNewInterfaces() which uses create-then-swap.
+// The explicit Unannounce sends mDNS goodbye packets, causing remote
+// devices to think the service left the network. It also performs
+// blocking I/O (DBus / zeroconf Shutdown) that compounds with the
+// muxReg lock-hold issue in Hub.SetAutoAccept.
+//
+// Reproducer: Set up an announced MdnsManager, call SetAutoAccept,
+// and verify that the provider's Unannounce() is NOT called — only
+// Announce() should be called (create-then-swap pattern).
+//
+// EXPECTED (current code): FAIL — Unannounce is called.
+// EXPECTED (after fix):    PASS — only Announce is called.
+// ---------------------------------------------------------------------
+
+func (s *IssuesSuite) Test_SetAutoAcceptDoesNotCallUnannounce() {
+	var unannounced atomic.Bool
+
+	provider := mocks.NewMdnsProviderInterface(s.T())
+	provider.On("Announce", mock.Anything, mock.Anything, mock.Anything).Maybe().Return(nil)
+	provider.On("Unannounce").Maybe().Run(func(_ mock.Arguments) {
+		unannounced.Store(true)
+	}).Return()
+
+	mgr := NewMDNS("test", "brand", "model", "EnergyManagementSystem",
+		"12345",
+		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
+		"shipid", "serviceName",
+		4729, nil, MdnsProviderSelectionAll)
+	mgr.SetTestProvider(provider)
+	mgr.mdnsProvider = provider
+	mgr.setIsServiceAnnounce(true)
+
+	mgr.SetAutoAccept(true)
+
+	// The provider's Announce should have been called (to re-announce
+	// with the updated autoaccept TXT record).
+	provider.AssertCalled(s.T(), "Announce", mock.Anything, mock.Anything, mock.Anything)
+
+	// Unannounce should NOT have been called. The create-then-swap
+	// pattern used by reannounceWithNewInterfaces avoids goodbye
+	// packets that disrupt remote devices.
+	assert.False(s.T(), unannounced.Load(),
+		"SetAutoAccept must not call Unannounce — use create-then-swap like reannounceWithNewInterfaces")
+}
+
 // Helper: verify avahi.InterfaceUnspec is what we expect
 func init() {
 	_ = avahi.InterfaceUnspec // ensure import is used

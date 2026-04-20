@@ -373,3 +373,106 @@ func TestHubStressWithAllOperations(t *testing.T) {
 
 	assert.Less(t, contentionRate, 0.01, "High contention rate detected: %.2f%%", contentionRate*100)
 }
+
+// TestSetAutoAccept_DoesNotBlockServiceForSKI reproduces the stall described
+// in auto-connect-issue.md: Hub.SetAutoAccept holds muxReg (write lock)
+// while calling h.mdns.SetAutoAccept, which may perform slow network I/O
+// (DBus / zeroconf). Any concurrent caller of ServiceForSKI (or any other
+// muxReg consumer) is blocked for the entire duration of that I/O.
+//
+// The test injects a mock MdnsInterface whose SetAutoAccept blocks on a
+// channel, simulating a slow provider. A second goroutine attempts
+// ServiceForSKI. If muxReg is still held during the mDNS call,
+// ServiceForSKI cannot proceed and the test times out — exposing the bug.
+//
+// EXPECTED (current code): FAIL — timeout, ServiceForSKI blocked.
+// EXPECTED (after fix):    PASS — ServiceForSKI completes immediately.
+func TestSetAutoAccept_DoesNotBlockServiceForSKI(t *testing.T) {
+	hub := setupTestHub(t)
+
+	// Channel that keeps the mock's SetAutoAccept blocked until we close it,
+	// simulating a slow mDNS provider (avahi DBus / zeroconf shutdown).
+	block := make(chan struct{})
+
+	mdnsMock := mocks.NewMdnsInterface(t)
+	mdnsMock.EXPECT().SetAutoAccept(mock.Anything).
+		Run(func(_ bool) {
+			<-block // block until test releases
+		}).Return()
+
+	// Replace the hub's mDNS with our blocking mock.
+	hub.mdns = mdnsMock
+
+	// Goroutine 1: call Hub.SetAutoAccept — acquires muxReg, then blocks
+	// inside the mock's SetAutoAccept (simulating slow I/O).
+	setAutoAcceptDone := make(chan struct{})
+	go func() {
+		hub.SetAutoAccept(true)
+		close(setAutoAcceptDone)
+	}()
+
+	// Give goroutine 1 a moment to acquire the lock and enter the mock.
+	time.Sleep(20 * time.Millisecond)
+
+	// Goroutine 2: try ServiceForSKI, which also needs muxReg.
+	done := make(chan struct{})
+	go func() {
+		_ = hub.ServiceForSKI("some-ski")
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// PASS: ServiceForSKI was not blocked by the mDNS call.
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("ServiceForSKI blocked for >500ms — muxReg is held during mDNS SetAutoAccept I/O")
+	}
+
+	// Release the blocked goroutine and wait for it to finish,
+	// so testify's mock cleanup doesn't race with the in-flight call.
+	close(block)
+	<-setAutoAcceptDone
+}
+
+// TestSetAutoAccept_DoesNotBlockIsAutoAcceptEnabled is a variant that checks
+// read-lock consumers of muxReg are also not starved. IsAutoAcceptEnabled
+// takes muxReg.RLock — if a write lock is held by SetAutoAccept during mDNS
+// I/O, readers are blocked too.
+func TestSetAutoAccept_DoesNotBlockIsAutoAcceptEnabled(t *testing.T) {
+	hub := setupTestHub(t)
+
+	block := make(chan struct{})
+
+	mdnsMock := mocks.NewMdnsInterface(t)
+	mdnsMock.EXPECT().SetAutoAccept(mock.Anything).
+		Run(func(_ bool) {
+			<-block
+		}).Return()
+
+	hub.mdns = mdnsMock
+
+	setAutoAcceptDone := make(chan struct{})
+	go func() {
+		hub.SetAutoAccept(true)
+		close(setAutoAcceptDone)
+	}()
+	time.Sleep(20 * time.Millisecond)
+
+	done := make(chan struct{})
+	go func() {
+		_ = hub.IsAutoAcceptEnabled()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// PASS
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("IsAutoAcceptEnabled blocked for >500ms — muxReg is held during mDNS SetAutoAccept I/O")
+	}
+
+	// Release the blocked goroutine and wait for it to finish,
+	// so testify's mock cleanup doesn't race with the in-flight call.
+	close(block)
+	<-setAutoAcceptDone
+}

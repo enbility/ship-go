@@ -66,9 +66,8 @@ func (h *Hub) mapShipMessageExchangeState(state model.ShipMessageExchangeState, 
 
 func (h *Hub) SetAutoAccept(autoaccept bool) {
 	h.muxReg.Lock()
-	defer h.muxReg.Unlock()
-
 	h.autoaccept = autoaccept
+	h.muxReg.Unlock()
 
 	h.mdns.SetAutoAccept(autoaccept)
 }

@@ -155,10 +155,10 @@ func (s *MdnsSuite) Test_GoZeroConfOnly() {
 
 	err := s.sut.Start(s.mdnsSearch)
 	assert.Nil(s.T(), err)
-	assert.False(s.T(), s.sut.autoaccept)
+	assert.False(s.T(), s.sut.autoaccept.Load())
 
 	s.sut.SetAutoAccept(true)
-	assert.True(s.T(), s.sut.autoaccept)
+	assert.True(s.T(), s.sut.autoaccept.Load())
 }
 
 func (s *MdnsSuite) Test_Start() {
@@ -203,7 +203,7 @@ func (s *MdnsSuite) Test_Start_IFaces_Invalid() {
 	assert.False(s.T(), s.sut.isAnnounced)
 
 	s.sut.SetAutoAccept(true)
-	assert.Equal(s.T(), true, s.sut.autoaccept)
+	assert.Equal(s.T(), true, s.sut.autoaccept.Load())
 
 	s.sut.Shutdown()
 }
@@ -1342,10 +1342,10 @@ func (s *MdnsSuite) Test_AutoAcceptServiceUnannouncedYet() {
 	s.sut.isAnnounced = false
 
 	s.sut.SetAutoAccept(true)
-	assert.True(s.T(), s.sut.autoaccept)
+	assert.True(s.T(), s.sut.autoaccept.Load())
 
 	s.sut.SetAutoAccept(false)
-	assert.False(s.T(), s.sut.autoaccept)
+	assert.False(s.T(), s.sut.autoaccept.Load())
 
 	assert.False(s.T(), s.sut.isAnnounced)
 
@@ -1361,10 +1361,10 @@ func (s *MdnsSuite) Test_AutoAcceptMdnsProviderNil() {
 	s.sut.isAnnounced = true
 
 	s.sut.SetAutoAccept(true)
-	assert.True(s.T(), s.sut.autoaccept)
+	assert.True(s.T(), s.sut.autoaccept.Load())
 
 	s.sut.SetAutoAccept(false)
-	assert.False(s.T(), s.sut.autoaccept)
+	assert.False(s.T(), s.sut.autoaccept.Load())
 
 	assert.True(s.T(), s.sut.isAnnounced)
 
@@ -1383,12 +1383,12 @@ func (s *MdnsSuite) Test_AutoAcceptServiceAlreadyAnnounced() {
 	mdnsProvider.EXPECT().Unannounce()
 	mdnsProvider.EXPECT().Announce(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	s.sut.SetAutoAccept(true)
-	assert.True(s.T(), s.sut.autoaccept)
+	assert.True(s.T(), s.sut.autoaccept.Load())
 
 	mdnsProvider.EXPECT().Unannounce()
 	mdnsProvider.EXPECT().Announce(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	s.sut.SetAutoAccept(false)
-	assert.False(s.T(), s.sut.autoaccept)
+	assert.False(s.T(), s.sut.autoaccept.Load())
 
 	assert.True(s.T(), s.sut.isAnnounced)
 	mdnsProvider.EXPECT().Shutdown()
@@ -1401,10 +1401,9 @@ func (s *MdnsSuite) Test_AutoAcceptMdnsProviderReannounceFails() {
 	// something has already been announced
 	s.sut.isAnnounced = true
 
-	mdnsProvider.EXPECT().Unannounce()
 	mdnsProvider.EXPECT().Announce(mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("myError"))
 	s.sut.SetAutoAccept(true)
-	assert.True(s.T(), s.sut.autoaccept)
+	assert.True(s.T(), s.sut.autoaccept.Load())
 	assert.False(s.T(), s.sut.isAnnounced)
 
 	mdnsProvider.EXPECT().Shutdown()
