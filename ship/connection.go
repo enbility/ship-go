@@ -2,6 +2,7 @@ package ship
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/enbility/ship-go/api"
@@ -53,6 +54,9 @@ type ShipConnection struct {
 	lastReceivedWaitingValue time.Duration // required for Prolong-Request-Reply-Timer
 
 	shutdownOnce sync.Once
+	// closed flips to true inside shutdownOnce.Do, allowing IsAlive() lock-free
+	// reads. We avoid exposing sync.Once state directly (Go has no API for it).
+	closed atomic.Bool
 
 	// buffer for SPINE messages that came in before the handshake was completed
 	spineBuffer [][]byte

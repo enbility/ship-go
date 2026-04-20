@@ -83,8 +83,8 @@ func (h *Hub) startWebsocketServer() error {
 // ServeHTTP handles incoming HTTP connection requests
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check connection limit before accepting new connections
+	currentConnections := h.registry.Len()
 	h.muxCon.RLock()
-	currentConnections := len(h.connections)
 	maxConnections := h.maxConnections
 	h.muxCon.RUnlock()
 
@@ -147,16 +147,25 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	remoteService = service
 
-	// don't allow a second connection
-	if !h.keepThisConnection(conn, true, remoteService) {
-		h.safeClose(conn, "double connection rejected")
+	// Atomically resolve any double connection and register the new one if it
+	// wins the §12.2.2 rule. Builder runs under the registry lock IFF we win.
+	res := h.registry.Swap(remoteService.SKI(), true, func() api.ShipConnectionInterface {
+		dataHandler := ws.NewWebsocketConnection(conn, remoteService.SKI())
+		return ship.NewConnectionHandler(h, dataHandler, ship.ShipRoleServer,
+			h.localService.ShipID(), remoteService.SKI(), remoteService.ShipID())
+	})
+
+	if !res.Kept {
+		// Rejected — single-owner close of the upgraded websocket (Bug 9).
+		h.sendWSCloseMessage(conn)
 		return
 	}
 
-	dataHandler := ws.NewWebsocketConnection(conn, remoteService.SKI())
-	shipConnection := ship.NewConnectionHandler(h, dataHandler, ship.ShipRoleServer,
-		h.localService.ShipID(), remoteService.SKI(), remoteService.ShipID())
-	shipConnection.Run()
+	// Evict any old connection off the critical path.
+	if res.OldConn != nil {
+		go res.OldConn.CloseConnection(false, 0, "")
+	}
 
-	h.registerConnection(shipConnection)
+	// Start the freshly-registered connection's read/handshake loop.
+	res.NewConn.Run()
 }

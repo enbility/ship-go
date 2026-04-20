@@ -51,6 +51,7 @@ func (s *HubConnectionsRegistrySuite) BeforeTest(suiteName, testName string) {
 	s.shipConnection = mocks.NewShipConnectionInterface(s.T())
 	s.shipConnection.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 	s.shipConnection.EXPECT().RemoteSKI().Return(s.remoteSki).Maybe()
+	s.shipConnection.EXPECT().IsAlive().Return(true).Maybe()
 	s.shipConnection.EXPECT().ApprovePendingHandshake().Return().Maybe()
 	s.shipConnection.EXPECT().AbortPendingHandshake().Return().Maybe()
 	s.shipConnection.EXPECT().DataHandler().Return(s.wsDataWriter).Maybe()
@@ -70,14 +71,18 @@ func (s *HubConnectionsRegistrySuite) Test_IsRemoteSKIPaired() {
 	paired := s.sut.IsRemoteServiceForSKIPaired(s.remoteSki)
 	assert.Equal(s.T(), false, paired)
 
-	s.sut.registerConnection(s.shipConnection)
+	s.sut.registry.mu.Lock()
+	s.sut.registry.connections[s.remoteSki] = s.shipConnection
+	s.sut.registry.mu.Unlock()
 	s.sut.RegisterRemoteSKI(s.remoteSki, "")
 
 	paired = s.sut.IsRemoteServiceForSKIPaired(s.remoteSki)
 	assert.Equal(s.T(), true, paired)
 
 	// remove the connection, so the test doesn't try to close it
-	delete(s.sut.connections, s.remoteSki)
+	s.sut.registry.mu.Lock()
+	delete(s.sut.registry.connections, s.remoteSki)
+	s.sut.registry.mu.Unlock()
 	s.sut.UnregisterRemoteSKI(s.remoteSki)
 	paired = s.sut.IsRemoteServiceForSKIPaired(s.remoteSki)
 	assert.Equal(s.T(), false, paired)
@@ -104,37 +109,45 @@ func (s *HubConnectionsRegistrySuite) Test_RegisterRemoteSKI_AfterStart() {
 	s.sut.hasStarted = true
 
 	s.sut.RegisterRemoteSKI(s.remoteSki, "")
-	assert.Equal(s.T(), 0, len(s.sut.connections))
+	assert.Equal(s.T(), 0, s.sut.registry.Len())
 
-	s.sut.registerConnection(s.shipConnection)
+	s.sut.registry.mu.Lock()
+	s.sut.registry.connections[s.remoteSki] = s.shipConnection
+	s.sut.registry.mu.Unlock()
 	s.sut.RegisterRemoteSKI(s.remoteSki, "")
-	assert.Equal(s.T(), 1, len(s.sut.connections))
+	assert.Equal(s.T(), 1, s.sut.registry.Len())
 }
 
 func (s *HubConnectionsRegistrySuite) Test_HandleConnectionClosed() {
 	s.sut.HandleConnectionClosed(s.shipConnection, false)
 
-	s.sut.registerConnection(s.shipConnection)
+	s.sut.registry.mu.Lock()
+	s.sut.registry.connections[s.remoteSki] = s.shipConnection
+	s.sut.registry.mu.Unlock()
 
 	s.sut.HandleConnectionClosed(s.shipConnection, true)
 
-	assert.Equal(s.T(), 0, len(s.sut.connections))
+	assert.Equal(s.T(), 0, s.sut.registry.Len())
 }
 
 func (s *HubConnectionsRegistrySuite) Test_RegisterConnection() {
-	s.sut.registerConnection(s.shipConnection)
-	assert.Equal(s.T(), 1, len(s.sut.connections))
+	s.sut.registry.mu.Lock()
+	s.sut.registry.connections[s.remoteSki] = s.shipConnection
+	s.sut.registry.mu.Unlock()
+	assert.Equal(s.T(), 1, s.sut.registry.Len())
 	con := s.sut.connectionForSKI(s.remoteSki)
 	assert.NotNil(s.T(), con)
 }
 
 func (s *HubConnectionsRegistrySuite) Test_CancelPairingWithSKI() {
 	s.sut.CancelPairingWithSKI(s.remoteSki)
-	assert.Equal(s.T(), 0, len(s.sut.connections))
+	assert.Equal(s.T(), 0, s.sut.registry.Len())
 	assert.Equal(s.T(), 0, len(s.sut.connectionAttemptRunning))
 
-	s.sut.registerConnection(s.shipConnection)
-	assert.Equal(s.T(), 1, len(s.sut.connections))
+	s.sut.registry.mu.Lock()
+	s.sut.registry.connections[s.remoteSki] = s.shipConnection
+	s.sut.registry.mu.Unlock()
+	assert.Equal(s.T(), 1, s.sut.registry.Len())
 
 	s.sut.CancelPairingWithSKI(s.remoteSki)
 	assert.Equal(s.T(), 0, len(s.sut.connectionAttemptRunning))

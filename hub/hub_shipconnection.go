@@ -18,13 +18,20 @@ func (h *Hub) IsRemoteServiceForSKIPaired(ski string) bool {
 }
 
 // report closing of a connection and if handshake did complete
+//
+// Gated on UnregisterConnectionIfMatch's return: if the closing connection no
+// longer owns the registry slot (because a double-connection swap replaced it
+// with a fresh one), we don't fire user-facing disconnect callbacks for a
+// connection the application no longer "sees". Resolves Bug 3.
 func (h *Hub) HandleConnectionClosed(connection api.ShipConnectionInterface, handshakeCompleted bool) {
 	remoteSki := connection.RemoteSKI()
 
-	// only remove this connection if it is the registered one for the ski!
-	// as we can have double connections but only one can be registered
-	// Use the new atomic method to avoid race conditions
-	h.UnregisterConnectionIfMatch(remoteSki, connection)
+	// Atomic compare-and-delete. If false, this connection was already evicted
+	// by a Swap and the slot now holds a replacement — do not surface a
+	// disconnect to the application.
+	if !h.UnregisterConnectionIfMatch(remoteSki, connection) {
+		return
+	}
 
 	// connection close was after a completed handshake, so we can reset the attempt counter
 	if handshakeCompleted {

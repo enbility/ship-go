@@ -64,19 +64,20 @@ func (s *HubConnectionsRegistryCoverageSuite) Test_ConnectionForSKI_ThreadSafety
 	// Create a mock connection
 	mockConn := &mocks.ShipConnectionInterface{}
 	mockConn.EXPECT().RemoteSKI().Return(ski).Maybe()
+	mockConn.EXPECT().IsAlive().Return(true).Maybe()
 
 	// Add to connections map
-	s.hub.muxCon.Lock()
-	s.hub.connections[ski] = mockConn
-	s.hub.muxCon.Unlock()
+	s.hub.registry.mu.Lock()
+	s.hub.registry.connections[ski] = mockConn
+	s.hub.registry.mu.Unlock()
 
 	// Run concurrent reads
 	done := make(chan bool, 10)
 	for i := 0; i < 10; i++ {
 		go func() {
-			s.hub.muxCon.RLock()
-			_ = s.hub.connections[ski]
-			s.hub.muxCon.RUnlock()
+			s.hub.registry.mu.RLock()
+			_ = s.hub.registry.connections[ski]
+			s.hub.registry.mu.RUnlock()
 			done <- true
 		}()
 	}
@@ -87,23 +88,21 @@ func (s *HubConnectionsRegistryCoverageSuite) Test_ConnectionForSKI_ThreadSafety
 	}
 }
 
-// Test_RegisterConnection_EdgeCases tests edge cases in connection registration
+// Test_RegisterConnection_EdgeCases tests edge cases in connection registration.
+// Post-Phase-3: registerConnection has been replaced by registry.Swap.
 func (s *HubConnectionsRegistryCoverageSuite) Test_RegisterConnection_EdgeCases() {
-	// The registerConnection method expects a non-nil connection
-	// as it calls connection.RemoteSKI() immediately
-	// So we test with a mock connection instead
-
 	mockConn := &mocks.ShipConnectionInterface{}
-	mockConn.EXPECT().RemoteSKI().Return("edge-case-ski").Once()
+	mockConn.EXPECT().RemoteSKI().Return("edge-case-ski").Maybe()
+	mockConn.EXPECT().IsAlive().Return(true).Maybe()
 
 	assert.NotPanics(s.T(), func() {
-		s.hub.registerConnection(mockConn)
+		s.hub.registry.Swap("edge-case-ski", false, func() api.ShipConnectionInterface { return mockConn })
 	})
 
 	// Verify it was registered
-	s.hub.muxCon.RLock()
-	_, exists := s.hub.connections["edge-case-ski"]
-	s.hub.muxCon.RUnlock()
+	s.hub.registry.mu.RLock()
+	_, exists := s.hub.registry.connections["edge-case-ski"]
+	s.hub.registry.mu.RUnlock()
 	assert.True(s.T(), exists)
 }
 
@@ -113,14 +112,16 @@ func (s *HubConnectionsRegistryCoverageSuite) Test_ConnectionRegistration() {
 	mockConn := &mocks.ShipConnectionInterface{}
 	ski := "test-register-ski"
 	mockConn.EXPECT().RemoteSKI().Return(ski).Maybe()
+	mockConn.EXPECT().IsAlive().Return(true).Maybe()
 
-	// Register the connection
-	s.hub.registerConnection(mockConn)
+	// Register the connection via registry.Swap (post-Phase-3 equivalent of
+	// registerConnection).
+	s.hub.registry.Swap(ski, false, func() api.ShipConnectionInterface { return mockConn })
 
 	// Verify it's registered
-	s.hub.muxCon.RLock()
-	conn, exists := s.hub.connections[ski]
-	s.hub.muxCon.RUnlock()
+	s.hub.registry.mu.RLock()
+	conn, exists := s.hub.registry.connections[ski]
+	s.hub.registry.mu.RUnlock()
 
 	assert.True(s.T(), exists)
 	assert.Equal(s.T(), mockConn, conn)
@@ -135,14 +136,14 @@ func (s *HubConnectionsRegistryCoverageSuite) Test_ConnectionRegistration() {
 	mockConn.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 
 	// Remove from connections map directly since we can't easily trigger the full flow
-	s.hub.muxCon.Lock()
-	delete(s.hub.connections, ski)
-	s.hub.muxCon.Unlock()
+	s.hub.registry.mu.Lock()
+	delete(s.hub.registry.connections, ski)
+	s.hub.registry.mu.Unlock()
 
 	// Verify it's removed
-	s.hub.muxCon.RLock()
-	_, exists = s.hub.connections[ski]
-	s.hub.muxCon.RUnlock()
+	s.hub.registry.mu.RLock()
+	_, exists = s.hub.registry.connections[ski]
+	s.hub.registry.mu.RUnlock()
 
 	assert.False(s.T(), exists)
 }
@@ -150,9 +151,9 @@ func (s *HubConnectionsRegistryCoverageSuite) Test_ConnectionRegistration() {
 // Test_ConnectionMapSize tests getting the size of connection map
 func (s *HubConnectionsRegistryCoverageSuite) Test_ConnectionMapSize() {
 	// Initially should be empty
-	s.hub.muxCon.RLock()
-	size := len(s.hub.connections)
-	s.hub.muxCon.RUnlock()
+	s.hub.registry.mu.RLock()
+	size := len(s.hub.registry.connections)
+	s.hub.registry.mu.RUnlock()
 	assert.Equal(s.T(), 0, size)
 
 	// Add mock connections
@@ -160,17 +161,19 @@ func (s *HubConnectionsRegistryCoverageSuite) Test_ConnectionMapSize() {
 	mockConn2 := &mocks.ShipConnectionInterface{}
 
 	mockConn1.EXPECT().RemoteSKI().Return("ski1").Maybe()
+	mockConn1.EXPECT().IsAlive().Return(true).Maybe()
 	mockConn2.EXPECT().RemoteSKI().Return("ski2").Maybe()
+	mockConn2.EXPECT().IsAlive().Return(true).Maybe()
 
-	s.hub.muxCon.Lock()
-	s.hub.connections["ski1"] = mockConn1
-	s.hub.connections["ski2"] = mockConn2
-	s.hub.muxCon.Unlock()
+	s.hub.registry.mu.Lock()
+	s.hub.registry.connections["ski1"] = mockConn1
+	s.hub.registry.connections["ski2"] = mockConn2
+	s.hub.registry.mu.Unlock()
 
 	// Should now be 2
-	s.hub.muxCon.RLock()
-	size = len(s.hub.connections)
-	s.hub.muxCon.RUnlock()
+	s.hub.registry.mu.RLock()
+	size = len(s.hub.registry.connections)
+	s.hub.registry.mu.RUnlock()
 
 	assert.Equal(s.T(), 2, size)
 }
@@ -186,10 +189,11 @@ func (s *HubConnectionsRegistryCoverageSuite) Test_ConcurrentConnectionOperation
 			mockConn := &mocks.ShipConnectionInterface{}
 			ski := string(rune('a' + idx))
 			mockConn.EXPECT().RemoteSKI().Return(ski).Maybe()
+			mockConn.EXPECT().IsAlive().Return(true).Maybe()
 
-			s.hub.muxCon.Lock()
-			s.hub.connections[ski] = mockConn
-			s.hub.muxCon.Unlock()
+			s.hub.registry.mu.Lock()
+			s.hub.registry.connections[ski] = mockConn
+			s.hub.registry.mu.Unlock()
 
 			done <- true
 		}(i)
@@ -198,9 +202,9 @@ func (s *HubConnectionsRegistryCoverageSuite) Test_ConcurrentConnectionOperation
 	// Readers
 	for i := 0; i < 10; i++ {
 		go func() {
-			s.hub.muxCon.RLock()
-			_ = len(s.hub.connections)
-			s.hub.muxCon.RUnlock()
+			s.hub.registry.mu.RLock()
+			_ = len(s.hub.registry.connections)
+			s.hub.registry.mu.RUnlock()
 
 			done <- true
 		}()
@@ -220,22 +224,25 @@ func (s *HubConnectionsRegistryCoverageSuite) Test_GetAllConnections() {
 	mockConn3 := &mocks.ShipConnectionInterface{}
 
 	mockConn1.EXPECT().RemoteSKI().Return("ski1").Maybe()
+	mockConn1.EXPECT().IsAlive().Return(true).Maybe()
 	mockConn2.EXPECT().RemoteSKI().Return("ski2").Maybe()
+	mockConn2.EXPECT().IsAlive().Return(true).Maybe()
 	mockConn3.EXPECT().RemoteSKI().Return("ski3").Maybe()
+	mockConn3.EXPECT().IsAlive().Return(true).Maybe()
 
-	s.hub.muxCon.Lock()
-	s.hub.connections["ski1"] = mockConn1
-	s.hub.connections["ski2"] = mockConn2
-	s.hub.connections["ski3"] = mockConn3
-	s.hub.muxCon.Unlock()
+	s.hub.registry.mu.Lock()
+	s.hub.registry.connections["ski1"] = mockConn1
+	s.hub.registry.connections["ski2"] = mockConn2
+	s.hub.registry.connections["ski3"] = mockConn3
+	s.hub.registry.mu.Unlock()
 
 	// Get all connections
-	s.hub.muxCon.RLock()
+	s.hub.registry.mu.RLock()
 	count := 0
-	for range s.hub.connections {
+	for range s.hub.registry.connections {
 		count++
 	}
-	s.hub.muxCon.RUnlock()
+	s.hub.registry.mu.RUnlock()
 
 	assert.Equal(s.T(), 3, count)
 }

@@ -41,6 +41,14 @@ func (c *ShipConnection) RemoteSKI() string {
 	return c.remoteSKI
 }
 
+// IsAlive returns true until CloseConnection has fired. Used by callers (in
+// particular the hub's connection registry) to detect stale entries — sockets
+// that have been torn down but whose HandleConnectionClosed callback has not
+// yet propagated through to the connections map.
+func (c *ShipConnection) IsAlive() bool {
+	return !c.closed.Load()
+}
+
 // DataHandler returns the WebSocket data writer
 func (c *ShipConnection) DataHandler() api.WebsocketDataWriterInterface {
 	return c.dataWriter
@@ -61,6 +69,11 @@ func (c *ShipConnection) ShipHandshakeState() (model.ShipMessageExchangeState, e
 // CloseConnection closes this ship connection
 func (c *ShipConnection) CloseConnection(safe bool, code int, reason string) {
 	c.shutdownOnce.Do(func() {
+		// Mark closed up front so IsAlive() flips false immediately, before any
+		// of the (potentially slow) teardown work below. The connection registry
+		// uses IsAlive to detect stale entries and unblock reconnect attempts.
+		c.closed.Store(true)
+
 		// Stop timer and wait for completion with a reasonable timeout
 		done := c.stopHandshakeTimer()
 		select {

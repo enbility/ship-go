@@ -112,17 +112,18 @@ func TestIsSkiConnected(t *testing.T) {
 
 	// Add connection
 	mockConn := mocks.NewShipConnectionInterface(t)
-	hub.muxCon.Lock()
-	hub.connections[ski] = mockConn
-	hub.muxCon.Unlock()
+	mockConn.EXPECT().IsAlive().Return(true).Maybe()
+	hub.registry.mu.Lock()
+	hub.registry.connections[ski] = mockConn
+	hub.registry.mu.Unlock()
 
 	// Now connected
 	assert.True(t, hub.isSkiConnected(ski))
 
 	// Remove connection
-	hub.muxCon.Lock()
-	delete(hub.connections, ski)
-	hub.muxCon.Unlock()
+	hub.registry.mu.Lock()
+	delete(hub.registry.connections, ski)
+	hub.registry.mu.Unlock()
 
 	// Not connected again
 	assert.False(t, hub.isSkiConnected(ski))
@@ -242,15 +243,16 @@ func TestConnectionForSKI(t *testing.T) {
 	ski := "lookup-ski"
 	mockConn := mocks.NewShipConnectionInterface(t)
 	mockConn.EXPECT().RemoteSKI().Return(ski).Maybe()
+	mockConn.EXPECT().IsAlive().Return(true).Maybe()
 
 	// Not found initially
 	conn := hub.connectionForSKI(ski)
 	assert.Nil(t, conn)
 
 	// Add connection
-	hub.muxCon.Lock()
-	hub.connections[ski] = mockConn
-	hub.muxCon.Unlock()
+	hub.registry.mu.Lock()
+	hub.registry.connections[ski] = mockConn
+	hub.registry.mu.Unlock()
 
 	// Found
 	conn = hub.connectionForSKI(ski)
@@ -263,12 +265,14 @@ func TestUnregisterConnectionIfMatchUnit(t *testing.T) {
 
 	ski := "unregister-ski"
 	mockConn1 := mocks.NewShipConnectionInterface(t)
+	mockConn1.EXPECT().IsAlive().Return(true).Maybe()
 	mockConn2 := mocks.NewShipConnectionInterface(t)
+	mockConn2.EXPECT().IsAlive().Return(true).Maybe()
 
 	// Add connection
-	hub.muxCon.Lock()
-	hub.connections[ski] = mockConn1
-	hub.muxCon.Unlock()
+	hub.registry.mu.Lock()
+	hub.registry.connections[ski] = mockConn1
+	hub.registry.mu.Unlock()
 
 	// Unregister with matching connection
 	success := hub.UnregisterConnectionIfMatch(ski, mockConn1)
@@ -278,9 +282,9 @@ func TestUnregisterConnectionIfMatchUnit(t *testing.T) {
 	assert.Nil(t, hub.connectionForSKI(ski))
 
 	// Add new connection
-	hub.muxCon.Lock()
-	hub.connections[ski] = mockConn1
-	hub.muxCon.Unlock()
+	hub.registry.mu.Lock()
+	hub.registry.connections[ski] = mockConn1
+	hub.registry.mu.Unlock()
 
 	// Try to unregister with non-matching connection
 	success = hub.UnregisterConnectionIfMatch(ski, mockConn2)
@@ -314,15 +318,24 @@ func TestStartWebsocketServer(t *testing.T) {
 	}
 }
 
-// TestKeepThisConnectionBasics tests basic double connection prevention
+// TestKeepThisConnectionBasics tests basic double connection prevention.
+// Post-Phase-3: keepThisConnection has been replaced by registry.Swap; the
+// rule (§12.2.2) is now exercised through the registry's atomic decide-and-
+// register path. This test reproduces the same outcome assertion: with no
+// existing connection, a Swap must always succeed.
 func TestKeepThisConnectionBasics(t *testing.T) {
 	t.Run("no_existing_connection", func(t *testing.T) {
 		hub := setupTestHubForTimer(t)
+		// Recreate the registry so localSKI matches the new local service.
 		hub.localService = api.NewServiceDetails("local-ski")
+		hub.registry = newConnectionRegistry(hub.localService.SKI())
 
 		remoteService := api.NewServiceDetails("remote-ski")
-		keep := hub.keepThisConnection(nil, true, remoteService)
-		assert.True(t, keep, "should keep when no existing connection")
+		mockConn := mocks.NewShipConnectionInterface(t)
+		mockConn.EXPECT().IsAlive().Return(true).Maybe()
+
+		res := hub.registry.Swap(remoteService.SKI(), true, func() api.ShipConnectionInterface { return mockConn })
+		assert.True(t, res.Kept, "should keep when no existing connection")
 	})
 }
 
@@ -376,9 +389,10 @@ func TestPrepareConnectionInitiationBasics(t *testing.T) {
 
 		ski := "connected-ski"
 		mockConn := mocks.NewShipConnectionInterface(t)
-		hub.muxCon.Lock()
-		hub.connections[ski] = mockConn
-		hub.muxCon.Unlock()
+		mockConn.EXPECT().IsAlive().Return(true).Maybe()
+		hub.registry.mu.Lock()
+		hub.registry.connections[ski] = mockConn
+		hub.registry.mu.Unlock()
 
 		entry := &api.MdnsEntry{Identifier: ski}
 
@@ -511,11 +525,13 @@ func TestConnectionLimit(t *testing.T) {
 
 		// Add 2 mock connections to reach the limit
 		mockConn1 := mocks.NewShipConnectionInterface(t)
+		mockConn1.EXPECT().IsAlive().Return(true).Maybe()
 		mockConn2 := mocks.NewShipConnectionInterface(t)
-		hub.muxCon.Lock()
-		hub.connections["ski1"] = mockConn1
-		hub.connections["ski2"] = mockConn2
-		hub.muxCon.Unlock()
+		mockConn2.EXPECT().IsAlive().Return(true).Maybe()
+		hub.registry.mu.Lock()
+		hub.registry.connections["ski1"] = mockConn1
+		hub.registry.connections["ski2"] = mockConn2
+		hub.registry.mu.Unlock()
 
 		// Create a test request
 		req := httptest.NewRequest("GET", "/ship", nil)
@@ -535,11 +551,13 @@ func TestConnectionLimit(t *testing.T) {
 
 		// Add 2 mock connections (under limit of 5)
 		mockConn1 := mocks.NewShipConnectionInterface(t)
+		mockConn1.EXPECT().IsAlive().Return(true).Maybe()
 		mockConn2 := mocks.NewShipConnectionInterface(t)
-		hub.muxCon.Lock()
-		hub.connections["ski1"] = mockConn1
-		hub.connections["ski2"] = mockConn2
-		hub.muxCon.Unlock()
+		mockConn2.EXPECT().IsAlive().Return(true).Maybe()
+		hub.registry.mu.Lock()
+		hub.registry.connections["ski1"] = mockConn1
+		hub.registry.connections["ski2"] = mockConn2
+		hub.registry.mu.Unlock()
 
 		// Create a test request
 		req := httptest.NewRequest("GET", "/ship", nil)
@@ -563,11 +581,13 @@ func TestConnectionLimit(t *testing.T) {
 
 		// Add 2 mock connections to reach the limit
 		mockConn1 := mocks.NewShipConnectionInterface(t)
+		mockConn1.EXPECT().IsAlive().Return(true).Maybe()
 		mockConn2 := mocks.NewShipConnectionInterface(t)
-		hub.muxCon.Lock()
-		hub.connections["ski1"] = mockConn1
-		hub.connections["ski2"] = mockConn2
-		hub.muxCon.Unlock()
+		mockConn2.EXPECT().IsAlive().Return(true).Maybe()
+		hub.registry.mu.Lock()
+		hub.registry.connections["ski1"] = mockConn1
+		hub.registry.connections["ski2"] = mockConn2
+		hub.registry.mu.Unlock()
 
 		// Try to connect to a new service
 		service := api.NewServiceDetails("ski3")
@@ -584,11 +604,13 @@ func TestConnectionLimit(t *testing.T) {
 
 		// Add 2 mock connections (under limit of 5)
 		mockConn1 := mocks.NewShipConnectionInterface(t)
+		mockConn1.EXPECT().IsAlive().Return(true).Maybe()
 		mockConn2 := mocks.NewShipConnectionInterface(t)
-		hub.muxCon.Lock()
-		hub.connections["ski1"] = mockConn1
-		hub.connections["ski2"] = mockConn2
-		hub.muxCon.Unlock()
+		mockConn2.EXPECT().IsAlive().Return(true).Maybe()
+		hub.registry.mu.Lock()
+		hub.registry.connections["ski1"] = mockConn1
+		hub.registry.connections["ski2"] = mockConn2
+		hub.registry.mu.Unlock()
 
 		// Try to connect to a new service
 		service := api.NewServiceDetails("ski3")

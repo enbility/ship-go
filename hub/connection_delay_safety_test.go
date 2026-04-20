@@ -15,12 +15,10 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// TestConnectionDelayRaceConditions tests for race conditions in connection delay and double connection prevention
+// TestConnectionDelayRaceConditions tests for race conditions in connection delay and double connection prevention.
+// Post-Phase-3: keepThisConnection / registerConnection have been replaced by registry.Swap.
 func TestConnectionDelayRaceConditions(t *testing.T) {
 	t.Run("double_connection_prevention_race", func(t *testing.T) {
-		// Test the race condition in keepThisConnection where existingC could change
-		// between lookup and action
-
 		// Create test hub with minimal setup
 		mockHubReader := mocks.NewHubReaderInterface(t)
 		mockMdns := mocks.NewMdnsInterface(t)
@@ -30,12 +28,12 @@ func TestConnectionDelayRaceConditions(t *testing.T) {
 
 		hub := NewHub(mockHubReader, mockMdns, 4729, cert, localService)
 
-		// Create remote service details
-		remoteService := api.NewServiceDetails("remote-ski-6000") // Higher than local
+		const remoteSKI = "remote-ski-6000" // Higher than local
 
-		// Mock connections
+		// Mock connection
 		mockConn1 := mocks.NewShipConnectionInterface(t)
-		mockConn1.EXPECT().RemoteSKI().Return("remote-ski-6000").Maybe()
+		mockConn1.EXPECT().RemoteSKI().Return(remoteSKI).Maybe()
+		mockConn1.EXPECT().IsAlive().Return(true).Maybe()
 		mockConn1.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 
 		var operationCount atomic.Int32
@@ -47,18 +45,20 @@ func TestConnectionDelayRaceConditions(t *testing.T) {
 		for range numIterations {
 			wg.Add(3)
 
-			// Goroutine 1: Register a connection
+			// Goroutine 1: Plant a connection directly (test bypasses the rule for setup).
 			go func() {
 				defer wg.Done()
-				hub.registerConnection(mockConn1)
+				hub.registry.mu.Lock()
+				hub.registry.connections[remoteSKI] = mockConn1
+				hub.registry.mu.Unlock()
 				operationCount.Add(1)
 			}()
 
-			// Goroutine 2: Check for double connection (incoming)
+			// Goroutine 2: §12.2.2 decide-and-act for an incoming connection.
 			go func() {
 				defer wg.Done()
-				keep := hub.keepThisConnection(nil, true, remoteService)
-				if !keep {
+				res := hub.registry.Swap(remoteSKI, true, func() api.ShipConnectionInterface { return mockConn1 })
+				if !res.Kept {
 					t.Log("expected to keep for higher remoteSKI")
 				}
 				operationCount.Add(1)
@@ -67,7 +67,7 @@ func TestConnectionDelayRaceConditions(t *testing.T) {
 			// Goroutine 3: Unregister connection
 			go func() {
 				defer wg.Done()
-				hub.UnregisterConnectionIfMatch("remote-ski-6000", mockConn1)
+				hub.UnregisterConnectionIfMatch(remoteSKI, mockConn1)
 				operationCount.Add(1)
 			}()
 		}

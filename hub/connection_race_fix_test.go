@@ -13,12 +13,11 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// TestKeepConnectionTOCTOURaceFix tests that the TOCTOU race condition in keepThisConnection is fixed
+// TestKeepConnectionTOCTOURaceFix tests that the TOCTOU race condition is fixed.
+// Post-Phase-3: keepThisConnection is gone; the equivalent atomic decide-and-register
+// is registry.Swap, whose Kept boolean replaces the old return value.
 func TestKeepConnectionTOCTOURaceFix(t *testing.T) {
 	t.Run("atomic_connection_removal", func(t *testing.T) {
-		// This test verifies that the connection removal in keepThisConnection is atomic
-		// and prevents the TOCTOU race condition
-
 		mockHubReader := mocks.NewHubReaderInterface(t)
 		mockMdns := mocks.NewMdnsInterface(t)
 		mockMdns.EXPECT().Shutdown().Maybe()
@@ -27,16 +26,17 @@ func TestKeepConnectionTOCTOURaceFix(t *testing.T) {
 
 		hub := NewHub(mockHubReader, mockMdns, 4729, cert, localService)
 
-		remoteSKI := "remote-ski-6000" // Higher than local, so remote should win
-		remoteService := api.NewServiceDetails(remoteSKI)
+		remoteSKI := "remote-ski-6000" // Higher than local, so for incoming the new conn wins.
 
 		// Create mock connections
 		oldConn := mocks.NewShipConnectionInterface(t)
 		oldConn.EXPECT().RemoteSKI().Return(remoteSKI).Maybe()
+		oldConn.EXPECT().IsAlive().Return(true).Maybe()
 		oldConn.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 
 		newConn := mocks.NewShipConnectionInterface(t)
 		newConn.EXPECT().RemoteSKI().Return(remoteSKI).Maybe()
+		newConn.EXPECT().IsAlive().Return(true).Maybe()
 		newConn.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 
 		var operationsCompleted atomic.Int32
@@ -49,31 +49,34 @@ func TestKeepConnectionTOCTOURaceFix(t *testing.T) {
 		for i := 0; i < numIterations; i++ {
 			wg.Add(3)
 
-			// Goroutine 1: Register old connection
+			// Goroutine 1: Plant the "old" connection directly.
 			go func() {
 				defer wg.Done()
-				hub.registerConnection(oldConn)
+				hub.registry.mu.Lock()
+				hub.registry.connections[remoteSKI] = oldConn
+				hub.registry.mu.Unlock()
 				operationsCompleted.Add(1)
 			}()
 
-			// Goroutine 2: Call keepThisConnection (should remove old connection atomically)
+			// Goroutine 2: §12.2.2 decide-and-act via Swap (incoming).
 			go func() {
 				defer wg.Done()
-				keep := hub.keepThisConnection(nil, true, remoteService)
+				res := hub.registry.Swap(remoteSKI, true, func() api.ShipConnectionInterface { return newConn })
 
 				keepResultsMux.Lock()
-				keepResults = append(keepResults, keep)
+				keepResults = append(keepResults, res.Kept)
 				keepResultsMux.Unlock()
 
 				operationsCompleted.Add(1)
 			}()
 
-			// Goroutine 3: Try to register a new connection
+			// Goroutine 3: Plant a new connection directly under registry.mu.
 			go func() {
 				defer wg.Done()
-				// Small delay to let the race condition potentially occur
 				time.Sleep(time.Microsecond)
-				hub.registerConnection(newConn)
+				hub.registry.mu.Lock()
+				hub.registry.connections[remoteSKI] = newConn
+				hub.registry.mu.Unlock()
 				operationsCompleted.Add(1)
 			}()
 		}
@@ -83,7 +86,6 @@ func TestKeepConnectionTOCTOURaceFix(t *testing.T) {
 		// All operations should complete
 		assert.Equal(t, int32(numIterations*3), operationsCompleted.Load())
 
-		// keepThisConnection should consistently return true (remote SKI is higher)
 		keepResultsMux.Lock()
 		trueCount := 0
 		for _, result := range keepResults {
@@ -93,16 +95,13 @@ func TestKeepConnectionTOCTOURaceFix(t *testing.T) {
 		}
 		keepResultsMux.Unlock()
 
-		// Most results should be true (remote SKI wins), but some might be false
-		// if no existing connection was found
-		t.Logf("keepThisConnection returned true %d/%d times", trueCount, len(keepResults))
+		// Most results should be true (remote SKI wins for incoming).
+		t.Logf("Swap.Kept was true %d/%d times", trueCount, len(keepResults))
 
 		hub.Shutdown()
 	})
 
 	t.Run("connection_consistency_under_contention", func(t *testing.T) {
-		// Test that connection state remains consistent under high contention
-
 		mockHubReader := mocks.NewHubReaderInterface(t)
 		mockMdns := mocks.NewMdnsInterface(t)
 		mockMdns.EXPECT().Shutdown().Maybe()
@@ -112,35 +111,37 @@ func TestKeepConnectionTOCTOURaceFix(t *testing.T) {
 		hub := NewHub(mockHubReader, mockMdns, 4729, cert, localService)
 
 		remoteSKI := "remote-ski-5000" // Higher than local
-		remoteService := api.NewServiceDetails(remoteSKI)
 
 		// Create multiple mock connections
 		mockConns := make([]*mocks.ShipConnectionInterface, 10)
 		for i := range mockConns {
 			mockConns[i] = mocks.NewShipConnectionInterface(t)
 			mockConns[i].EXPECT().RemoteSKI().Return(remoteSKI).Maybe()
+			mockConns[i].EXPECT().IsAlive().Return(true).Maybe()
 			mockConns[i].EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 		}
 
 		var wg sync.WaitGroup
 		const numOperations = 100
 
-		// Rapid register/keepConnection/unregister operations
+		// Rapid register/swap/unregister operations
 		for i := 0; i < numOperations; i++ {
 			wg.Add(3)
 			connIndex := i % len(mockConns)
 
-			// Register
+			// Register (planted directly).
 			go func(conn *mocks.ShipConnectionInterface) {
 				defer wg.Done()
-				hub.registerConnection(conn)
+				hub.registry.mu.Lock()
+				hub.registry.connections[remoteSKI] = conn
+				hub.registry.mu.Unlock()
 			}(mockConns[connIndex])
 
-			// Keep connection check
-			go func() {
+			// Rule check via Swap.
+			go func(conn *mocks.ShipConnectionInterface) {
 				defer wg.Done()
-				hub.keepThisConnection(nil, true, remoteService)
-			}()
+				hub.registry.Swap(remoteSKI, true, func() api.ShipConnectionInterface { return conn })
+			}(mockConns[connIndex])
 
 			// Unregister
 			go func(conn *mocks.ShipConnectionInterface) {

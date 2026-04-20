@@ -13,6 +13,16 @@ type ShipConnectionInterface interface {
 	ApprovePendingHandshake()
 	AbortPendingHandshake()
 	ShipHandshakeState() (model.ShipMessageExchangeState, error)
+
+	// IsAlive returns false once CloseConnection has fired. Used by the
+	// connection registry to detect stale entries (sockets that are dead but
+	// have not yet propagated through HandleConnectionClosed) so a new dial
+	// can take over instead of being short-circuited by a zombie entry.
+	IsAlive() bool
+
+	// Run starts the connection's read/handshake processing. Called by the
+	// hub after registry.Swap has atomically registered the connection.
+	Run()
 }
 
 // interface for getting service wide information

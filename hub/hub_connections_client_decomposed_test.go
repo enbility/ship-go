@@ -90,11 +90,14 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ValidateConnectionLimit() {
 			s.hub.maxConnections = tt.maxConnections
 
 			// Add dummy connections to reach the current count
-			s.hub.connections = make(map[string]api.ShipConnectionInterface)
+			s.hub.registry.mu.Lock()
+			s.hub.registry.connections = make(map[string]api.ShipConnectionInterface)
 			for i := 0; i < tt.currentConnections; i++ {
 				mockConn := mocks.NewShipConnectionInterface(s.T())
-				s.hub.connections[fmt.Sprintf("ski-%d", i)] = mockConn
+				mockConn.EXPECT().IsAlive().Return(true).Maybe()
+				s.hub.registry.connections[fmt.Sprintf("ski-%d", i)] = mockConn
 			}
+			s.hub.registry.mu.Unlock()
 
 			err := s.hub.validateConnectionLimit()
 

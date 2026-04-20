@@ -29,8 +29,8 @@ type CertificateValidationResult struct {
 // validateConnectionLimit checks if a new connection can be established
 // This is a pure function that's easy to test
 func (h *Hub) validateConnectionLimit() error {
+	currentConnections := h.registry.Len()
 	h.muxCon.RLock()
-	currentConnections := len(h.connections)
 	maxConnections := h.maxConnections
 	h.muxCon.RUnlock()
 
@@ -116,24 +116,24 @@ func (h *Hub) establishWebSocketConnection(host, port, path string) (*websocket.
 	return conn, nil
 }
 
-// createShipConnection creates and initializes a SHIP connection
-// This is a focused function that handles SHIP connection setup
-func (h *Hub) createShipConnection(conn *websocket.Conn, remoteService *api.ServiceDetails) {
-	// Set read limit to prevent DoS attacks
-	conn.SetReadLimit(ws.MaxMessageSize)
-
-	dataHandler := ws.NewWebsocketConnection(conn, remoteService.SKI())
-	shipConnection := ship.NewConnectionHandler(h, dataHandler, ship.ShipRoleClient,
-		h.localService.ShipID(), remoteService.SKI(), remoteService.ShipID())
-	shipConnection.Run()
-
-	h.registerConnection(shipConnection)
-}
-
-// connectFoundService establishes a connection to another EEBUS service
+// connectFoundService establishes a connection to another EEBUS service.
 //
-// returns error contains a reason for failing the connection or nil if no further tries should be processed
+// Returns error contains a reason for failing the connection or nil if no
+// further tries should be processed.
+//
+// Atomic registration: the §12.2.2 double-connection rule + the actual
+// registration both happen under the connection registry's lock via Swap.
+// This eliminates the TOCTOU window the previous keepThisConnection +
+// registerConnection split had (Bug 2).
 func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port, path string) error {
+	// Hub is shutting down — abort before any I/O. We check ctx and join the
+	// in-flight WaitGroup before any work that could outlive Shutdown's drain.
+	if h.ctx.Err() != nil {
+		return errors.New("hub is shutting down")
+	}
+	h.inflightWg.Add(1)
+	defer h.inflightWg.Done()
+
 	if h.isSkiConnected(remoteService.SKI()) {
 		return nil
 	}
@@ -161,14 +161,28 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 		return errors.New(errorString)
 	}
 
-	// Check for double connections
-	if !h.keepThisConnection(conn, false, remoteService) {
-		errorString := fmt.Sprintf("closing connection to %s: ignoring this connection", remoteService.SKI())
-		return errors.New(errorString)
+	// Atomically resolve any double connection and register the new one if it
+	// wins the §12.2.2 rule. Builder runs under the registry lock IFF we win.
+	res := h.registry.Swap(remoteService.SKI(), false, func() api.ShipConnectionInterface {
+		conn.SetReadLimit(ws.MaxMessageSize)
+		dataHandler := ws.NewWebsocketConnection(conn, remoteService.SKI())
+		return ship.NewConnectionHandler(h, dataHandler, ship.ShipRoleClient,
+			h.localService.ShipID(), remoteService.SKI(), remoteService.ShipID())
+	})
+
+	if !res.Kept {
+		// Rejected by §12.2.2 rule. Single-owner close of the dialed websocket.
+		h.sendWSCloseMessage(conn)
+		return fmt.Errorf("closing connection to %s: ignoring this connection", remoteService.SKI())
 	}
 
-	// Create and setup SHIP connection
-	h.createShipConnection(conn, remoteService)
+	// Evict the old connection (caller-owned cleanup, off the critical path).
+	if res.OldConn != nil {
+		go res.OldConn.CloseConnection(false, 0, "")
+	}
+
+	// Start the freshly-registered connection's read/handshake loop.
+	res.NewConn.Run()
 
 	return nil
 }

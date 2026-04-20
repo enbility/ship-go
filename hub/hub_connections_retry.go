@@ -32,6 +32,22 @@ func (h *Hub) coordinateConnectionInitations(ski string, entry *api.MdnsEntry) {
 // prepareConnectionInitation is invoked by coordinateConnectionInitations either with a delay or directly
 // when initiating a pairing process
 func (h *Hub) prepareConnectionInitation(ski string, counter int, entry *api.MdnsEntry) {
+	// Hub is shutting down — do nothing. The timer fired between Shutdown's
+	// cancel and the timer's Stop, so we must not touch any hub state.
+	if h.ctx.Err() != nil {
+		return
+	}
+
+	// Self-remove our timer entry from connectionDelayTimers. Without this, fired
+	// timers leak entries forever (only Stop deletes), causing slow map growth.
+	h.cancelConnectionDelayTimer(ski)
+
+	// The running flag was set in coordinateConnectionInitations before scheduling
+	// this callback. Clear it on every exit path so a future mDNS event for the
+	// same SKI can schedule a new attempt; without this defer, the early returns
+	// below would leak the flag and silently block reconnects.
+	defer h.setConnectionAttemptRunning(ski, false)
+
 	// check if the current counter is still the same, otherwise this counter is irrelevant
 	currentCounter, exists := h.getCurrentConnectionAttemptCounter(ski)
 	if !exists || currentCounter != counter {

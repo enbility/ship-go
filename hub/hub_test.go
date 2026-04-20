@@ -59,6 +59,7 @@ func (s *HubSuite) BeforeTest(suiteName, testName string) {
 	s.shipConnection = mocks.NewShipConnectionInterface(s.T())
 	s.shipConnection.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 	s.shipConnection.EXPECT().RemoteSKI().Return(s.remoteSki).Maybe()
+	s.shipConnection.EXPECT().IsAlive().Return(true).Maybe()
 	s.shipConnection.EXPECT().ApprovePendingHandshake().Return().Maybe()
 	s.shipConnection.EXPECT().AbortPendingHandshake().Return().Maybe()
 	s.shipConnection.EXPECT().DataHandler().Return(s.wsDataWriter).Maybe()
@@ -173,12 +174,12 @@ func (s *HubSuite) Test_Mdns() {
 	s.sut.checkAutoReannounce()
 
 	pairedServices := s.sut.numberPairedServices()
-	assert.Equal(s.T(), 0, len(s.sut.connections))
+	assert.Equal(s.T(), 0, s.sut.registry.Len())
 	assert.Equal(s.T(), 0, pairedServices)
 
 	s.sut.RegisterRemoteSKI(s.remoteSki, "")
 	pairedServices = s.sut.numberPairedServices()
-	assert.Equal(s.T(), 0, len(s.sut.connections))
+	assert.Equal(s.T(), 0, s.sut.registry.Len())
 	assert.Equal(s.T(), 1, pairedServices)
 }
 
@@ -206,7 +207,9 @@ func (s *HubSuite) Test_Ship() {
 	detail := s.sut.PairingDetailForSki(s.remoteSki)
 	assert.NotNil(s.T(), detail)
 
-	s.sut.registerConnection(s.shipConnection)
+	s.sut.registry.mu.Lock()
+	s.sut.registry.connections[s.remoteSki] = s.shipConnection
+	s.sut.registry.mu.Unlock()
 
 	detail = s.sut.PairingDetailForSki(s.remoteSki)
 	assert.NotNil(s.T(), detail)

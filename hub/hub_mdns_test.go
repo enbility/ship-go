@@ -15,7 +15,7 @@ import (
 func TestReportMdnsEntries_CleanupRemovedEntries(t *testing.T) {
 	mockMdns := mocks.NewMdnsInterface(t)
 	hub := &Hub{
-		connections:              make(map[string]api.ShipConnectionInterface),
+		registry:                 newConnectionRegistry(""),
 		remoteServices:           make(map[string]*api.ServiceDetails, 0),
 		connectionAttemptCounter: make(map[string]int),
 		connectionAttemptRunning: make(map[string]bool),
@@ -84,7 +84,7 @@ func TestReportMdnsEntries_CleanupRemovedEntries(t *testing.T) {
 func TestReportMdnsEntries_CleanupWithNewEntries(t *testing.T) {
 	mockMdns := mocks.NewMdnsInterface(t)
 	hub := &Hub{
-		connections:              make(map[string]api.ShipConnectionInterface),
+		registry:                 newConnectionRegistry(""),
 		remoteServices:           make(map[string]*api.ServiceDetails, 0),
 		connectionAttemptCounter: make(map[string]int),
 		connectionAttemptRunning: make(map[string]bool),
@@ -130,7 +130,7 @@ func TestReportMdnsEntries_CleanupWithNewEntries(t *testing.T) {
 func TestReportMdnsEntries_CleanupWithNoPreviousEntries(t *testing.T) {
 	mockMdns := mocks.NewMdnsInterface(t)
 	hub := &Hub{
-		connections:              make(map[string]api.ShipConnectionInterface),
+		registry:                 newConnectionRegistry(""),
 		remoteServices:           make(map[string]*api.ServiceDetails, 0),
 		connectionAttemptCounter: make(map[string]int),
 		connectionAttemptRunning: make(map[string]bool),

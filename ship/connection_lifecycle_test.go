@@ -23,6 +23,14 @@ func (s *ConnectionLifecycleSuite) TestRun() {
 	assert.Equal(s.T(), model.CmiStateServerWait, state)
 }
 
+// TestIsAlive verifies the IsAlive() invariant used by the hub connection
+// registry: true initially, flips to false once CloseConnection has fired.
+func (s *ConnectionLifecycleSuite) TestIsAlive() {
+	assert.True(s.T(), s.sut.IsAlive(), "fresh connection must be alive")
+	s.sut.CloseConnection(false, 0, "test")
+	assert.False(s.T(), s.sut.IsAlive(), "IsAlive must return false after CloseConnection")
+}
+
 func (s *ConnectionLifecycleSuite) TestShipHandshakeState() {
 	state, err := s.sut.ShipHandshakeState()
 	assert.Nil(s.T(), err)

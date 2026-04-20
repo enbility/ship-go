@@ -188,59 +188,71 @@ func TestPrepareConnectionInitiationCounterMismatch(t *testing.T) {
 	// The key is that the function returns early due to counter mismatch
 }
 
-// TestDoubleConnectionPreventionEdgeCases tests specific scenarios in
-// keepThisConnection logic
+// TestDoubleConnectionPreventionEdgeCases tests the §12.2.2 double-connection rule.
+// Post-Phase-3: keepThisConnection has been replaced by registry.Swap; the same
+// rule (initiator with higher SKI wins) is now exercised through the registry's
+// atomic decide-and-register path.
 func TestDoubleConnectionPreventionEdgeCases(t *testing.T) {
-	// Test case 1: Local SKI > Remote SKI, outgoing connection
+	// Test case 1: Local SKI > Remote SKI, outgoing connection -> keep
 	{
 		hub := setupTestHubForTimer(t)
 		hub.localService = api.NewServiceDetails("zzz-local-ski") // Higher than remote
+		hub.registry = newConnectionRegistry(hub.localService.SKI())
 		hub.Start()
 		defer hub.Shutdown()
 
 		remoteSKI := "aaa-remote-ski"
-		remoteService := api.NewServiceDetails(remoteSKI)
+		newConn := mocks.NewShipConnectionInterface(t)
+		newConn.EXPECT().IsAlive().Return(true).Maybe()
+		// Shutdown will close any registered connections.
+		newConn.EXPECT().CloseConnection(mock.AnythingOfType("bool"), mock.AnythingOfType("int"), mock.AnythingOfType("string")).Maybe()
 
-		// For outgoing connection, we should keep it (local > remote)
-		shouldKeep := hub.keepThisConnection(nil, false, remoteService)
-		assert.True(t, shouldKeep, "should keep outgoing connection when local SKI > remote SKI")
+		res := hub.registry.Swap(remoteSKI, false, func() api.ShipConnectionInterface { return newConn })
+		assert.True(t, res.Kept, "should keep outgoing connection when local SKI > remote SKI")
 	}
 
-	// Test case 2: Local SKI < Remote SKI, incoming connection
+	// Test case 2: Local SKI < Remote SKI, incoming connection -> keep
 	{
 		hub := setupTestHubForTimer(t)
 		hub.localService = api.NewServiceDetails("aaa-local-ski") // Lower than remote
+		hub.registry = newConnectionRegistry(hub.localService.SKI())
 		hub.Start()
 		defer hub.Shutdown()
 
-		remoteService := api.NewServiceDetails("zzz-remote-ski")
+		remoteSKI := api.NewServiceDetails("zzz-remote-ski").SKI()
+		newConn := mocks.NewShipConnectionInterface(t)
+		newConn.EXPECT().IsAlive().Return(true).Maybe()
+		newConn.EXPECT().CloseConnection(mock.AnythingOfType("bool"), mock.AnythingOfType("int"), mock.AnythingOfType("string")).Maybe()
 
-		// For incoming connection, we should keep it (remote > local)
-		shouldKeep := hub.keepThisConnection(nil, true, remoteService)
-		assert.True(t, shouldKeep, "should keep incoming connection when remote SKI > local SKI")
+		res := hub.registry.Swap(remoteSKI, true, func() api.ShipConnectionInterface { return newConn })
+		assert.True(t, res.Kept, "should keep incoming connection when remote SKI > local SKI")
 	}
 
-	// Test case 3: Existing connection scenario
+	// Test case 3: Existing connection, new outgoing wins (local > remote) -> keep + evict old
 	{
 		hub := setupTestHubForTimer(t)
 		hub.localService = api.NewServiceDetails("zzz-high-ski") // Higher than existing
+		hub.registry = newConnectionRegistry(hub.localService.SKI())
 		hub.Start()
 		defer hub.Shutdown()
 
-		existingSKI := "existing-ski"
+		existingSKI := api.NewServiceDetails("existing-ski").SKI()
 		existingConn := mocks.NewShipConnectionInterface(t)
 		existingConn.EXPECT().RemoteSKI().Return(existingSKI).Maybe()
+		existingConn.EXPECT().IsAlive().Return(true).Maybe()
 		existingConn.EXPECT().CloseConnection(mock.AnythingOfType("bool"), mock.AnythingOfType("int"), mock.AnythingOfType("string")).Maybe()
 
-		hub.muxCon.Lock()
-		hub.connections[existingSKI] = existingConn
-		hub.muxCon.Unlock()
+		hub.registry.mu.Lock()
+		hub.registry.connections[existingSKI] = existingConn
+		hub.registry.mu.Unlock()
 
-		existingService := api.NewServiceDetails(existingSKI)
+		newConn := mocks.NewShipConnectionInterface(t)
+		newConn.EXPECT().IsAlive().Return(true).Maybe()
+		newConn.EXPECT().CloseConnection(mock.AnythingOfType("bool"), mock.AnythingOfType("int"), mock.AnythingOfType("string")).Maybe()
 
-		// New outgoing connection should be kept
-		shouldKeep := hub.keepThisConnection(nil, false, existingService)
-		assert.True(t, shouldKeep, "should keep new connection when conditions favor it")
+		res := hub.registry.Swap(existingSKI, false, func() api.ShipConnectionInterface { return newConn })
+		assert.True(t, res.Kept, "should keep new connection when local SKI > remote SKI")
+		assert.Equal(t, existingConn, res.OldConn, "old connection must be returned for caller-owned cleanup")
 	}
 }
 

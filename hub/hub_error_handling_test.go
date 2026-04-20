@@ -109,9 +109,11 @@ func TestHub_Shutdown_GracefulWithTimeout(t *testing.T) {
 	// Add mock connections
 	normalConn := mocks.NewShipConnectionInterface(t)
 	normalConn.EXPECT().RemoteSKI().Return("normal-ski").Maybe()
-	
+	normalConn.EXPECT().IsAlive().Return(true).Maybe()
+
 	slowConn := mocks.NewShipConnectionInterface(t)
 	slowConn.EXPECT().RemoteSKI().Return("slow-ski").Maybe()
+	slowConn.EXPECT().IsAlive().Return(true).Maybe()
 
 	// Track close calls
 	var normalClosed, slowClosed bool
@@ -132,8 +134,10 @@ func TestHub_Shutdown_GracefulWithTimeout(t *testing.T) {
 		closeMux.Unlock()
 	}).Once()
 
-	hub.connections["normal-ski"] = normalConn
-	hub.connections["slow-ski"] = slowConn
+	hub.registry.mu.Lock()
+	hub.registry.connections["normal-ski"] = normalConn
+	hub.registry.connections["slow-ski"] = slowConn
+	hub.registry.mu.Unlock()
 
 	start := time.Now()
 	hub.Shutdown()
@@ -167,7 +171,8 @@ func TestHub_Shutdown_TimeoutStuckConnections(t *testing.T) {
 	// Add a stuck connection
 	stuckConn := mocks.NewShipConnectionInterface(t)
 	stuckConn.EXPECT().RemoteSKI().Return("stuck-ski").Maybe()
-	
+	stuckConn.EXPECT().IsAlive().Return(true).Maybe()
+
 	// This connection never completes closing
 	closeStarted := make(chan bool, 1)
 	stuckConn.EXPECT().CloseConnection(false, 0, mock.Anything).Run(func(safe bool, code int, reason string) {
@@ -176,7 +181,9 @@ func TestHub_Shutdown_TimeoutStuckConnections(t *testing.T) {
 		select {}
 	}).Once()
 
-	hub.connections["stuck-ski"] = stuckConn
+	hub.registry.mu.Lock()
+	hub.registry.connections["stuck-ski"] = stuckConn
+	hub.registry.mu.Unlock()
 
 	start := time.Now()
 	

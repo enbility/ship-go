@@ -311,12 +311,13 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_SkiAlreadyC
 
 	// Create a mock connection that satisfies the interface
 	mockConnection := &mocks.ShipConnectionInterface{}
+	mockConnection.EXPECT().IsAlive().Return(true).Maybe()
 
 	// Add the connection to the hub's connections map using the normalized SKI
-	s.hub.muxCon.Lock()
-	s.hub.connections[normalizedSKI] = mockConnection
-	connectionCountBefore := len(s.hub.connections)
-	s.hub.muxCon.Unlock()
+	s.hub.registry.mu.Lock()
+	s.hub.registry.connections[normalizedSKI] = mockConnection
+	connectionCountBefore := len(s.hub.registry.connections)
+	s.hub.registry.mu.Unlock()
 
 	// Verify that isSkiConnected returns true before calling connectFoundService
 	assert.True(s.T(), s.hub.isSkiConnected(normalizedSKI), "SKI should be connected before test")
@@ -329,10 +330,10 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_SkiAlreadyC
 	assert.NoError(s.T(), err, "connectFoundService should return nil when SKI is already connected")
 
 	// Verify that the connection count is unchanged (no new connections added)
-	s.hub.muxCon.RLock()
-	connectionCountAfter := len(s.hub.connections)
-	existingConnection := s.hub.connections[normalizedSKI]
-	s.hub.muxCon.RUnlock()
+	s.hub.registry.mu.RLock()
+	connectionCountAfter := len(s.hub.registry.connections)
+	existingConnection := s.hub.registry.connections[normalizedSKI]
+	s.hub.registry.mu.RUnlock()
 
 	assert.Equal(s.T(), connectionCountBefore, connectionCountAfter, "Connection count should be unchanged")
 	assert.Equal(s.T(), mockConnection, existingConnection, "Existing connection should be unchanged")
@@ -474,9 +475,9 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_Certificate
 	s.hub.muxReg.Unlock()
 
 	// Track connections before the test
-	s.hub.muxCon.RLock()
-	connectionsBefore := len(s.hub.connections)
-	s.hub.muxCon.RUnlock()
+	s.hub.registry.mu.RLock()
+	connectionsBefore := len(s.hub.registry.connections)
+	s.hub.registry.mu.RUnlock()
 
 	// Call connectFoundService - it should fail with certificate validation error
 	err = s.hub.connectFoundService(service, host, portStr, "/")
@@ -487,9 +488,9 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_Certificate
 	assert.Contains(s.T(), err.Error(), "invalid SKI", "Error should mention invalid SKI")
 
 	// Verify that no connection was added to the hub
-	s.hub.muxCon.RLock()
-	connectionsAfter := len(s.hub.connections)
-	s.hub.muxCon.RUnlock()
+	s.hub.registry.mu.RLock()
+	connectionsAfter := len(s.hub.registry.connections)
+	s.hub.registry.mu.RUnlock()
 	assert.Equal(s.T(), connectionsBefore, connectionsAfter, "No new connections should be added on certificate validation failure")
 
 	// Verify that the SKI is not considered connected
@@ -889,170 +890,135 @@ func (s *HubConnectionsClientCoverageSuite) createDirectTestCertificate(expiryTi
 	return certificate
 }
 
-// Test_KeepThisConnection_DirectTest tests the keepThisConnection function directly
-// to ensure proper coverage of the double connection prevention logic
+// Test_KeepThisConnection_DirectTest tests the §12.2.2 double-connection rule.
+// Post-Phase-3: keepThisConnection has been replaced by registry.Swap; the rule
+// (initiator with the higher SKI wins) is now exercised via Swap's atomic
+// decide-and-register path. Each subtest builds a fresh registry with the
+// local SKI it needs because the rule is captured at construction.
 func (s *HubConnectionsClientCoverageSuite) Test_KeepThisConnection_DirectTest() {
-	// Test case 1: No existing connection - should return true
+	// Test case 1: No existing connection - Swap always succeeds.
 	s.Run("no_existing_connection", func() {
-		remoteService := api.NewServiceDetails("test-remote-ski")
-		result := s.hub.keepThisConnection(nil, false, remoteService)
-		assert.True(s.T(), result, "Should keep connection when no existing connection")
+		s.hub.localService = api.NewServiceDetails("test-local-ski")
+		s.hub.registry = newConnectionRegistry(s.hub.localService.SKI())
+
+		remoteSKI := api.NewServiceDetails("test-remote-ski").SKI()
+		newConn := mocks.NewShipConnectionInterface(s.T())
+		newConn.EXPECT().IsAlive().Return(true).Maybe()
+
+		res := s.hub.registry.Swap(remoteSKI, false, func() api.ShipConnectionInterface { return newConn })
+		assert.True(s.T(), res.Kept, "Should keep connection when no existing connection")
 	})
 
-	// Test case 2: Existing connection, outgoing request, local SKI > remote SKI - should return true and close existing
+	// Test case 2: Existing connection, outgoing, local SKI > remote SKI -> kept, old returned for cleanup.
 	s.Run("outgoing_local_higher_ski", func() {
-		// Clean up connections first
-		s.hub.muxCon.Lock()
-		s.hub.connections = make(map[string]api.ShipConnectionInterface)
-		s.hub.muxCon.Unlock()
-
-		// Set up local service with higher SKI
 		s.hub.localService = api.NewServiceDetails("zzz-high-local-ski")
+		s.hub.registry = newConnectionRegistry(s.hub.localService.SKI())
 
-		remoteSKI := "aaa-low-remote-ski"
-		remoteService := api.NewServiceDetails(remoteSKI)
-		normalizedRemoteSKI := remoteService.SKI() // Get the normalized SKI
+		normalizedRemoteSKI := api.NewServiceDetails("aaa-low-remote-ski").SKI()
 
-		// Create and register existing connection
 		mockExistingConnection := &mocks.ShipConnectionInterface{}
-		mockExistingConnection.EXPECT().CloseConnection(false, 0, "").Once()
+		mockExistingConnection.EXPECT().IsAlive().Return(true).Maybe()
 
-		s.hub.muxCon.Lock()
-		s.hub.connections[normalizedRemoteSKI] = mockExistingConnection // Use normalized SKI
-		s.hub.muxCon.Unlock()
+		s.hub.registry.mu.Lock()
+		s.hub.registry.connections[normalizedRemoteSKI] = mockExistingConnection
+		s.hub.registry.mu.Unlock()
 
-		// Call keepThisConnection
-		// For outgoing: keep = localSKI > remoteSKI
-		// Here: "zzz-high-local-ski" > "aaa-low-remote-ski" = true
-		s.T().Logf("Local SKI: %s, Remote SKI: %s", s.hub.localService.SKI(), remoteService.SKI())
-		result := s.hub.keepThisConnection(nil, false, remoteService)
+		newConn := mocks.NewShipConnectionInterface(s.T())
+		newConn.EXPECT().IsAlive().Return(true).Maybe()
 
-		// Should return true and remove the existing connection
-		assert.True(s.T(), result, "Should keep new connection when local SKI > remote SKI")
+		res := s.hub.registry.Swap(normalizedRemoteSKI, false, func() api.ShipConnectionInterface { return newConn })
 
-		// Verify existing connection was removed
-		s.hub.muxCon.RLock()
-		_, exists := s.hub.connections[normalizedRemoteSKI]
-		s.hub.muxCon.RUnlock()
-		assert.False(s.T(), exists, "Existing connection should be removed")
+		assert.True(s.T(), res.Kept, "Should keep new connection when local SKI > remote SKI")
+		assert.Equal(s.T(), mockExistingConnection, res.OldConn, "Old connection must be returned for caller-owned cleanup")
 
-		// Wait a moment for the close goroutine to execute
-		time.Sleep(10 * time.Millisecond)
+		// New connection is now in the slot.
+		s.hub.registry.mu.RLock()
+		conn := s.hub.registry.connections[normalizedRemoteSKI]
+		s.hub.registry.mu.RUnlock()
+		assert.Equal(s.T(), newConn, conn, "New connection should occupy the slot")
 	})
 
-	// Test case 3: Existing connection, outgoing request, local SKI < remote SKI - should return false
+	// Test case 3: Existing connection, outgoing, local SKI < remote SKI -> rejected.
 	s.Run("outgoing_local_lower_ski_returns_false", func() {
-		// Clean up connections first
-		s.hub.muxCon.Lock()
-		s.hub.connections = make(map[string]api.ShipConnectionInterface)
-		s.hub.muxCon.Unlock()
-
-		// Set up local service with lower SKI
 		s.hub.localService = api.NewServiceDetails("aaa-low-local-ski")
+		s.hub.registry = newConnectionRegistry(s.hub.localService.SKI())
 
-		remoteSKI := "zzz-high-remote-ski"
-		remoteService := api.NewServiceDetails(remoteSKI)
-		normalizedRemoteSKI := remoteService.SKI() // Get the normalized SKI
+		normalizedRemoteSKI := api.NewServiceDetails("zzz-high-remote-ski").SKI()
 
-		// Create and register existing connection
 		mockExistingConnection := &mocks.ShipConnectionInterface{}
+		mockExistingConnection.EXPECT().IsAlive().Return(true).Maybe()
 
-		s.hub.muxCon.Lock()
-		s.hub.connections[normalizedRemoteSKI] = mockExistingConnection // Use normalized SKI
-		connectionCountBefore := len(s.hub.connections)
-		s.hub.muxCon.Unlock()
+		s.hub.registry.mu.Lock()
+		s.hub.registry.connections[normalizedRemoteSKI] = mockExistingConnection
+		connectionCountBefore := len(s.hub.registry.connections)
+		s.hub.registry.mu.Unlock()
 
-		// Call keepThisConnection - this should return false
-		// For outgoing: keep = localSKI > remoteSKI
-		// Here: "aaa-low-local-ski" > "zzz-high-remote-ski" = false
-		result := s.hub.keepThisConnection(nil, false, remoteService)
+		newConn := mocks.NewShipConnectionInterface(s.T())
+		newConn.EXPECT().IsAlive().Return(true).Maybe()
 
-		// Should return false (don't keep the new connection)
-		assert.False(s.T(), result, "Should NOT keep new connection when local SKI < remote SKI for outgoing connection")
+		res := s.hub.registry.Swap(normalizedRemoteSKI, false, func() api.ShipConnectionInterface { return newConn })
 
-		// Verify existing connection is still there
-		s.hub.muxCon.RLock()
-		connectionCountAfter := len(s.hub.connections)
-		existingConnection := s.hub.connections[normalizedRemoteSKI]
-		s.hub.muxCon.RUnlock()
+		assert.False(s.T(), res.Kept, "Should NOT keep new connection when local SKI < remote SKI for outgoing connection")
+		assert.Nil(s.T(), res.OldConn, "Rejected new connection should not surface OldConn")
+
+		s.hub.registry.mu.RLock()
+		connectionCountAfter := len(s.hub.registry.connections)
+		existingConnection := s.hub.registry.connections[normalizedRemoteSKI]
+		s.hub.registry.mu.RUnlock()
 
 		assert.Equal(s.T(), connectionCountBefore, connectionCountAfter, "Connection count should remain the same")
 		assert.Equal(s.T(), mockExistingConnection, existingConnection, "Existing connection should remain unchanged")
 	})
 
-	// Test case 4: Existing connection, incoming request, remote SKI > local SKI - should return true
+	// Test case 4: Existing connection, incoming, remote SKI > local SKI -> kept.
 	s.Run("incoming_remote_higher_ski", func() {
-		// Clean up any existing connections first
-		s.hub.muxCon.Lock()
-		s.hub.connections = make(map[string]api.ShipConnectionInterface)
-		s.hub.muxCon.Unlock()
-
-		// Set up local service with lower SKI
 		s.hub.localService = api.NewServiceDetails("aaa-low-local-ski")
+		s.hub.registry = newConnectionRegistry(s.hub.localService.SKI())
 
-		remoteSKI := "zzz-high-remote-ski"
-		remoteService := api.NewServiceDetails(remoteSKI)
-		normalizedRemoteSKI := remoteService.SKI() // Get the normalized SKI
+		normalizedRemoteSKI := api.NewServiceDetails("zzz-high-remote-ski").SKI()
 
-		// Create and register existing connection
 		mockExistingConnection := &mocks.ShipConnectionInterface{}
-		mockExistingConnection.EXPECT().CloseConnection(false, 0, "").Once()
+		mockExistingConnection.EXPECT().IsAlive().Return(true).Maybe()
 
-		s.hub.muxCon.Lock()
-		s.hub.connections[normalizedRemoteSKI] = mockExistingConnection // Use normalized SKI
-		s.hub.muxCon.Unlock()
+		s.hub.registry.mu.Lock()
+		s.hub.registry.connections[normalizedRemoteSKI] = mockExistingConnection
+		s.hub.registry.mu.Unlock()
 
-		// Call keepThisConnection for incoming request
-		result := s.hub.keepThisConnection(nil, true, remoteService)
+		newConn := mocks.NewShipConnectionInterface(s.T())
+		newConn.EXPECT().IsAlive().Return(true).Maybe()
 
-		// Should return true (keep the new incoming connection)
-		assert.True(s.T(), result, "Should keep incoming connection when remote SKI > local SKI")
+		res := s.hub.registry.Swap(normalizedRemoteSKI, true, func() api.ShipConnectionInterface { return newConn })
 
-		// Verify existing connection was removed
-		s.hub.muxCon.RLock()
-		_, exists := s.hub.connections[normalizedRemoteSKI]
-		s.hub.muxCon.RUnlock()
-		assert.False(s.T(), exists, "Existing connection should be removed")
-
-		// Wait a moment for the close goroutine to execute
-		time.Sleep(10 * time.Millisecond)
+		assert.True(s.T(), res.Kept, "Should keep incoming connection when remote SKI > local SKI")
+		assert.Equal(s.T(), mockExistingConnection, res.OldConn, "Old connection must be returned for caller-owned cleanup")
 	})
 
-	// Test case 5: Existing connection, incoming request, remote SKI < local SKI - should return false
+	// Test case 5: Existing connection, incoming, remote SKI < local SKI -> rejected.
 	s.Run("incoming_remote_lower_ski_returns_false", func() {
-		// Clean up any existing connections first
-		s.hub.muxCon.Lock()
-		s.hub.connections = make(map[string]api.ShipConnectionInterface)
-		s.hub.muxCon.Unlock()
-
-		// Set up local service with higher SKI
 		s.hub.localService = api.NewServiceDetails("zzz-high-local-ski")
+		s.hub.registry = newConnectionRegistry(s.hub.localService.SKI())
 
-		remoteSKI := "aaa-low-remote-ski"
-		remoteService := api.NewServiceDetails(remoteSKI)
-		normalizedRemoteSKI := remoteService.SKI() // Get the normalized SKI
+		normalizedRemoteSKI := api.NewServiceDetails("aaa-low-remote-ski").SKI()
 
-		// Create and register existing connection
 		mockExistingConnection := &mocks.ShipConnectionInterface{}
+		mockExistingConnection.EXPECT().IsAlive().Return(true).Maybe()
 
-		s.hub.muxCon.Lock()
-		s.hub.connections[normalizedRemoteSKI] = mockExistingConnection // Use normalized SKI
-		connectionCountBefore := len(s.hub.connections)
-		s.hub.muxCon.Unlock()
+		s.hub.registry.mu.Lock()
+		s.hub.registry.connections[normalizedRemoteSKI] = mockExistingConnection
+		connectionCountBefore := len(s.hub.registry.connections)
+		s.hub.registry.mu.Unlock()
 
-		// Call keepThisConnection for incoming request
-		// For incoming: keep = remoteSKI > localSKI
-		// Here: "aaa-low-remote-ski" > "zzz-high-local-ski" = false
-		result := s.hub.keepThisConnection(nil, true, remoteService)
+		newConn := mocks.NewShipConnectionInterface(s.T())
+		newConn.EXPECT().IsAlive().Return(true).Maybe()
 
-		// Should return false (don't keep the new incoming connection)
-		assert.False(s.T(), result, "Should NOT keep incoming connection when remote SKI < local SKI")
+		res := s.hub.registry.Swap(normalizedRemoteSKI, true, func() api.ShipConnectionInterface { return newConn })
 
-		// Verify existing connection is still there
-		s.hub.muxCon.RLock()
-		connectionCountAfter := len(s.hub.connections)
-		existingConnection := s.hub.connections[normalizedRemoteSKI]
-		s.hub.muxCon.RUnlock()
+		assert.False(s.T(), res.Kept, "Should NOT keep incoming connection when remote SKI < local SKI")
+
+		s.hub.registry.mu.RLock()
+		connectionCountAfter := len(s.hub.registry.connections)
+		existingConnection := s.hub.registry.connections[normalizedRemoteSKI]
+		s.hub.registry.mu.RUnlock()
 
 		assert.Equal(s.T(), connectionCountBefore, connectionCountAfter, "Connection count should remain the same")
 		assert.Equal(s.T(), mockExistingConnection, existingConnection, "Existing connection should remain unchanged")
@@ -1120,9 +1086,9 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_SuccessfulC
 	s.hub.muxReg.Unlock()
 
 	// Track initial connection count
-	s.hub.muxCon.RLock()
-	initialConnectionCount := len(s.hub.connections)
-	s.hub.muxCon.RUnlock()
+	s.hub.registry.mu.RLock()
+	initialConnectionCount := len(s.hub.registry.connections)
+	s.hub.registry.mu.RUnlock()
 
 	// Setup reader expectations for successful connection callbacks
 	s.mockReader.EXPECT().ServicePairingDetailUpdate(mock.AnythingOfType("string"), mock.AnythingOfType("*api.ConnectionStateDetail")).Maybe()
@@ -1139,10 +1105,10 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_SuccessfulC
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify that the connection was registered in the hub
-	s.hub.muxCon.RLock()
-	finalConnectionCount := len(s.hub.connections)
-	registeredConnection := s.hub.connections[service.SKI()]
-	s.hub.muxCon.RUnlock()
+	s.hub.registry.mu.RLock()
+	finalConnectionCount := len(s.hub.registry.connections)
+	registeredConnection := s.hub.registry.connections[service.SKI()]
+	s.hub.registry.mu.RUnlock()
 
 	assert.Equal(s.T(), initialConnectionCount+1, finalConnectionCount, "Should have one more connection registered")
 	assert.NotNil(s.T(), registeredConnection, "Connection should be registered under the correct SKI")

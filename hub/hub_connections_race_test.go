@@ -13,7 +13,12 @@ import (
 )
 
 // TestConnectionRegistration_ConcurrentCloseAndReplace tests race conditions
-// in connection registration when a connection is being closed while a new one registers
+// in connection registration when a connection is being closed while a new one registers.
+// Post-Phase-3: registerConnection is replaced by registry.Swap. Note that with
+// setupTestHub's localSKI = "test-ski", the constant testSKI = "test-ski-123" is
+// "greater" lexicographically than the local SKI; for an outgoing call (isIncoming=false)
+// the rule says: keep iff localSKI > remoteSKI -> false. So we use isIncoming=true to
+// keep parity with the original test's intent of "registration succeeds".
 func TestConnectionRegistration_ConcurrentCloseAndReplace(t *testing.T) {
 	hub := setupTestHub(t)
 
@@ -24,16 +29,20 @@ func TestConnectionRegistration_ConcurrentCloseAndReplace(t *testing.T) {
 		// Create two different connections
 		conn1 := mocks.NewShipConnectionInterface(t)
 		conn1.EXPECT().RemoteSKI().Return(testSKI).Maybe()
+		conn1.EXPECT().IsAlive().Return(true).Maybe()
 		conn1.EXPECT().DataHandler().Return(nil).Maybe()
 		conn1.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 
 		conn2 := mocks.NewShipConnectionInterface(t)
 		conn2.EXPECT().RemoteSKI().Return(testSKI).Maybe()
+		conn2.EXPECT().IsAlive().Return(true).Maybe()
 		conn2.EXPECT().DataHandler().Return(nil).Maybe()
 		conn2.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 
-		// Register first connection
-		hub.registerConnection(conn1)
+		// Plant first connection directly (the test bypasses the rule for setup).
+		hub.registry.mu.Lock()
+		hub.registry.connections[testSKI] = conn1
+		hub.registry.mu.Unlock()
 
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -41,22 +50,20 @@ func TestConnectionRegistration_ConcurrentCloseAndReplace(t *testing.T) {
 		// Goroutine 1: Close and unregister the first connection
 		go func() {
 			defer wg.Done()
-			// Simulate HandleConnectionClosed logic
+			// Simulate HandleConnectionClosed logic via the atomic helper.
 			if existingC := hub.connectionForSKI(testSKI); existingC != nil {
-				// Small delay to increase race probability
 				time.Sleep(time.Microsecond)
 				if existingC == conn1 {
-					hub.muxCon.Lock()
-					delete(hub.connections, testSKI)
-					hub.muxCon.Unlock()
+					hub.UnregisterConnectionIfMatch(testSKI, conn1)
 				}
 			}
 		}()
 
-		// Goroutine 2: Register a new connection
+		// Goroutine 2: Register a new connection via the rule path. With
+		// remoteSKI > localSKI and isIncoming=true, the rule keeps it.
 		go func() {
 			defer wg.Done()
-			hub.registerConnection(conn2)
+			hub.registry.Swap(testSKI, true, func() api.ShipConnectionInterface { return conn2 })
 		}()
 
 		wg.Wait()
@@ -69,6 +76,12 @@ func TestConnectionRegistration_ConcurrentCloseAndReplace(t *testing.T) {
 		default:
 			t.Errorf("Final connection should be either nil or conn2, iteration %d", i)
 		}
+
+		// Clean the slot for the next iteration so we don't reuse stale entries
+		// across mock generations (each iteration creates fresh mocks).
+		hub.registry.mu.Lock()
+		delete(hub.registry.connections, testSKI)
+		hub.registry.mu.Unlock()
 	}
 }
 
@@ -111,9 +124,13 @@ func TestUnregisterConnectionIfMatch(t *testing.T) {
 
 			conn := mocks.NewShipConnectionInterface(t)
 			conn.EXPECT().RemoteSKI().Return(testSKI).Maybe()
+			conn.EXPECT().IsAlive().Return(true).Maybe()
 
 			if tt.setupConn {
-				hub.registerConnection(conn)
+				// Plant directly: this is setup, not a rule check.
+				hub.registry.mu.Lock()
+				hub.registry.connections[testSKI] = conn
+				hub.registry.mu.Unlock()
 			}
 
 			// Determine which connection to pass
@@ -158,6 +175,7 @@ func TestConcurrentConnectionOperations(t *testing.T) {
 
 		conn := mocks.NewShipConnectionInterface(t)
 		conn.EXPECT().RemoteSKI().Return(ski).Maybe()
+		conn.EXPECT().IsAlive().Return(true).Maybe()
 		conn.EXPECT().DataHandler().Return(nil).Maybe()
 		conn.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 		connections[i] = conn
@@ -174,10 +192,14 @@ func TestConcurrentConnectionOperations(t *testing.T) {
 			ski := skis[skiIdx]
 			conn := connections[skiIdx]
 
-			// Perform random operation
+			// Perform random operation. We bypass the §12.2.2 rule for
+			// "Register" by planting directly — this test exercises map
+			// concurrency, not the rule.
 			switch idx % 3 {
-			case 0: // Register
-				hub.registerConnection(conn)
+			case 0: // Register (planted directly, bypassing rule)
+				hub.registry.mu.Lock()
+				hub.registry.connections[ski] = conn
+				hub.registry.mu.Unlock()
 			case 1: // Read
 				_ = hub.connectionForSKI(ski)
 			case 2: // Unregister if match

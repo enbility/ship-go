@@ -201,6 +201,50 @@ func (_c *ShipConnectionInterface_DataHandler_Call) RunAndReturn(run func() api.
 	return _c
 }
 
+// IsAlive provides a mock function for the type ShipConnectionInterface
+func (_mock *ShipConnectionInterface) IsAlive() bool {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for IsAlive")
+	}
+
+	var r0 bool
+	if returnFunc, ok := ret.Get(0).(func() bool); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	return r0
+}
+
+// ShipConnectionInterface_IsAlive_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IsAlive'
+type ShipConnectionInterface_IsAlive_Call struct {
+	*mock.Call
+}
+
+// IsAlive is a helper method to define mock.On call
+func (_e *ShipConnectionInterface_Expecter) IsAlive() *ShipConnectionInterface_IsAlive_Call {
+	return &ShipConnectionInterface_IsAlive_Call{Call: _e.mock.On("IsAlive")}
+}
+
+func (_c *ShipConnectionInterface_IsAlive_Call) Run(run func()) *ShipConnectionInterface_IsAlive_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *ShipConnectionInterface_IsAlive_Call) Return(b bool) *ShipConnectionInterface_IsAlive_Call {
+	_c.Call.Return(b)
+	return _c
+}
+
+func (_c *ShipConnectionInterface_IsAlive_Call) RunAndReturn(run func() bool) *ShipConnectionInterface_IsAlive_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // RemoteSKI provides a mock function for the type ShipConnectionInterface
 func (_mock *ShipConnectionInterface) RemoteSKI() string {
 	ret := _mock.Called()
@@ -242,6 +286,39 @@ func (_c *ShipConnectionInterface_RemoteSKI_Call) Return(s string) *ShipConnecti
 
 func (_c *ShipConnectionInterface_RemoteSKI_Call) RunAndReturn(run func() string) *ShipConnectionInterface_RemoteSKI_Call {
 	_c.Call.Return(run)
+	return _c
+}
+
+// Run provides a mock function for the type ShipConnectionInterface
+func (_mock *ShipConnectionInterface) Run() {
+	_mock.Called()
+	return
+}
+
+// ShipConnectionInterface_Run_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Run'
+type ShipConnectionInterface_Run_Call struct {
+	*mock.Call
+}
+
+// Run is a helper method to define mock.On call
+func (_e *ShipConnectionInterface_Expecter) Run() *ShipConnectionInterface_Run_Call {
+	return &ShipConnectionInterface_Run_Call{Call: _e.mock.On("Run")}
+}
+
+func (_c *ShipConnectionInterface_Run_Call) Run(run func()) *ShipConnectionInterface_Run_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *ShipConnectionInterface_Run_Call) Return() *ShipConnectionInterface_Run_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *ShipConnectionInterface_Run_Call) RunAndReturn(run func()) *ShipConnectionInterface_Run_Call {
+	_c.Run(run)
 	return _c
 }
 

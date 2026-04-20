@@ -19,11 +19,13 @@ func TestHubMutexOrderingDeadlock(t *testing.T) {
 	// Create test connections
 	conn1 := mocks.NewShipConnectionInterface(t)
 	conn1.EXPECT().RemoteSKI().Return("ski-1").Maybe()
+	conn1.EXPECT().IsAlive().Return(true).Maybe()
 	conn1.EXPECT().DataHandler().Return(nil).Maybe()
 	conn1.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 
 	conn2 := mocks.NewShipConnectionInterface(t)
 	conn2.EXPECT().RemoteSKI().Return("ski-2").Maybe()
+	conn2.EXPECT().IsAlive().Return(true).Maybe()
 	conn2.EXPECT().DataHandler().Return(nil).Maybe()
 	conn2.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 
@@ -34,10 +36,12 @@ func TestHubMutexOrderingDeadlock(t *testing.T) {
 	for i := 0; i < iterations; i++ {
 		wg.Add(3)
 
-		// Operation 1: Register connection (might need muxCon)
+		// Operation 1: Register connection (planted directly under registry.mu).
 		go func() {
 			defer wg.Done()
-			hub.registerConnection(conn1)
+			hub.registry.mu.Lock()
+			hub.registry.connections["ski-1"] = conn1
+			hub.registry.mu.Unlock()
 		}()
 
 		// Operation 2: Check pairing details (might need muxReg)
@@ -46,7 +50,7 @@ func TestHubMutexOrderingDeadlock(t *testing.T) {
 			_ = hub.ServiceForSKI("ski-1")
 		}()
 
-		// Operation 3: Connection lookup (needs muxCon)
+		// Operation 3: Connection lookup (needs registry.mu)
 		go func() {
 			defer wg.Done()
 			_ = hub.connectionForSKI("ski-1")
@@ -68,7 +72,11 @@ func TestHubMutexOrderingDeadlock(t *testing.T) {
 	}
 }
 
-// TestConnectionRegistrationRace tests the specific race condition in connection registration
+// TestConnectionRegistrationRace tests the specific race condition in connection registration.
+// Post-Phase-3: the racy compare-and-delete pattern is now collapsed into the
+// registry's atomic UnregisterConnectionIfMatch (registry.RemoveIfMatches), and
+// registration goes through registry.mu directly for these tests (which exercise
+// concurrency, not the §12.2.2 rule).
 func TestConnectionRegistrationRace(t *testing.T) {
 	hub := setupTestHub(t)
 
@@ -82,16 +90,20 @@ func TestConnectionRegistrationRace(t *testing.T) {
 		// Create connections for this iteration
 		conn1 := mocks.NewShipConnectionInterface(t)
 		conn1.EXPECT().RemoteSKI().Return(testSKI).Maybe()
+		conn1.EXPECT().IsAlive().Return(true).Maybe()
 		conn1.EXPECT().DataHandler().Return(nil).Maybe()
 		conn1.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 
 		conn2 := mocks.NewShipConnectionInterface(t)
 		conn2.EXPECT().RemoteSKI().Return(testSKI).Maybe()
+		conn2.EXPECT().IsAlive().Return(true).Maybe()
 		conn2.EXPECT().DataHandler().Return(nil).Maybe()
 		conn2.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 
-		// Register first connection
-		hub.registerConnection(conn1)
+		// Plant first connection directly.
+		hub.registry.mu.Lock()
+		hub.registry.connections[testSKI] = conn1
+		hub.registry.mu.Unlock()
 
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -106,21 +118,19 @@ func TestConnectionRegistrationRace(t *testing.T) {
 				// Small delay to increase race probability
 				time.Sleep(time.Microsecond)
 
-				// Traditional approach (racy)
-				hub.muxCon.Lock()
-				// Between getting the connection and deleting, conn2 might register
-				if hub.connections[testSKI] == conn1 {
-					delete(hub.connections, testSKI)
+				// Atomic compare-and-delete via the registry helper.
+				if hub.UnregisterConnectionIfMatch(testSKI, conn1) {
 					atomic.AddInt64(&successfulUnregistrations, 1)
 				}
-				hub.muxCon.Unlock()
 			}
 		}()
 
-		// Goroutine 2: Try to register new connection
+		// Goroutine 2: Try to register new connection (planted directly).
 		go func() {
 			defer wg.Done()
-			hub.registerConnection(conn2)
+			hub.registry.mu.Lock()
+			hub.registry.connections[testSKI] = conn2
+			hub.registry.mu.Unlock()
 			atomic.AddInt64(&successfulRegistrations, 1)
 		}()
 
@@ -164,14 +174,18 @@ func TestAtomicUnregisterIfMatch(t *testing.T) {
 		// Create connections
 		conn1 := mocks.NewShipConnectionInterface(t)
 		conn1.EXPECT().RemoteSKI().Return(testSKI).Maybe()
+		conn1.EXPECT().IsAlive().Return(true).Maybe()
 		conn1.EXPECT().DataHandler().Return(nil).Maybe()
 
 		conn2 := mocks.NewShipConnectionInterface(t)
 		conn2.EXPECT().RemoteSKI().Return(testSKI).Maybe()
+		conn2.EXPECT().IsAlive().Return(true).Maybe()
 		conn2.EXPECT().DataHandler().Return(nil).Maybe()
 
-		// Register first connection
-		hub.registerConnection(conn1)
+		// Plant first connection directly.
+		hub.registry.mu.Lock()
+		hub.registry.connections[testSKI] = conn1
+		hub.registry.mu.Unlock()
 
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -188,10 +202,12 @@ func TestAtomicUnregisterIfMatch(t *testing.T) {
 			}
 		}()
 
-		// Goroutine 2: Try to register new connection
+		// Goroutine 2: Try to register new connection (planted directly).
 		go func() {
 			defer wg.Done()
-			hub.registerConnection(conn2)
+			hub.registry.mu.Lock()
+			hub.registry.connections[testSKI] = conn2
+			hub.registry.mu.Unlock()
 			registerHappened = true
 		}()
 
@@ -238,6 +254,7 @@ func TestHubStressWithAllOperations(t *testing.T) {
 
 		conn := mocks.NewShipConnectionInterface(t)
 		conn.EXPECT().RemoteSKI().Return(ski).Maybe()
+		conn.EXPECT().IsAlive().Return(true).Maybe()
 		conn.EXPECT().DataHandler().Return(nil).Maybe()
 		conn.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
 		connections[i] = conn
@@ -259,7 +276,7 @@ func TestHubStressWithAllOperations(t *testing.T) {
 	// Spawn workers for different operations
 	numWorkers := 5
 
-	// Registration workers
+	// Registration workers (planted directly; this test exercises stress, not the rule)
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func(workerID int) {
@@ -271,7 +288,9 @@ func TestHubStressWithAllOperations(t *testing.T) {
 				default:
 					idx := workerID % numSKIs
 					monitorOperation(func() {
-						hub.registerConnection(connections[idx])
+						hub.registry.mu.Lock()
+						hub.registry.connections[skis[idx]] = connections[idx]
+						hub.registry.mu.Unlock()
 					}, &registrations)
 					time.Sleep(time.Microsecond * 100)
 				}
