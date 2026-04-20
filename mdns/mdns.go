@@ -42,7 +42,7 @@ type ProviderFactory struct {
 func DefaultProviderFactory() *ProviderFactory {
 	return &ProviderFactory{
 		NewAvahi:    func(ifaceIndexes []int32) api.MdnsProviderInterface { return NewAvahiProvider(ifaceIndexes) },
-		NewZeroconf: func(ifaces []net.Interface) api.MdnsProviderInterface { return NewZeroconfProvider(ifaces) },
+		NewZeroconf: func(ifaces []net.Interface) api.MdnsProviderInterface { return NewZeroconfProvider(ifaces, nil, nil) },
 	}
 }
 

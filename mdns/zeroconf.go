@@ -8,11 +8,14 @@ import (
 
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/logging"
-	"github.com/enbility/zeroconf/v2"
+	"github.com/enbility/zeroconf/v3"
+	zapi "github.com/enbility/zeroconf/v3/api"
 )
 
 type ZeroconfProvider struct {
-	ifaces []net.Interface
+	ifaces            []net.Interface
+	connFactory       zapi.ConnectionFactory
+	interfaceProvider zapi.InterfaceProvider
 
 	zc *zeroconf.Server
 
@@ -25,9 +28,24 @@ type ZeroconfProvider struct {
 	mux sync.Mutex
 }
 
-func NewZeroconfProvider(ifaces []net.Interface) *ZeroconfProvider {
+// The connection factory and interface provider can be replaced with mocks for testing
+//
+// For normal operation no special connection factory or interface provider need to be passed (simply pass nil)
+func NewZeroconfProvider(ifaces []net.Interface, connFactory *zapi.ConnectionFactory, interfaceProvider *zapi.InterfaceProvider) *ZeroconfProvider {
+	zConnFactory := zeroconf.NewConnectionFactory()
+	if connFactory != nil {
+		zConnFactory = *connFactory
+	}
+
+	zInterfaceProvider := zeroconf.NewInterfaceProvider()
+	if interfaceProvider != nil {
+		zInterfaceProvider = *interfaceProvider
+	}
+	
 	return &ZeroconfProvider{
 		ifaces: ifaces,
+		connFactory: zConnFactory,
+		interfaceProvider: zInterfaceProvider,
 	}
 }
 
@@ -92,11 +110,13 @@ func (z *ZeroconfProvider) Shutdown() {
 
 func (z *ZeroconfProvider) Announce(serviceName string, port int, txt []string) error {
 	logging.Log().Debug("mdns: using zeroconf")
-
+	
 	// use Zeroconf library if avahi is not available
 	// Set TTL to 2 minutes as defined in SHIP chapter 7
-	ifaces := z.getIfaces()
-	mDNSServer, err := zeroconf.Register(serviceName, shipZeroConfServiceType, shipZeroConfDomain, port, txt, ifaces, zeroconf.TTL(120))
+	ifaces := z.getIfaces()  
+	opts := []zeroconf.ServerOption{zeroconf.TTL(120), zeroconf.WithServerConnFactory(z.connFactory), zeroconf.WithServerInterfaceProvider(z.interfaceProvider)}
+	mDNSServer, err := zeroconf.Register(serviceName, shipZeroConfServiceType, shipZeroConfDomain, port, txt, ifaces, opts...)
+
 	if err != nil {
 		return err
 	}
@@ -149,10 +169,12 @@ func (z *ZeroconfProvider) chanListener(cb api.MdnsResolveCB) {
 	z.ctx, z.cancel = context.WithCancel(context.Background())
 	z.mux.Unlock()
 
-	// Get a thread-safe copy of interfaces
+  // Get a thread-safe copy of interfaces
 	ifaces := z.getIfaces()
+	opts := []zeroconf.ClientOption{zeroconf.SelectIfaces(ifaces), zeroconf.WithClientConnFactory(z.connFactory), zeroconf.WithClientInterfaceProvider(z.interfaceProvider)}
 	go func() {
-		_ = zeroconf.Browse(z.ctx, shipZeroConfServiceType, shipZeroConfDomain, zcEntries, zcRemoved, zeroconf.SelectIfaces(ifaces))
+		_ = zeroconf.Browse(z.ctx, shipZeroConfServiceType, shipZeroConfDomain, zcEntries, zcRemoved, opts...)
+
 	}()
 
 	for {

@@ -4,10 +4,10 @@ go 1.23.0
 
 require (
 	github.com/enbility/go-avahi v0.0.0-20240909195612-d5de6b280d7a
-	github.com/enbility/zeroconf/v2 v2.0.0-20240920094356-be1cae74fda6
+	github.com/enbility/zeroconf/v3 v3.0.0-20260223114850-96b346b210f2
 	github.com/gorilla/websocket v1.5.3
 	github.com/sasha-s/go-deadlock v0.3.5
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	gitlab.com/c0b/go-ordered-json v0.0.0-20201030195603-febf46534d5a
 	go.uber.org/mock v0.5.2
 )
