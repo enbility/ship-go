@@ -23,6 +23,12 @@ func (c *ShipConnection) handshakeAccessMethods_Init() {
 
 	c.setHandshakeTimer(timeoutTimerTypeWaitForReady, cmiTimeout)
 	c.setState(model.SmeAccessMethodsRequest, nil)
+
+	// EEBus SHIP IG - Transport and Connectivity §2.1 "Immediate readiness": as soon as
+	// "connection data exchange" is reached, we SHALL be fully prepared to process SPINE
+	// messages independently of the state of SME requests - so enable it now rather than
+	// waiting for the remote to answer our own accessMethods request.
+	c.enableDataProcessing()
 }
 
 // detectAccessMethodsMessageType determines the type of access methods message
@@ -98,7 +104,9 @@ func (c *ShipConnection) handshakeAccessMethods_Request(message []byte) {
 			c.endHandshakeWithError(err)
 			return
 		}
-		// Stay in current state waiting for response
+		// Per IG §2.1 "Decoupled SME responses", answering this request must not wait on
+		// anything else. Stay in the current state, waiting for the remote's response to our
+		// own accessMethods request, to complete the handshake.
 		return
 
 	case "methods":
