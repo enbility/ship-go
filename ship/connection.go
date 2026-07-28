@@ -54,11 +54,7 @@ type ShipConnection struct {
 
 	shutdownOnce sync.Once
 
-	// buffer for SPINE messages that came in before the handshake was completed
-	spineBuffer [][]byte
-
-	mux       sync.Mutex
-	bufferMux sync.Mutex
+	mux sync.Mutex
 }
 
 var _ api.ShipConnectionInterface = (*ShipConnection)(nil)

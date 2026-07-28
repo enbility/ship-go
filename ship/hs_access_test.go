@@ -1,6 +1,7 @@
 package ship
 
 import (
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -12,6 +13,22 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 )
+
+// spineDataMessage builds a raw websocket message carrying the given SPINE datagram payload,
+// in the same shape HandleIncomingWebsocketMessage expects (SHIP header byte + ShipData JSON).
+func spineDataMessage(t *testing.T, payload string) []byte {
+	t.Helper()
+
+	modelData := model.ShipData{
+		Data: model.DataType{
+			Payload: json.RawMessage(payload),
+		},
+	}
+	jsonData, err := json.Marshal(modelData)
+	assert.Nil(t, err)
+
+	return append([]byte{model.MsgTypeData}, jsonData...)
+}
 
 func TestAccessSuite(t *testing.T) {
 	suite.Run(t, new(AccessSuite))
@@ -81,6 +98,8 @@ func (s *AccessSuite) AfterTest(suiteName, testName string) {
 }
 
 func (s *AccessSuite) Test_Init() {
+	reader := mocks.NewShipConnectionDataReaderInterface(s.T())
+	s.mockShipInfo.EXPECT().SetupRemoteService(mock.Anything, mock.Anything).Return(reader)
 	s.sut.setState(model.SmePinStateCheckOk, nil)
 	s.sut.handleState(false, nil)
 
@@ -386,6 +405,77 @@ func (s *AccessSuite) Test_HandshakeAccessMethods_Request_MethodsType_Success() 
 
 	// Verify state changed to complete
 	assert.Equal(s.T(), model.SmeStateComplete, s.sut.getState())
+}
+
+// TC_SHIP_AMDATA_001: we must not drop incoming SPINE "data" messages while our own
+// accessMethods request is unanswered. We cannot know when the remote side will answer it, so
+// SPINE processing starts as soon as we send our own accessMethods request (entering the Access
+// Methods phase), not when the remote's response arrives.
+func (s *AccessSuite) Test_TC_SHIP_AMDATA_001_SpineProcessingEnabledWithOwnAccessMethodsRequest() {
+	reader := mocks.NewShipConnectionDataReaderInterface(s.T())
+	reader.EXPECT().HandleShipPayloadMessage(mock.Anything).Return()
+	s.mockShipInfo.EXPECT().SetupRemoteService(mock.Anything, mock.Anything).Return(reader).Once()
+
+	// we enter the Access Methods phase and send our own accessMethods request
+	s.sut.setState(model.SmePinStateCheckOk, nil)
+	s.sut.handleState(false, nil)
+	assert.Equal(s.T(), model.SmeAccessMethodsRequest, s.sut.getState())
+	assert.NotNil(s.T(), s.sut.dataReader)
+
+	// (1) test tool sends a SPINE data message - processed immediately
+	s.sut.HandleIncomingWebsocketMessage(spineDataMessage(s.T(), `{"datagram":{"cmd":"detailed-discovery"}}`))
+	reader.AssertNumberOfCalls(s.T(), "HandleShipPayloadMessage", 1)
+
+	// (2) test tool sends its own accessMethodsRequest - we must answer it
+	requestMsg := append([]byte{model.MsgTypeControl}, []byte(`{"accessMethodsRequest":{}}`)...)
+	s.sut.handleState(false, requestMsg)
+	assert.NotNil(s.T(), s.lastMessage(), "we must send our accessMethods reply")
+	assert.Equal(s.T(), model.SmeAccessMethodsRequest, s.sut.getState())
+
+	// (3) test tool sends a third SPINE data message - still processed immediately, without
+	// waiting for the response to our own outgoing accessMethods request
+	s.sut.HandleIncomingWebsocketMessage(spineDataMessage(s.T(), `{"datagram":{"cmd":"use-case-discovery"}}`))
+	reader.AssertNumberOfCalls(s.T(), "HandleShipPayloadMessage", 2)
+}
+
+// A SPINE "data" message can only legitimately arrive after we've set up the reader: SHIP
+// guarantees in-order delivery per connection, and a compliant remote can only send SPINE data
+// after completing the handshake steps that make us call enableSpineDataProcessing(). This test
+// documents what happens on a protocol violation (data arriving too early): we drop it instead of
+// crashing or silently accumulating it.
+func (s *AccessSuite) Test_SpineDataMessage_DroppedBeforeReaderIsSetUp() {
+	s.sut.HandleIncomingWebsocketMessage(spineDataMessage(s.T(), `{"datagram":{"cmd":"detailed-discovery"}}`))
+	assert.Nil(s.T(), s.sut.dataReader)
+}
+
+// TC_SHIP_AMDATA_002: same burst as TC_SHIP_AMDATA_001, followed by a delayed accessMethods
+// response completing our own outgoing request. The handshake must complete without
+// re-registering the remote service a second time.
+func (s *AccessSuite) Test_TC_SHIP_AMDATA_002_DelayedAccessMethodsResponseCompletesHandshakeOnce() {
+	reader := mocks.NewShipConnectionDataReaderInterface(s.T())
+	reader.EXPECT().HandleShipPayloadMessage(mock.Anything).Return()
+	s.mockShipInfo.EXPECT().SetupRemoteService(mock.Anything, mock.Anything).Return(reader).Once()
+
+	// we enter the Access Methods phase and send our own accessMethods request
+	s.sut.setState(model.SmePinStateCheckOk, nil)
+	s.sut.handleState(false, nil)
+
+	// burst: SPINE data, the test tool's own accessMethodsRequest, more SPINE data - all
+	// processed immediately, without waiting for the response to our own request
+	s.sut.HandleIncomingWebsocketMessage(spineDataMessage(s.T(), `{"datagram":{"cmd":"detailed-discovery"}}`))
+	requestMsg := append([]byte{model.MsgTypeControl}, []byte(`{"accessMethodsRequest":{}}`)...)
+	s.sut.handleState(false, requestMsg)
+	s.sut.HandleIncomingWebsocketMessage(spineDataMessage(s.T(), `{"datagram":{"cmd":"use-case-discovery"}}`))
+
+	reader.AssertNumberOfCalls(s.T(), "HandleShipPayloadMessage", 2)
+	assert.Equal(s.T(), model.SmeAccessMethodsRequest, s.sut.getState())
+
+	// 8s later: the response to our own outgoing accessMethodsRequest finally arrives
+	methodsMsg := append([]byte{model.MsgTypeControl}, []byte(`{"accessMethods":{"id":"RemoteShipID"}}`)...)
+	s.sut.handleState(false, methodsMsg)
+
+	assert.Equal(s.T(), model.SmeStateComplete, s.sut.getState())
+	// SetupRemoteService's .Once() expectation above fails the test if it is called again here
 }
 
 func (s *AccessSuite) Test_HandshakeAccessMethods_Request_UnknownMessageType() {
