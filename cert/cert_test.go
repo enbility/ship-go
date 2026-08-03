@@ -167,6 +167,8 @@ func (c *CertSuite) Test_SkiFromCertificate_NonECDSAKey() {
 }
 
 // Test_SkiFromCertificate_SKIMismatch tests SKI validation errors
+// TC_SHIP_SEC_001: DUT rejects a spoofed certificate whose SKI != SHA-1(public key) (no prior pairing).
+// TC_SHIP_SEC_002: same SKI-mismatch detection applies regardless of the SKI being known from a prior pairing.
 func (c *CertSuite) Test_SkiFromCertificate_SKIMismatch() {
 	// Create a valid ECDSA key
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

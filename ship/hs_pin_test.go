@@ -115,6 +115,7 @@ func (s *PinSuite) Test_CheckListen_Failure() {
 	assert.Equal(s.T(), model.SmeStateError, s.sut.getState())
 }
 
+// TC_SHIP_PIN_001: DUT accepts pin state "none" and advances to the access-methods request.
 func (s *PinSuite) Test_CheckListen_None() {
 	s.sut.setState(model.SmePinStateCheckListen, nil)
 

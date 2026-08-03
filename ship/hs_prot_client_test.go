@@ -99,6 +99,7 @@ func (s *ProClientSuite) Test_Init() {
 	assert.NotNil(s.T(), s.lastMessage())
 }
 
+// TC_SHIP_PROT_002: DUT as client accepts the server's select and confirms the JSON-UTF8 format.
 func (s *ProClientSuite) Test_ListenChoice() {
 	s.sut.setState(model.SmeProtHStateClientListenChoice, nil)
 

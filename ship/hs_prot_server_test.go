@@ -101,6 +101,7 @@ func (s *ProServerSuite) Test_Init() {
 	assert.Nil(s.T(), s.lastMessage())
 }
 
+// TC_SHIP_PROT_001: DUT as server accepts the announceMax proposal and selects the JSON-UTF8 format.
 func (s *ProServerSuite) Test_ListenProposal() {
 	s.sut.setState(model.SmeProtHStateServerListenProposal, nil)
 

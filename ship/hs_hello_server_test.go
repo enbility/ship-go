@@ -124,6 +124,7 @@ func (s *HelloSuite) Test_ReadyListen_Init() {
 	assert.Equal(s.T(), true, s.sut.getHandshakeTimerRunning())
 }
 
+// TC_SHIP_HELLO_001: DUT processes a valid "ready" hello and proceeds into the protocol handshake.
 func (s *HelloSuite) Test_ReadyListen_Ok() {
 	s.sut.setState(model.SmeHelloStateReadyInit, nil) // inits the timer
 	s.sut.setState(model.SmeHelloStateReadyListen, nil)
@@ -144,6 +145,7 @@ func (s *HelloSuite) Test_ReadyListen_Ok() {
 	assert.Equal(s.T(), model.SmeProtHStateServerListenProposal, s.sut.getState())
 }
 
+// TC_SHIP_HELLO_003: DUT aborts hello when the Wait-For-Ready timer expires (timeout).
 func (s *HelloSuite) Test_ReadyListen_Timeout() {
 	s.sut.setState(model.SmeHelloStateReadyInit, nil) // inits the timer
 	s.sut.setState(model.SmeHelloStateReadyListen, nil)
@@ -155,6 +157,7 @@ func (s *HelloSuite) Test_ReadyListen_Timeout() {
 	assert.NotNil(s.T(), s.lastMessage())
 }
 
+// TC_SHIP_HELLO_004: DUT ignores a "pending" update without prolongationRequest while in "ready" state.
 func (s *HelloSuite) Test_ReadyListen_Ignore() {
 	s.sut.setState(model.SmeHelloStateReadyInit, nil) // inits the timer
 	s.sut.setState(model.SmeHelloStateReadyListen, nil)
@@ -194,6 +197,7 @@ func (s *HelloSuite) Test_ReadyListen_Ignore_Invalid() {
 	assert.Equal(s.T(), model.SmeHelloStateReadyListen, s.sut.getState())
 }
 
+// TC_SHIP_HELLO_002: DUT accepts an incoming prolongation request and re-arms the Wait-For-Ready timer.
 func (s *HelloSuite) Test_ReadyListen_Prolongation() {
 	s.sut.setState(model.SmeHelloStateReadyInit, nil) // inits the timer
 	s.sut.setState(model.SmeHelloStateReadyListen, nil)

@@ -83,6 +83,7 @@ func (s *InitClientSuite) Test_Init() {
 	assert.Equal(s.T(), model.CmiStateInitStart, s.sut.getState())
 }
 
+// TC_SHIP_ROLE_002: DUT acting as SME client sends the CMI init and enters CMI client-wait.
 func (s *InitClientSuite) Test_Start() {
 	s.sut.setState(model.CmiStateInitStart, nil)
 
@@ -104,6 +105,7 @@ func (s *InitClientSuite) Test_ClientWait() {
 	assert.NotNil(s.T(), s.lastMessage())
 }
 
+// TC_SHIP_CMI_004: DUT as client closes the connection when the CmiTimeout expires without a CMI message.
 func (s *InitClientSuite) Test_ClientWait_Timeout() {
 	s.mockShipInfo.EXPECT().HandleConnectionClosed(mock.Anything, mock.Anything).Return()
 
@@ -115,6 +117,7 @@ func (s *InitClientSuite) Test_ClientWait_Timeout() {
 	assert.Nil(s.T(), s.lastMessage())
 }
 
+// TC_SHIP_CMI_002: DUT as client closes the connection on an invalid CMI MessageType (!= 0).
 func (s *InitClientSuite) Test_ClientWait_InvalidMsgType() {
 	s.sut.setState(model.CmiStateClientWait, nil)
 
@@ -124,6 +127,7 @@ func (s *InitClientSuite) Test_ClientWait_InvalidMsgType() {
 	assert.Nil(s.T(), s.lastMessage())
 }
 
+// TC_SHIP_CMI_006: DUT as client closes the connection on an invalid CmiHead/MessageValue (> 0).
 func (s *InitClientSuite) Test_ClientWait_InvalidData() {
 	s.sut.setState(model.CmiStateClientWait, nil)
 

@@ -886,6 +886,7 @@ func (s *HubConnectionsClientCoverageSuite) createDirectTestCertificate(expiryTi
 
 // Test_KeepThisConnection_DirectTest tests the keepThisConnection function directly
 // to ensure proper coverage of the double connection prevention logic
+// TC_SHIP_ROLE_003: on a double connection the node with the larger SKI keeps the connection (server & client roles), per SHIP-TS-ROLE-01.
 func (s *HubConnectionsClientCoverageSuite) Test_KeepThisConnection_DirectTest() {
 	// Test case 1: No existing connection - should return true
 	s.Run("no_existing_connection", func() {

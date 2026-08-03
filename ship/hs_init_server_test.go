@@ -83,6 +83,7 @@ func (s *InitServerSuite) Test_Init() {
 	assert.Equal(s.T(), model.CmiStateInitStart, s.sut.getState())
 }
 
+// TC_SHIP_ROLE_001: DUT acting as SME server enters CMI server-wait after init.
 func (s *InitServerSuite) Test_Start() {
 	s.sut.setState(model.CmiStateInitStart, nil)
 
@@ -124,6 +125,7 @@ func (s *InitServerSuite) Test_ServerWait_InvalidData() {
 	assert.Equal(s.T(), model.ShipInit, s.lastMessage())
 }
 
+// TC_SHIP_CMI_003: DUT as server closes the connection when the CmiTimeout expires without a CMI message.
 func (s *InitServerSuite) Test_ServerWait_Timeout() {
 	s.sut.setState(model.CmiStateServerWait, nil)
 

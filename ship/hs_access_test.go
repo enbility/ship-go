@@ -112,6 +112,7 @@ func (s *AccessSuite) Test_Init_SendError() {
 	assert.Equal(s.T(), false, s.sut.handshakeTimerRunning)
 }
 
+// TC_SHIP_AM_001: DUT replies to an access-methods request with its own access methods (accessMethods.id = own SHIP ID).
 func (s *AccessSuite) Test_Request() {
 	s.sut.setState(model.SmeAccessMethodsRequest, nil)
 

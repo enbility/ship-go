@@ -148,10 +148,12 @@ func (s *ConnectionMessagingCoverageSuite) Test_HandleIncomingWebsocketMessage_E
 		message []byte
 	}{
 		{
+			// TC_SHIP_MSG_002: DUT silently handles a SHIP message with an unknown MessageType (0xFF) without closing/panicking.
 			name:    "invalid_utf8",
 			message: []byte{0xFF, 0xFF},
 		},
 		{
+			// TC_SHIP_MSG_001: DUT silently handles a SHIP message with only a MessageType and empty MessageValue.
 			name:    "very_short",
 			message: []byte{0},
 		},
