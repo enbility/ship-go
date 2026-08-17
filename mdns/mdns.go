@@ -309,6 +309,15 @@ func (m *MdnsManager) setReportInterface(report api.MdnsReportInterface) {
 	m.report = report
 }
 
+// ConnectionsHub returns the SHIP connections hub registered as mDNS report callback.
+// Available after Hub.Start() has invoked MdnsInterface.Start.
+func (m *MdnsManager) ConnectionsHub() api.HubInterface {
+	if hub, ok := m.reportInterface().(api.HubInterface); ok {
+		return hub
+	}
+	return nil
+}
+
 func (m *MdnsManager) Start(pairingMode api.PairingMode, cb api.MdnsReportInterface) error {
 	// Always update the callback, even on subsequent calls
 	m.setReportInterface(cb)
