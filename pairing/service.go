@@ -125,6 +125,14 @@ func (s *Service) IsServiceRunning() bool {
 	return s.running
 }
 
+// Listener returns the active pairing listener instance, if any.
+func (s *Service) Listener() api.PairingListenerInterface {
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+
+	return s.listener
+}
+
 // CreateAnnouncer creates a configured announcer component
 func (s *Service) CreateAnnouncer() api.PairingAnnouncerInterface {
 	s.mux.RLock()
