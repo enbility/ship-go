@@ -143,6 +143,12 @@ func (h *Hub) RegisterRemoteService(identity api.ServiceIdentity) {
 		return
 	}
 
+	// Registering expresses fresh connection intent, so drop an accumulated
+	// retry backoff: the delay ranges grow to 10-20s and would otherwise defer
+	// the attempt far beyond what a caller waiting for the connection expects.
+	h.cancelConnectionDelayTimer(identity.SKI)
+	h.removeConnectionAttemptCounter(identity.SKI)
+
 	// Pairing spec §4.3: registering trust in an addCu device expresses the
 	// pairing intent, so processing of addCu-requests must deactivate now —
 	// not only once the connection completes (HandleShipHandshakeStateUpdate).
@@ -199,6 +205,7 @@ func (h *Hub) UnregisterRemoteService(identity api.ServiceIdentity) {
 		}
 	}
 
+	h.cancelConnectionDelayTimer(identity.SKI)
 	h.removeConnectionAttemptCounter(identity.SKI)
 
 	// Convert ServiceIdentity to ServiceDetails for service-based lookup
