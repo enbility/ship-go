@@ -58,13 +58,13 @@ func (s *ConnectionMessagingSuite) TestHandleIncomingShipMessage() {
 	msg = []byte{0}
 	msg = append(msg, jsonData...)
 
+	// no reader set up yet - a SPINE message arriving now must be dropped, not crash
 	s.sut.HandleIncomingWebsocketMessage(msg)
 
+	// once the reader is set up, SPINE messages are delivered directly
 	s.sut.dataReader = s.shipConnectionReader
-
-	s.sut.processBufferedSpineMessages()
-
 	s.sut.HandleIncomingWebsocketMessage(msg)
+	s.shipConnectionReader.AssertNumberOfCalls(s.T(), "HandleShipPayloadMessage", 1)
 }
 
 func (s *ConnectionMessagingSuite) TestReportConnectionError() {

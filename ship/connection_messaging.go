@@ -42,17 +42,13 @@ func (c *ShipConnection) shipModelFromMessage(message []byte) (*model.ShipData, 
 	return &data, nil
 }
 
-// processBufferedSpineMessages processes any SPINE messages that came in before the handshake completed
-// this will be called once the handshake is completed and spineDataProcessing is set
-func (c *ShipConnection) processBufferedSpineMessages() {
-	c.bufferMux.Lock()
-	defer c.bufferMux.Unlock()
-
-	for _, item := range c.spineBuffer {
-		c.dataReader.HandleShipPayloadMessage(item)
+// Safe to call more than once: once the reader is set up, later calls are a no-op.
+func (c *ShipConnection) enableDataProcessing() {
+	if c.dataReader != nil {
+		return
 	}
 
-	c.spineBuffer = nil
+	c.dataReader = c.infoProvider.SetupRemoteService(c.remoteSKI, c)
 }
 
 // HandleIncomingWebsocketMessage routes the incoming message to either SHIP or SPINE message handlers
@@ -69,12 +65,12 @@ func (c *ShipConnection) HandleIncomingWebsocketMessage(message []byte) {
 	}
 
 	if c.dataReader == nil {
-		// buffer message for processing once the handshake is completed
-		c.bufferMux.Lock()
-		defer c.bufferMux.Unlock()
-
-		c.spineBuffer = append(c.spineBuffer, []byte(data.Data.Payload))
-
+		// SHIP data messages are only allowed after entering "Connection data
+		// exchange" at which point dataReader will already be initialized via
+		// enableDataProcessing The spec does not define how we should handle
+		// these messages; we choose to drop the message to match how we handle
+		// unknown message types.
+		logging.Log().Debug(c.RemoteSKI(), "received SPINE data before handshake completed, dropping")
 		return
 	}
 
