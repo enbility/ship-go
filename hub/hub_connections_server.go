@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -16,6 +17,15 @@ import (
 	"github.com/enbility/ship-go/ws"
 	"github.com/gorilla/websocket"
 )
+
+// Port returns the websocket server's actual bound port, resolved once
+// Start() has run - useful when the configured port was 0.
+func (h *Hub) Port() int {
+	h.muxPort.RLock()
+	defer h.muxPort.RUnlock()
+
+	return h.boundPort
+}
 
 // verifyPeerCertificate validates the peer certificate for WebSocket connections
 func (h *Hub) verifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
@@ -87,6 +97,22 @@ func (h *Hub) startWebsocketServer() error {
 	addr := fmt.Sprintf(":%d", h.port)
 	logging.Log().Debug("starting websocket server on", addr)
 
+	// Listen synchronously so a bind failure (incl. port 0 -> OS-assigned)
+	// surfaces immediately and the actual bound port is known before mDNS starts.
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("websocket server failed to start: %w", err)
+	}
+
+	boundPort := ln.Addr().(*net.TCPAddr).Port
+	h.muxPort.Lock()
+	h.boundPort = boundPort
+	h.muxPort.Unlock()
+	if h.port == 0 {
+		// OS-assigned port: mDNS must announce the real one, not 0.
+		h.mdns.SetPort(boundPort)
+	}
+
 	h.httpServer = &http.Server{
 		Addr:              addr,
 		Handler:           h,
@@ -103,7 +129,7 @@ func (h *Hub) startWebsocketServer() error {
 
 	serverStarted := h.serverStarted // capture for goroutine; prevents closing a replaced channel
 	go func() {
-		err := h.httpServer.ListenAndServeTLS("", "")
+		err := h.httpServer.ServeTLS(ln, "", "")
 		if err != nil && err != http.ErrServerClosed {
 			logging.Log().Error("websocket server error:", err)
 			h.serverStartErr = err

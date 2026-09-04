@@ -51,6 +51,7 @@ func TestHub_Start_ReturnsError_WhenMdnsFails(t *testing.T) {
 	mdnsService := mocks.NewMockMdnsInterface(ctrl)
 
 	mdnsError := errors.New("mDNS startup failed")
+	mdnsService.EXPECT().SetPort(gomock.Any()).AnyTimes()
 	mdnsService.EXPECT().Start(gomock.Any(), gomock.Any()).Return(mdnsError)
 
 	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
@@ -80,6 +81,7 @@ func TestHub_Start_Success(t *testing.T) {
 
 	hubReader := mocks.NewMockHubReaderInterface(ctrl)
 	mdnsService := mocks.NewMockMdnsInterface(ctrl)
+	mdnsService.EXPECT().SetPort(gomock.Any()).AnyTimes()
 	mdnsService.EXPECT().Start(gomock.Any(), gomock.Any()).Return(nil)
 
 	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
@@ -227,6 +229,7 @@ func TestHub_HTTPServerShutdown_WithContext(t *testing.T) {
 
 	hubReader := mocks.NewMockHubReaderInterface(ctrl)
 	mdnsService := mocks.NewMockMdnsInterface(ctrl)
+	mdnsService.EXPECT().SetPort(gomock.Any()).AnyTimes()
 	mdnsService.EXPECT().Start(gomock.Any(), gomock.Any()).Return(nil)
 	mdnsService.EXPECT().Shutdown()
 

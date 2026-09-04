@@ -375,6 +375,46 @@ func (_c *MdnsInterface_SetAutoAccept_Call) RunAndReturn(run func(b bool)) *Mdns
 	return _c
 }
 
+// SetPort provides a mock function for the type MdnsInterface
+func (_mock *MdnsInterface) SetPort(port int) {
+	_mock.Called(port)
+	return
+}
+
+// MdnsInterface_SetPort_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetPort'
+type MdnsInterface_SetPort_Call struct {
+	*mock.Call
+}
+
+// SetPort is a helper method to define mock.On call
+//   - port int
+func (_e *MdnsInterface_Expecter) SetPort(port interface{}) *MdnsInterface_SetPort_Call {
+	return &MdnsInterface_SetPort_Call{Call: _e.mock.On("SetPort", port)}
+}
+
+func (_c *MdnsInterface_SetPort_Call) Run(run func(port int)) *MdnsInterface_SetPort_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 int
+		if args[0] != nil {
+			arg0 = args[0].(int)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MdnsInterface_SetPort_Call) Return() *MdnsInterface_SetPort_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MdnsInterface_SetPort_Call) RunAndReturn(run func(port int)) *MdnsInterface_SetPort_Call {
+	_c.Run(run)
+	return _c
+}
+
 // Shutdown provides a mock function for the type MdnsInterface
 func (_mock *MdnsInterface) Shutdown() {
 	_mock.Called()

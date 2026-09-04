@@ -792,6 +792,15 @@ func (m *MdnsManager) SetAutoAccept(accept bool) {
 	}
 }
 
+// SetPort updates the port announced via mDNS - e.g. once the websocket
+// server resolves its actual bound port for a configured port of 0.
+func (m *MdnsManager) SetPort(port int) {
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
+	m.port = port
+}
+
 // SetMdnsProvider sets the mDNS provider for the manager
 // mainly used for testing
 func (m *MdnsManager) SetMdnsProvider(provider api.MdnsProviderInterface) {

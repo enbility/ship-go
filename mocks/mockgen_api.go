@@ -147,6 +147,18 @@ func (mr *MockMdnsInterfaceMockRecorder) SetAutoAccept(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetAutoAccept", reflect.TypeOf((*MockMdnsInterface)(nil).SetAutoAccept), arg0)
 }
 
+// SetPort mocks base method.
+func (m *MockMdnsInterface) SetPort(arg0 int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetPort", arg0)
+}
+
+// SetPort indicates an expected call of SetPort.
+func (mr *MockMdnsInterfaceMockRecorder) SetPort(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPort", reflect.TypeOf((*MockMdnsInterface)(nil).SetPort), arg0)
+}
+
 // Shutdown mocks base method.
 func (m *MockMdnsInterface) Shutdown() {
 	m.ctrl.T.Helper()

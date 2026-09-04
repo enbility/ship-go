@@ -75,6 +75,10 @@ type MdnsInterface interface {
 	//   - autoAccept: true to enable auto-accept, false to require manual approval
 	SetAutoAccept(bool)
 
+	// SetPort updates the port announced via mDNS - e.g. once the websocket
+	// server resolves its actual bound port for a configured port of 0.
+	SetPort(port int)
+
 	// DeviceBrand returns the device brand for QR code generation and mDNS announcements.
 	// This is optional metadata that helps users identify the device.
 	DeviceBrand() string

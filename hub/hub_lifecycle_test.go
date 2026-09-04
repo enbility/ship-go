@@ -31,6 +31,7 @@ func TestHub_Lifecycle_DoubleStart_ReturnsError(t *testing.T) {
 
 	hubReader := mocks.NewMockHubReaderInterface(ctrl)
 	mdnsService := mocks.NewMockMdnsInterface(ctrl)
+	mdnsService.EXPECT().SetPort(gomock.Any()).AnyTimes()
 	mdnsService.EXPECT().Start(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
@@ -67,6 +68,7 @@ func TestHub_Lifecycle_RestartAfterShutdown(t *testing.T) {
 
 	hubReader := mocks.NewMockHubReaderInterface(ctrl)
 	mdnsService := mocks.NewMockMdnsInterface(ctrl)
+	mdnsService.EXPECT().SetPort(gomock.Any()).AnyTimes()
 	mdnsService.EXPECT().Start(gomock.Any(), gomock.Any()).Return(nil).Times(2)
 	mdnsService.EXPECT().Shutdown().Times(2)
 
@@ -105,6 +107,7 @@ func TestHub_Lifecycle_ShutdownResetsState(t *testing.T) {
 
 	hubReader := mocks.NewMockHubReaderInterface(ctrl)
 	mdnsService := mocks.NewMockMdnsInterface(ctrl)
+	mdnsService.EXPECT().SetPort(gomock.Any()).AnyTimes()
 	mdnsService.EXPECT().Start(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	mdnsService.EXPECT().Shutdown().Times(1)
 
@@ -137,6 +140,7 @@ func TestHub_Lifecycle_RetryAfterMdnsFailure(t *testing.T) {
 
 	hubReader := mocks.NewMockHubReaderInterface(ctrl)
 	mdnsService := mocks.NewMockMdnsInterface(ctrl)
+	mdnsService.EXPECT().SetPort(gomock.Any()).AnyTimes()
 
 	// First call fails, second succeeds
 	gomock.InOrder(
