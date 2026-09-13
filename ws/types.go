@@ -5,6 +5,10 @@ import "time"
 const (
 	writeWait = 10 * time.Second
 
+	// Upper bound for a close to wait until the SHIP messages queued before it are written.
+	// A peer that stops reading must not turn a close into a hang.
+	flushTimeout = 2 * time.Second
+
 	// Time allowed to read the next pong message from the peer.
 	pongWait = 60 * time.Second // SHIP 4.2: ping interval + pong timeout
 	// Send pings to peer with this period. Must be less than pongWait.

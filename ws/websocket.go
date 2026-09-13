@@ -26,6 +26,12 @@ type WebsocketConnection struct {
 	// The ship write channel for outgoing SHIP messages
 	shipWriteChannel chan []byte
 
+	// Flush requests: the write pump answers one once every SHIP message queued so far is written
+	flushChannel chan chan struct{}
+
+	// A close is flushing the queued SHIP messages, so no new ones are accepted. Guarded by muxShipWrite.
+	closing bool
+
 	// internal handling of closed connections
 	connectionClosed bool
 
@@ -82,6 +88,7 @@ func (w *WebsocketConnection) isConnClosed() bool {
 func (w *WebsocketConnection) run() {
 	w.shipWriteChannel = make(chan []byte, DefaultWriteBufferSize) // Send outgoing ship messages
 	w.closeChannel = make(chan struct{}, 1)                        // Listen to close events
+	w.flushChannel = make(chan chan struct{})                      // Flush requests before a close
 
 	w.pumpsWg.Add(2)
 	go w.readShipPump()
@@ -126,6 +133,11 @@ func (w *WebsocketConnection) writeShipPump() {
 
 			text := w.textFromMessage(message)
 			logging.Log().Trace("Send:", w.remoteSki, text)
+
+		case ack := <-w.flushChannel:
+			// a close is waiting: write everything still queued before acknowledging
+			w.drainShipWriteChannel()
+			close(ack)
 
 		case <-ticker.C:
 			w.handlePing()
@@ -273,7 +285,7 @@ func (w *WebsocketConnection) WriteMessageToWebsocketConnection(message []byte) 
 	w.muxShipWrite.Lock()
 	defer w.muxShipWrite.Unlock()
 
-	if w.isConnClosed() || w.shipWriteChannel == nil {
+	if w.closing || w.isConnClosed() || w.shipWriteChannel == nil {
 		return fmt.Errorf("%w for remote SKI %s", api.ErrConnectionClosed, w.remoteSki)
 	}
 
@@ -326,6 +338,12 @@ func (w *WebsocketConnection) writeMessageWithoutErrorHandling(messageType int, 
 
 // shutdown the connection and all internals
 func (w *WebsocketConnection) CloseDataConnection(closeCode int, reason string) {
+	// Deliver the SHIP messages queued before the close first. Callers queue a final message and
+	// close in the same breath - a protocol handshake abort, a CMI rejection - and close()
+	// discards whatever the write pump has not written yet. The close frame below is written
+	// directly, so without the flush it would overtake those messages too.
+	w.flushShipWrites(flushTimeout)
+
 	// send a close message to the remote side if we have a reason
 	if reason != "" {
 		_ = w.writeMessageWithoutErrorHandling(websocket.CloseMessage, websocket.FormatCloseMessage(closeCode, reason))
@@ -350,4 +368,52 @@ func (w *WebsocketConnection) closeShipWriteChannel() {
 	w.muxShipWrite.Lock()
 	defer w.muxShipWrite.Unlock()
 	close(w.shipWriteChannel)
+}
+
+// drainShipWriteChannel writes every SHIP message still queued. It runs on the write pump, the only
+// writer, so once it returns no message is held between leaving the queue and reaching the socket.
+func (w *WebsocketConnection) drainShipWriteChannel() {
+	for {
+		select {
+		case message, ok := <-w.shipWriteChannel:
+			if !ok || !w.writeMessage(websocket.BinaryMessage, message) {
+				return
+			}
+		default:
+			return
+		}
+	}
+}
+
+// flushShipWrites stops accepting SHIP messages and waits, at most timeout, until the write pump has
+// written every message queued before that point. It returns immediately if the connection is
+// already closed or was never started, e.g. after a read or write error.
+func (w *WebsocketConnection) flushShipWrites(timeout time.Duration) {
+	w.muxShipWrite.Lock()
+	if w.closing || w.shipWriteChannel == nil || w.isConnClosed() {
+		w.muxShipWrite.Unlock()
+		return
+	}
+	w.closing = true
+	w.muxShipWrite.Unlock()
+
+	ack := make(chan struct{})
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+
+	select {
+	case w.flushChannel <- ack:
+	case <-w.closeChannel:
+		return
+	case <-deadline.C:
+		logging.Log().Debug(w.remoteSki, "timeout requesting a flush of queued SHIP messages")
+		return
+	}
+
+	select {
+	case <-ack:
+	case <-w.closeChannel:
+	case <-deadline.C:
+		logging.Log().Debug(w.remoteSki, "timeout flushing queued SHIP messages before close")
+	}
 }
