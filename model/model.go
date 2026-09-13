@@ -93,8 +93,10 @@ const (
 	PinInputPermissionTypeOk   PinInputPermissionType = "ok"
 )
 
+// MessageProtocolHandshakeError is the SME "protocol handshake error" message: SHIP 13.4.4.2.1
+// defines it by the root tag "messageProtocolHandshakeError", wrapping the error number.
 type MessageProtocolHandshakeError struct {
-	Error MessageProtocolHandshakeErrorErrorType `json:"error"`
+	MessageProtocolHandshakeError MessageProtocolHandshakeErrorType `json:"messageProtocolHandshakeError"`
 }
 
 type ConnectionPinStateType struct {
