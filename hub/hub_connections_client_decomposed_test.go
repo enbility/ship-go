@@ -112,12 +112,15 @@ func (s *HubConnectionsDecomposedTestSuite) Test_ValidateConnectionLimit() {
 
 // Test createWebSocketDialer function
 func (s *HubConnectionsDecomposedTestSuite) Test_CreateWebSocketDialer() {
-	dialer := s.hub.createWebSocketDialer(nil)
+	dialer := s.hub.createWebSocketDialer(nil, "")
 
 	assert.NotNil(s.T(), dialer)
 	assert.Equal(s.T(), 5*time.Second, dialer.HandshakeTimeout)
 	assert.NotNil(s.T(), dialer.TLSClientConfig)
 	assert.True(s.T(), dialer.TLSClientConfig.InsecureSkipVerify)
+	// SHIP-TS-SEC-01/02: the certificate check has to run during the TLS handshake,
+	// so the hook must actually be wired into the dialer - see TestVerifyServerCertificateHook
+	assert.NotNil(s.T(), dialer.TLSClientConfig.VerifyPeerCertificate)
 	assert.Equal(s.T(), []string{"ship"}, dialer.Subprotocols)
 	assert.Equal(s.T(), cert.CipherSuites, dialer.TLSClientConfig.CipherSuites)
 	assert.Len(s.T(), dialer.TLSClientConfig.Certificates, 1)

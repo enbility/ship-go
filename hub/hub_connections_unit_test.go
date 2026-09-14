@@ -39,6 +39,23 @@ func TestVerifyPeerCertificate(t *testing.T) {
 		assert.Error(t, err, "invalid certificate should fail")
 	})
 
+	// TC_SHIP_SEC_001 §4.4.1 step 1 / TC_SHIP_SEC_002 §4.4.2 step 2: the test tool connects as
+	// a pure client with a spoofed certificate, and the DUT has to abort the TLS handshake.
+	// Returning an error from this hook is what makes crypto/tls send a bad_certificate alert
+	// instead of completing the websocket upgrade.
+	t.Run("spoofed_certificate", func(t *testing.T) {
+		// SEC_001: no prior pairing, the certificate's own SKI is corrupted
+		spoofed := spoofedCertificate(t, nil)
+		err := hub.verifyPeerCertificate(spoofed.Certificate, nil)
+		assert.Error(t, err, "a certificate whose SKI is not SHA-1 of its public key must be rejected")
+
+		// SEC_002: the SKI of a previously trusted certificate is forged onto a new key pair
+		_, _, trustedSKI := legitimateCertificate(t, "trusted-peer")
+		forged := spoofedCertificate(t, trustedSKI)
+		err = hub.verifyPeerCertificate(forged.Certificate, nil)
+		assert.Error(t, err, "a forged but previously trusted SKI must not make the certificate valid")
+	})
+
 	t.Run("certificate_without_ski", func(t *testing.T) {
 		// Create a certificate without SubjectKeyId
 		template := &x509.Certificate{

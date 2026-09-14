@@ -479,8 +479,11 @@ func (s *HubConnectionsClientCoverageSuite) Test_ConnectFoundService_Certificate
 
 	// Verify that the error is returned and contains the expected message
 	assert.Error(s.T(), err, "connectFoundService should return an error for invalid certificate SKI")
-	assert.Contains(s.T(), err.Error(), "certificate validation failed", "Error should mention certificate validation failure")
 	assert.Contains(s.T(), err.Error(), "invalid SKI", "Error should mention invalid SKI")
+	// SHIP 12.2 / SHIP-TS-SEC-01: the SKI is checked inside the TLS handshake now, so the
+	// dial fails there instead of reaching the post-upgrade "certificate validation failed"
+	// path in connectFoundService. See TestSpoofedServerCertificateAbortsTlsHandshake.
+	assert.ErrorIs(s.T(), err, errCertificateRejected, "Error should report a rejected peer certificate")
 
 	// Verify that no connection was added to the hub
 	s.hub.muxCon.RLock()
