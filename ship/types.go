@@ -22,6 +22,7 @@ const (
 	tHelloInit              = 60 * time.Second // SHIP 13.4.4.1.3
 	tHelloInc               = tHelloInit       // SHIP 13.4.4.1.3: the same value as T_hello_init
 	tHelloProlongWaitingGap = 15 * time.Second
+	accessMethodsTimeout    = 60 * time.Second // SHIP 13.4.6.2.1
 )
 
 // SHIP 13.4.4.1.3: an SME User SHALL accept at least two prolongation requests

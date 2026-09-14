@@ -137,12 +137,25 @@ type HubInterface interface {
 // BREAKING CHANGE v0.8.0: All callbacks now use ServiceIdentity instead of string parameters
 type HubReaderInterface interface {
 	// report a connection to a remote service
+	//
+	// Called once the connection is complete: in SHIP connection data exchange, with the remote's
+	// SHIP ID verified by the access methods exchange. SetupRemoteService was called before.
 	RemoteServiceConnected(identity ServiceIdentity)
 
 	// report a disconnection from a remote service
+	//
+	// NOTE: The connection may not have been reported as connected before, e.g. if the remote's
+	// SHIP ID could not be verified after SetupRemoteService was already called.
 	RemoteServiceDisconnected(identity ServiceIdentity)
 
-	// report an approved handshake by a remote service
+	// set up SPINE communication with a remote service
+	//
+	// Called exactly once per connection, when it enters SHIP connection data exchange after PIN
+	// verification succeeded, and before RemoteServiceConnected. SPINE messages of the remote are
+	// passed to the returned reader from then on (SHIP IG Transport and Connectivity 2.1). The
+	// access methods exchange that verifies the remote's SHIP ID runs in parallel, so identity may
+	// not contain the SHIP ID yet; ServiceUpdated reports it once known. Return nil if SPINE data
+	// is not processed.
 	SetupRemoteService(identity ServiceIdentity, writeI ShipConnectionDataWriterInterface) ShipConnectionDataReaderInterface
 
 	// report all currently visible EEBUS services

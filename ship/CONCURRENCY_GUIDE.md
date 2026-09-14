@@ -10,7 +10,7 @@ The ShipConnection handles the data connection and coordinates SHIP and SPINE me
 
 The ShipConnection uses multiple mutexes to protect different aspects of the connection:
 
-- `mux` - Main connection state mutex  
+- `mux` - Main connection state mutex (SHIP state, error, and the SPINE `dataReader`)
 - `handshakeTimerMux` - Handshake timer state protection
 - `shutdownOnce` - Ensures single shutdown execution
 
@@ -110,6 +110,18 @@ func (c *ShipConnection) getHandshakeTimerRunning() bool {
     return c.handshakeTimerRunning
 }
 ```
+
+## SPINE Data Reader
+
+`dataReader` is set once, from `handshakeAccessMethods_Init`, when the connection enters SHIP
+connection data exchange (SHIP 13.4.5). The websocket reader goroutine reads it for every incoming
+SPINE message, so both sides go through `setDataReader()` / `getDataReader()` under `mux`.
+
+`SetupRemoteService` is called without holding `mux`: the application may write SPINE messages
+from inside the callback, which re-enters the connection.
+
+Incoming SPINE data is only delivered while `isDataExchangeState(getState())` holds and the reader
+is non-nil. A nil reader is valid and means the application does not process SPINE data.
 
 ## State Query Patterns
 

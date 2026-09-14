@@ -10,6 +10,7 @@ The ship-go library supports a `test` build tag that modifies timer values to ma
 - Hello Init Timeout: **60 seconds**
 - Abort Delay: **1 second**
 - CMI Timeout: **10 seconds**
+- Access Methods Timeout: **60 seconds**
 - Hello Prolongation Min: **1 second**
 - Hello Prolongation Threshold: **30 seconds**
 
@@ -17,6 +18,7 @@ The ship-go library supports a `test` build tag that modifies timer values to ma
 - Hello Init Timeout: **500 milliseconds**
 - Abort Delay: **100 milliseconds**
 - CMI Timeout: **500 milliseconds**
+- Access Methods Timeout: **500 milliseconds**
 - Hello Prolongation Min: **100 milliseconds**
 - Hello Prolongation Threshold: **200 milliseconds**
 

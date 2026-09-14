@@ -216,10 +216,25 @@ func (c *ShipConnection) handleState(timeout bool, message []byte) {
 	case model.SmePinStateCheckOk:
 		c.handshakeAccessMethods_Init()
 
-	// smeAccessMethods
+	// connection data exchange (SHIP 13.4.5), with access methods identification (SHIP 13.4.6)
+	// running in parallel
 
 	case model.SmeAccessMethodsRequest:
-		c.handshakeAccessMethods_Request(message)
+		if timeout {
+			// SHIP 13.4.6.2.1: the requester CAN close the connection if it does not receive a
+			// proper "access methods" message in time
+			c.endDataExchangeWithError(fmt.Errorf("%w: no access methods response from remote SKI %s within %v",
+				api.ErrConnectionTimeout, c.remoteSKI, getAccessMethodsTimeout()))
+			return
+		}
+		c.handleDataExchangeSmeMessage(message)
+
+	case model.SmeStateComplete:
+		// no timer runs once complete, so a timeout here is a stale one
+		if timeout {
+			return
+		}
+		c.handleDataExchangeSmeMessage(message)
 	}
 }
 
@@ -229,10 +244,9 @@ func (c *ShipConnection) setAndHandleState(state model.ShipMessageExchangeState)
 	c.handleState(false, nil)
 }
 
-// SHIP handshake is approved, now set the new state and the SPINE read handler
+// access methods identification succeeded and the remote's SHIP ID is verified, so the connection
+// is complete. SPINE processing was already set up when connection data exchange was entered.
 func (c *ShipConnection) approveHandshake() {
-	// no-op if we already started processing SPINE data when entering the Access Methods phase
-	c.enableDataProcessing()
 	c.stopTimerSafe()
 	c.setState(model.SmeStateComplete, nil)
 }
@@ -252,6 +266,34 @@ func (c *ShipConnection) endHandshakeWithError(err error) {
 		Error: err,
 	}
 	c.infoProvider.HandleShipHandshakeStateUpdate(c.remoteSKI, state)
+}
+
+// end a connection that already entered connection data exchange because of an error
+//
+// Unlike endHandshakeWithError this announces the termination first, per SHIP 13.4.7, so that a
+// data message still in flight can be completed. CloseConnection only announces while the state
+// is a data exchange state, which is why the error state is set afterwards.
+func (c *ShipConnection) endDataExchangeWithError(err error) {
+	c.stopTimerSafe()
+
+	logging.Log().Debug(c.RemoteSKI(), "SHIP data exchange error:", err)
+
+	c.CloseConnection(true, 0, err.Error())
+
+	c.setState(model.SmeStateError, err)
+}
+
+// isDataExchangeState reports whether a state belongs to SHIP connection data exchange (SHIP
+// 13.4.5). Both sides enable it once PIN verification succeeded (SHIP 13.4.4.3), and access
+// methods identification then runs in parallel to it (SHIP 13.4.6.2), so SmeAccessMethodsRequest
+// and SmeStateApproved are data exchange states just like SmeStateComplete.
+func isDataExchangeState(state model.ShipMessageExchangeState) bool {
+	switch state {
+	case model.SmeAccessMethodsRequest, model.SmeStateApproved, model.SmeStateComplete:
+		return true
+	default:
+		return false
+	}
 }
 
 // set the handshake timer to a new duration and start the channel

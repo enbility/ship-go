@@ -5,13 +5,27 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/enbility/ship-go/api"
+	"github.com/enbility/ship-go/logging"
 	"github.com/enbility/ship-go/model"
 )
 
-// Handshake Access covers the states smeAccess...
+// Access methods identification (SHIP 13.4.6) covers the state SmeAccessMethodsRequest.
+//
+// It is not part of the handshake. SHIP 13.4.6.2: the state "can run in parallel to connection
+// data exchange" and "MUST NOT be entered before connection data exchange is entered". Connection
+// data exchange is entered once PIN verification succeeded (SHIP 13.4.4.3), which is when
+// handshakeAccessMethods_Init runs, and SPINE data is processed from then on without waiting for
+// the access methods exchange (SHIP IG Transport and Connectivity 2.1).
+//
+// ship-go always requests the remote's access methods, and only reports the connection as
+// complete once the reply arrived: it carries the remote SHIP ID, the primary identifier in the
+// trust store (SHIP Pairing Service 10.4), which is verified against the SHIP ID trust was
+// established for. The recipient of the request SHALL reply (SHIP 13.4.6.2.1), so a remote that
+// does not reply within getAccessMethodsTimeout() is disconnected.
 
+// handshakeAccessMethods_Init enters connection data exchange once PIN verification succeeded
 func (c *ShipConnection) handshakeAccessMethods_Init() {
-	// Access Methods
 	accessMethodsRequest := model.AccessMethodsRequest{
 		AccessMethodsRequest: model.AccessMethodsRequestType{},
 	}
@@ -21,14 +35,13 @@ func (c *ShipConnection) handshakeAccessMethods_Init() {
 		return
 	}
 
-	c.setHandshakeTimer(timeoutTimerTypeWaitForReady, cmiTimeout)
-	c.setState(model.SmeAccessMethodsRequest, nil)
+	// SHIP IG Transport and Connectivity 2.1 "Immediate readiness": set up SPINE processing now,
+	// without waiting for the remote's reply to our request. This is the only place the
+	// application is handed the connection.
+	c.setDataReader(c.infoProvider.SetupRemoteService(c.remoteSKI, c))
 
-	// EEBus SHIP IG - Transport and Connectivity §2.1 "Immediate readiness": as soon as
-	// "connection data exchange" is reached, we SHALL be fully prepared to process SPINE
-	// messages independently of the state of SME requests - so enable it now rather than
-	// waiting for the remote to answer our own accessMethods request.
-	c.enableDataProcessing()
+	c.setHandshakeTimer(timeoutTimerTypeWaitForReady, getAccessMethodsTimeout())
+	c.setState(model.SmeAccessMethodsRequest, nil)
 }
 
 // detectAccessMethodsMessageType determines the type of access methods message
@@ -73,10 +86,11 @@ func (c *ShipConnection) handleAccessMethodsResponse(accessMethods *model.Access
 
 	remoteID := *accessMethods.AccessMethods.Id
 
-	// If we already know the remote ID, verify it matches
+	// If we already know the remote ID, verify it matches: a remote that authenticated with a
+	// trusted certificate but reports another SHIP ID is not the node trust was established for
 	if len(c.remoteShipID) > 0 && c.remoteShipID != remoteID {
-		return fmt.Errorf("SHIP ID mismatch for remote SKI %s: expected '%s', got '%s'",
-			c.remoteSKI, c.remoteShipID, remoteID)
+		return fmt.Errorf("%w for remote SKI %s: expected '%s', got '%s'",
+			api.ErrShipIDMismatch, c.remoteSKI, c.remoteShipID, remoteID)
 	}
 
 	// Save and report the SHIP ID if this is the first time we see it
@@ -88,40 +102,55 @@ func (c *ShipConnection) handleAccessMethodsResponse(accessMethods *model.Access
 	return nil
 }
 
-func (c *ShipConnection) handshakeAccessMethods_Request(message []byte) {
+// handleDataExchangeSmeMessage handles SME control messages in connection data exchange: while
+// our own access methods request is pending (SmeAccessMethodsRequest), and afterwards
+// (SmeStateComplete).
+//
+// Anything other than an access methods message is logged and ignored instead of ending a
+// working connection (SHIP 13.4.5.1: gracefully skip unknown content). Only the access methods
+// exchange itself can end the connection, and it does so with a SHIP 13.4.7 termination.
+func (c *ShipConnection) handleDataExchangeSmeMessage(message []byte) {
+	if len(message) == 0 {
+		return
+	}
+
 	_, data := c.parseMessage(message, true)
 
-	// Determine message type using JSON parsing instead of string matching
 	msgType, err := detectAccessMethodsMessageType(data)
 	if err != nil {
-		c.endHandshakeWithError(err)
+		logging.Log().Debug(c.RemoteSKI(), "ignoring SME message in connection data exchange:", err)
 		return
 	}
 
 	switch msgType {
 	case "request":
+		// SHIP 13.4.6.2.1: the recipient SHALL respond, whatever the state of our own request.
+		// SHIP IG Transport and Connectivity 2.1 "Decoupled SME responses": answer immediately.
 		if err := c.handleAccessMethodsRequest(); err != nil {
-			c.endHandshakeWithError(err)
-			return
+			c.endDataExchangeWithError(err)
 		}
-		// Per IG §2.1 "Decoupled SME responses", answering this request must not wait on
-		// anything else. Stay in the current state, waiting for the remote's response to our
-		// own accessMethods request, to complete the handshake.
-		return
 
 	case "methods":
+		// SHIP 13.4.6.2.1: "access methods" SHALL ONLY be sent upon a request, and we send ours
+		// once, so anything but the reply to it is unsolicited
+		if c.getState() != model.SmeAccessMethodsRequest {
+			logging.Log().Debug(c.RemoteSKI(), "ignoring unsolicited accessMethods message")
+			return
+		}
+
+		// This is the reply to our only request: an unusable reply will not be followed by a
+		// better one, so end the connection now instead of waiting for the timeout
 		var accessMethods model.AccessMethods
 		if err := json.Unmarshal(data, &accessMethods); err != nil {
-			c.endHandshakeWithError(err)
+			c.endDataExchangeWithError(err)
 			return
 		}
 
 		if err := c.handleAccessMethodsResponse(&accessMethods); err != nil {
-			c.endHandshakeWithError(err)
+			c.endDataExchangeWithError(err)
 			return
 		}
 
-		// Transition to approved state
 		c.setState(model.SmeStateApproved, nil)
 		c.approveHandshake()
 	}

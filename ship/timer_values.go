@@ -21,3 +21,7 @@ func getAbortDelay() time.Duration {
 func getCmiTimeout() time.Duration {
 	return cmiTimeout
 }
+
+func getAccessMethodsTimeout() time.Duration {
+	return accessMethodsTimeout
+}

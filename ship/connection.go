@@ -25,7 +25,8 @@ type ShipConnection struct {
 	// data provider
 	infoProvider api.ShipConnectionInfoProviderInterface
 
-	// Where to pass incoming SPINE messages to
+	// Where to pass incoming SPINE messages to. Set once, when connection data exchange is
+	// entered, and nil if the application does not process SPINE data. Guarded by mux.
 	dataReader api.ShipConnectionDataReaderInterface
 
 	// the (web socket) handler for sending messages
@@ -58,6 +59,9 @@ type ShipConnection struct {
 	acceptedProlongationRequests int
 
 	shutdownOnce sync.Once
+
+	// limits logging of dropped SPINE data to once per connection
+	droppedDataLogOnce sync.Once
 
 	mux sync.Mutex
 }

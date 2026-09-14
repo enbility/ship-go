@@ -91,8 +91,9 @@ func (c *ShipConnection) CloseConnection(safe bool, code int, reason string) {
 			state == model.SmeHelloStateRemoteAbortDone ||
 			state == model.SmeHelloStateRejected
 
-		// this may not be used for Connection Data Exchange is entered!
-		if safe && state == model.SmeStateComplete {
+		// SHIP 13.4.7 termination applies once connection data exchange is entered, which
+		// includes access methods identification (SHIP 13.4.6.2), and not to earlier states
+		if safe && isDataExchangeState(state) {
 			// SHIP 13.4.7: Connection Termination Announce
 			closeMessage := model.ConnectionClose{
 				ConnectionClose: model.ConnectionCloseType{

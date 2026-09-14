@@ -1,7 +1,6 @@
 package ship
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 
@@ -42,20 +41,48 @@ func (c *ShipConnection) shipModelFromMessage(message []byte) (*model.ShipData, 
 	return &data, nil
 }
 
-// Safe to call more than once: once the reader is set up, later calls are a no-op.
-func (c *ShipConnection) enableDataProcessing() {
-	if c.dataReader != nil {
-		return
-	}
+// getDataReader returns the application's SPINE reader: nil before connection data exchange is
+// entered, or if the application does not process SPINE data
+func (c *ShipConnection) getDataReader() api.ShipConnectionDataReaderInterface {
+	c.mux.Lock()
+	defer c.mux.Unlock()
 
-	c.dataReader = c.infoProvider.SetupRemoteService(c.remoteSKI, c)
+	return c.dataReader
+}
+
+// setDataReader stores the reader returned by SetupRemoteService. The websocket reader goroutine
+// reads it for every SPINE message, so it is guarded by mux like the SHIP state.
+func (c *ShipConnection) setDataReader(reader api.ShipConnectionDataReaderInterface) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
+	c.dataReader = reader
 }
 
 // HandleIncomingWebsocketMessage routes the incoming message to either SHIP or SPINE message handlers
 func (c *ShipConnection) HandleIncomingWebsocketMessage(message []byte) {
-	// Check if this is a SHIP SME or SPINE message
-	if !c.hasSpineDatagram(message) {
+	// SHIP 13.4.5.2.1: SPINE data is carried in "data" messages with MessageType 0x02. Route on
+	// that header byte: scanning the content would misroute SME control messages that happen to
+	// contain "datagram", e.g. in a SHIP ID.
+	if len(message) == 0 || message[0] != model.MsgTypeData {
 		c.handleShipMessage(false, message)
+		return
+	}
+
+	// decide before parsing, so data that is dropped costs nothing
+	if state := c.getState(); !isDataExchangeState(state) {
+		// SHIP 13.4.4.3: data exchange is only enabled once PIN verification succeeded, so data
+		// before that, or after the connection failed, is a protocol violation. Drop it, like
+		// other messages that are invalid in the current state.
+		c.droppedDataLogOnce.Do(func() {
+			logging.Log().Debug(c.RemoteSKI(), "dropping SPINE data received outside connection data exchange, state:", state)
+		})
+		return
+	}
+
+	reader := c.getDataReader()
+	if reader == nil {
+		// the application does not process SPINE data on this connection
 		return
 	}
 
@@ -64,23 +91,8 @@ func (c *ShipConnection) HandleIncomingWebsocketMessage(message []byte) {
 		return
 	}
 
-	if c.dataReader == nil {
-		// SHIP data messages are only allowed after entering "Connection data
-		// exchange" at which point dataReader will already be initialized via
-		// enableDataProcessing The spec does not define how we should handle
-		// these messages; we choose to drop the message to match how we handle
-		// unknown message types.
-		logging.Log().Debug(c.RemoteSKI(), "received SPINE data before handshake completed, dropping")
-		return
-	}
-
 	// pass the payload to the SPINE read handler
-	c.dataReader.HandleShipPayloadMessage([]byte(data.Data.Payload))
-}
-
-// hasSpineDatagram checks whether the provided message is a SHIP message
-func (c *ShipConnection) hasSpineDatagram(message []byte) bool {
-	return bytes.Contains(message, []byte("datagram"))
+	reader.HandleShipPayloadMessage([]byte(data.Data.Payload))
 }
 
 // ReportConnectionError handles WebSocket connection errors from remote
