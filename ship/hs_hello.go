@@ -48,12 +48,17 @@ func (c *ShipConnection) handshakeHello_ReadyListen(timeout bool, message []byte
 
 		// if we got a prolongation request, accept it
 		if *hello.ProlongationRequest {
+			// SHIP 13.4.4.1.3, common procedure to decide an incoming prolongation request: an
+			// accepted request increases the Wait-For-Ready-Timer by T_hello_inc. Restarting it
+			// would lose the time that was left.
 			if c.infoProvider.AllowWaitingForTrust(c.remoteSKI) {
-				// re-init timer
-				c.setHandshakeTimer(timeoutTimerTypeWaitForReady, getHelloInitTimeout())
+				c.extendHandshakeTimer(timeoutTimerTypeWaitForReady, getHelloIncTimeout())
 			}
 
-			if err := c.handshakeHelloSend(model.ConnectionHelloPhaseTypeReady, getHelloInitTimeout(), false); err != nil {
+			// common procedure for sending an SME "hello" update: announce the current value of
+			// the Wait-For-Ready-Timer, and none if it is not active
+			remaining, _ := c.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
+			if err := c.handshakeHelloSend(model.ConnectionHelloPhaseTypeReady, remaining, false); err != nil {
 				c.endHandshakeWithError(err)
 			}
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/enbility/ship-go/mocks"
 	"github.com/enbility/ship-go/model"
@@ -214,6 +215,69 @@ func (s *HelloSuite) Test_ReadyListen_Prolongation() {
 	s.sut.handleState(false, msg)
 
 	assert.Equal(s.T(), model.SmeHelloStateReadyListen, s.sut.getState())
+}
+
+func (s *HelloSuite) prolongationRequest() []byte {
+	msg, err := s.sut.shipMessage(model.MsgTypeControl, model.ConnectionHello{
+		ConnectionHello: model.ConnectionHelloType{
+			Phase:               model.ConnectionHelloPhaseTypePending,
+			ProlongationRequest: util.Ptr(true),
+		},
+	})
+	assert.Nil(s.T(), err)
+
+	return msg
+}
+
+// assertAnnouncedWaiting checks that the last SME "hello" update announced the given time left
+func (s *HelloSuite) assertAnnouncedWaiting(remaining time.Duration) {
+	var hello model.ConnectionHello
+	assert.Nil(s.T(), s.sut.processShipJsonMessage(s.lastMessage(), &hello))
+	assert.Equal(s.T(), model.ConnectionHelloPhaseTypeReady, hello.ConnectionHello.Phase)
+	if assert.NotNil(s.T(), hello.ConnectionHello.Waiting) {
+		announced := time.Duration(*hello.ConnectionHello.Waiting) * time.Millisecond
+		assert.InDelta(s.T(), remaining, announced, float64(100*time.Millisecond))
+	}
+}
+
+// SHIP 13.4.4.1.3: an accepted prolongation request increases the Wait-For-Ready-Timer by
+// T_hello_inc, at least two requests are accepted, and each update announces the time left
+func (s *HelloSuite) Test_ReadyListen_Prolongation_IncreasesTimer() {
+	s.sut.setState(model.SmeHelloStateReadyInit, nil) // inits the timer
+	s.sut.setState(model.SmeHelloStateReadyListen, nil)
+	s.mockShipInfo.EXPECT().AllowWaitingForTrust(mock.Anything).Return(true)
+
+	initial, ok := s.sut.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
+	assert.True(s.T(), ok)
+
+	for request := 1; request <= 2; request++ {
+		s.sut.handleState(false, s.prolongationRequest())
+
+		remaining, ok := s.sut.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
+		assert.True(s.T(), ok)
+		assert.InDelta(s.T(), initial+time.Duration(request)*getHelloIncTimeout(), remaining,
+			float64(100*time.Millisecond), "request %d must increase the timer, not restart it", request)
+		s.assertAnnouncedWaiting(remaining)
+	}
+
+	assert.Equal(s.T(), model.SmeHelloStateReadyListen, s.sut.getState())
+}
+
+// A prolongation request that is not accepted leaves the timer as it is, and the update still
+// announces the time left
+func (s *HelloSuite) Test_ReadyListen_Prolongation_NotAccepted_KeepsTimer() {
+	s.sut.setState(model.SmeHelloStateReadyInit, nil) // inits the timer
+	s.sut.setState(model.SmeHelloStateReadyListen, nil)
+	s.mockShipInfo.EXPECT().AllowWaitingForTrust(mock.Anything).Return(false)
+
+	before, _ := s.sut.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
+	s.sut.handleState(false, s.prolongationRequest())
+
+	after, ok := s.sut.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
+	assert.True(s.T(), ok)
+	assert.LessOrEqual(s.T(), after, before)
+	assert.InDelta(s.T(), before, after, float64(100*time.Millisecond))
+	s.assertAnnouncedWaiting(after)
 }
 
 func (s *HelloSuite) Test_ReadyListen_Abort() {

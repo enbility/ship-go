@@ -44,11 +44,12 @@ type ShipConnection struct {
 	// SendProlongationRequest SHIP 13.4.4.1.3: Local timer to request for prolongation at the communication partner in time (i.e. before the communication partner's Wait-For-Ready-Timer expires).
 	//
 	// ProlongationRequestReply SHIP 13.4.4.1.3: Detection of response timeout on prolongation request.
-	handshakeTimer        *time.Timer
-	handshakeTimerType    timeoutTimerType
-	handshakeTimerMux     sync.Mutex
-	handshakeTimerDone    chan struct{} // Signals when timer goroutine has completed
-	handshakeTimerRunning bool          // For test assertions only
+	handshakeTimer         *time.Timer
+	handshakeTimerType     timeoutTimerType
+	handshakeTimerMux      sync.Mutex
+	handshakeTimerDone     chan struct{} // Signals when timer goroutine has completed
+	handshakeTimerRunning  bool          // For test assertions only
+	handshakeTimerDeadline time.Time     // When the running timer expires, to tell the time left on it
 
 	lastReceivedWaitingValue time.Duration // required for Prolong-Request-Reply-Timer
 
