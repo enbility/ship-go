@@ -214,6 +214,9 @@ func (c *ShipConnection) handleState(timeout bool, message []byte) {
 		c.handshakePin_smePinStateCheckListen(message)
 
 	case model.SmePinStateCheckOk:
+		// SHIP 13.4.4.3: PIN verification succeeded, so both sides enable connection data exchange
+		c.enterConnectionDataExchange()
+		// SHIP 13.4.6.2: access methods identification runs in parallel to connection data exchange
 		c.handshakeAccessMethods_Init()
 
 	// connection data exchange (SHIP 13.4.5), with access methods identification (SHIP 13.4.6)
@@ -281,6 +284,16 @@ func (c *ShipConnection) endDataExchangeWithError(err error) {
 	c.CloseConnection(true, 0, err.Error())
 
 	c.setState(model.SmeStateError, err)
+}
+
+// enterConnectionDataExchange hands the connection to the application, so SPINE data is processed
+// from now on without waiting for the access methods exchange (SHIP IG Transport and Connectivity
+// 2.1 "Immediate readiness"). This is the only place the application is handed the connection.
+//
+// Incoming SPINE data is also only delivered in a data exchange state. The first one,
+// SmeAccessMethodsRequest, is set by handshakeAccessMethods_Init right after this.
+func (c *ShipConnection) enterConnectionDataExchange() {
+	c.setDataReader(c.infoProvider.SetupRemoteService(c.remoteSKI, c))
 }
 
 // isDataExchangeState reports whether a state belongs to SHIP connection data exchange (SHIP

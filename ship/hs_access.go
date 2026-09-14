@@ -14,9 +14,9 @@ import (
 //
 // It is not part of the handshake. SHIP 13.4.6.2: the state "can run in parallel to connection
 // data exchange" and "MUST NOT be entered before connection data exchange is entered". Connection
-// data exchange is entered once PIN verification succeeded (SHIP 13.4.4.3), which is when
-// handshakeAccessMethods_Init runs, and SPINE data is processed from then on without waiting for
-// the access methods exchange (SHIP IG Transport and Connectivity 2.1).
+// data exchange is entered once PIN verification succeeded (SHIP 13.4.4.3), see
+// enterConnectionDataExchange, and SPINE data is processed from then on without waiting for the
+// access methods exchange (SHIP IG Transport and Connectivity 2.1).
 //
 // ship-go always requests the remote's access methods, and only reports the connection as
 // complete once the reply arrived: it carries the remote SHIP ID, the primary identifier in the
@@ -24,7 +24,8 @@ import (
 // established for. The recipient of the request SHALL reply (SHIP 13.4.6.2.1), so a remote that
 // does not reply within getAccessMethodsTimeout() is disconnected.
 
-// handshakeAccessMethods_Init enters connection data exchange once PIN verification succeeded
+// handshakeAccessMethods_Init requests the remote's access methods, right after connection data
+// exchange was entered
 func (c *ShipConnection) handshakeAccessMethods_Init() {
 	accessMethodsRequest := model.AccessMethodsRequest{
 		AccessMethodsRequest: model.AccessMethodsRequestType{},
@@ -34,11 +35,6 @@ func (c *ShipConnection) handshakeAccessMethods_Init() {
 		c.endHandshakeWithError(err)
 		return
 	}
-
-	// SHIP IG Transport and Connectivity 2.1 "Immediate readiness": set up SPINE processing now,
-	// without waiting for the remote's reply to our request. This is the only place the
-	// application is handed the connection.
-	c.setDataReader(c.infoProvider.SetupRemoteService(c.remoteSKI, c))
 
 	c.setHandshakeTimer(timeoutTimerTypeWaitForReady, getAccessMethodsTimeout())
 	c.setState(model.SmeAccessMethodsRequest, nil)

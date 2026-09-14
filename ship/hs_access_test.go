@@ -187,6 +187,11 @@ func (s *AccessSuite) Test_Init_SendError() {
 	expectedErr := errors.New("websocket write failed during init")
 	s.mockWSWrite.EXPECT().WriteMessageToWebsocketConnection(mock.Anything).Return(expectedErr).Once()
 
+	// Connection data exchange is entered before the access methods request is sent, so the
+	// application has already been handed the connection when that send fails
+	reader := mocks.NewShipConnectionDataReaderInterface(s.T())
+	s.mockShipInfo.EXPECT().SetupRemoteService(mock.Anything, mock.Anything).Return(reader).Once()
+
 	s.sut.handleState(false, nil)
 
 	// Verify state changed to error due to sendShipModel failure in handshakeAccessMethods_Init

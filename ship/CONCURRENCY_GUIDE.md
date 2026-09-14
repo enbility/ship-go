@@ -113,7 +113,7 @@ func (c *ShipConnection) getHandshakeTimerRunning() bool {
 
 ## SPINE Data Reader
 
-`dataReader` is set once, from `handshakeAccessMethods_Init`, when the connection enters SHIP
+`dataReader` is set once, from `enterConnectionDataExchange`, when the connection enters SHIP
 connection data exchange (SHIP 13.4.5). The websocket reader goroutine reads it for every incoming
 SPINE message, so both sides go through `setDataReader()` / `getDataReader()` under `mux`.
 
