@@ -53,6 +53,10 @@ type ShipConnection struct {
 
 	lastReceivedWaitingValue time.Duration // required for Prolong-Request-Reply-Timer
 
+	// prolongation requests accepted in state READY. Only the websocket read loop handles incoming
+	// messages, so this needs no lock.
+	acceptedProlongationRequests int
+
 	shutdownOnce sync.Once
 
 	// buffer for SPINE messages that came in before the handshake was completed

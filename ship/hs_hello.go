@@ -51,8 +51,9 @@ func (c *ShipConnection) handshakeHello_ReadyListen(timeout bool, message []byte
 			// SHIP 13.4.4.1.3, common procedure to decide an incoming prolongation request: an
 			// accepted request increases the Wait-For-Ready-Timer by T_hello_inc. Restarting it
 			// would lose the time that was left.
-			if c.infoProvider.AllowWaitingForTrust(c.remoteSKI) {
-				c.extendHandshakeTimer(timeoutTimerTypeWaitForReady, getHelloIncTimeout())
+			if c.acceptProlongationRequest() &&
+				c.extendHandshakeTimer(timeoutTimerTypeWaitForReady, getHelloIncTimeout()) {
+				c.acceptedProlongationRequests++
 			}
 
 			// common procedure for sending an SME "hello" update: announce the current value of
@@ -81,6 +82,34 @@ func (c *ShipConnection) handshakeHello_ReadyListen(timeout bool, message []byte
 	}
 
 	c.handleState(false, nil)
+}
+
+// acceptProlongationRequest decides an incoming prolongation request in state READY.
+//
+// SHIP 13.4.4.1.3 requires accepting at least two prolongation requests and sets no maximum, but
+// leaves every further one to the SME User ("Otherwise: No specific action required"). The first
+// two are therefore accepted unconditionally, even when the application does not allow waiting
+// for trust: in state READY that request comes from a peer that needs more time, not from this
+// node waiting for its own trust decision.
+//
+// Each accepted request adds T_hello_inc, so accepting every further one would let a burst push
+// the deadline arbitrarily far out. A further request is only accepted while at most T_hello_init
+// is left, and while the application still allows waiting: a peer asking in time before the
+// deadline is served, and the timer never exceeds T_hello_init + 2 * T_hello_inc.
+func (c *ShipConnection) acceptProlongationRequest() bool {
+	// SHIP 13.4.4.1.3: the first two prolongation requests SHALL be accepted
+	if c.acceptedProlongationRequests < helloProlongationRequestsAlwaysAccepted {
+		return true
+	}
+
+	// any further one is the SME User's choice: only while at most T_hello_init is left, and while
+	// the application still allows waiting
+	remaining, running := c.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
+	if !running || remaining > getHelloInitTimeout() {
+		return false
+	}
+
+	return c.infoProvider.AllowWaitingForTrust(c.remoteSKI)
 }
 
 func (c *ShipConnection) handshakeHello_ReadyTimeout() {

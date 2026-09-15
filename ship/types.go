@@ -24,6 +24,9 @@ const (
 	tHelloProlongWaitingGap = 15 * time.Second
 )
 
+// SHIP 13.4.4.1.3: an SME User SHALL accept at least two prolongation requests
+const helloProlongationRequestsAlwaysAccepted = 2
+
 // Variables that can be overridden in tests
 var (
 	tHelloProlongMin    = 1 * time.Second  // Minimum prolongation time

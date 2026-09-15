@@ -199,7 +199,7 @@ func (s *HelloSuite) Test_ReadyListen_Prolongation() {
 	s.sut.setState(model.SmeHelloStateReadyInit, nil) // inits the timer
 	s.sut.setState(model.SmeHelloStateReadyListen, nil)
 
-	s.mockShipInfo.EXPECT().AllowWaitingForTrust(mock.Anything).Return(true)
+	s.mockShipInfo.EXPECT().AllowWaitingForTrust(mock.Anything).Return(true).Maybe()
 
 	helloMsg := model.ConnectionHello{
 		ConnectionHello: model.ConnectionHelloType{
@@ -241,11 +241,12 @@ func (s *HelloSuite) assertAnnouncedWaiting(remaining time.Duration) {
 }
 
 // SHIP 13.4.4.1.3: an accepted prolongation request increases the Wait-For-Ready-Timer by
-// T_hello_inc, at least two requests are accepted, and each update announces the time left
+// T_hello_inc, the first two requests are accepted even when sent back to back, and each update
+// announces the time left
 func (s *HelloSuite) Test_ReadyListen_Prolongation_IncreasesTimer() {
 	s.sut.setState(model.SmeHelloStateReadyInit, nil) // inits the timer
 	s.sut.setState(model.SmeHelloStateReadyListen, nil)
-	s.mockShipInfo.EXPECT().AllowWaitingForTrust(mock.Anything).Return(true)
+	s.mockShipInfo.EXPECT().AllowWaitingForTrust(mock.Anything).Return(true).Maybe()
 
 	initial, ok := s.sut.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
 	assert.True(s.T(), ok)
@@ -263,12 +264,40 @@ func (s *HelloSuite) Test_ReadyListen_Prolongation_IncreasesTimer() {
 	assert.Equal(s.T(), model.SmeHelloStateReadyListen, s.sut.getState())
 }
 
-// A prolongation request that is not accepted leaves the timer as it is, and the update still
-// announces the time left
-func (s *HelloSuite) Test_ReadyListen_Prolongation_NotAccepted_KeepsTimer() {
+// SHIP 13.4.4.1.3: the first two prolongation requests are accepted even when the application does
+// not allow waiting for trust
+func (s *HelloSuite) Test_ReadyListen_Prolongation_FirstTwoAcceptedWithoutWaitingForTrust() {
 	s.sut.setState(model.SmeHelloStateReadyInit, nil) // inits the timer
 	s.sut.setState(model.SmeHelloStateReadyListen, nil)
-	s.mockShipInfo.EXPECT().AllowWaitingForTrust(mock.Anything).Return(false)
+	s.mockShipInfo.EXPECT().AllowWaitingForTrust(mock.Anything).Return(false).Maybe()
+
+	initial, ok := s.sut.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
+	assert.True(s.T(), ok)
+
+	for request := 1; request <= 2; request++ {
+		s.sut.handleState(false, s.prolongationRequest())
+
+		remaining, ok := s.sut.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
+		assert.True(s.T(), ok)
+		assert.InDelta(s.T(), initial+time.Duration(request)*getHelloIncTimeout(), remaining,
+			float64(100*time.Millisecond), "request %d must be accepted", request)
+		s.assertAnnouncedWaiting(remaining)
+	}
+}
+
+// Beyond the first two, a prolongation request is declined while the application does not allow
+// waiting for trust: the timer is left as it is, and the update still announces the time left.
+// The application is only asked about that request, not about the first two.
+func (s *HelloSuite) Test_ReadyListen_Prolongation_DeclinedWhenWaitingForTrustNotAllowed() {
+	s.sut.setState(model.SmeHelloStateReadyInit, nil) // inits the timer
+	s.sut.setState(model.SmeHelloStateReadyListen, nil)
+	s.mockShipInfo.EXPECT().AllowWaitingForTrust(mock.Anything).Return(false).Once()
+
+	s.sut.handleState(false, s.prolongationRequest())
+	s.sut.handleState(false, s.prolongationRequest())
+
+	// stands in for time passing until the deadline is near, so only the application can decline
+	s.sut.setHandshakeTimer(timeoutTimerTypeWaitForReady, getHelloInitTimeout()/4)
 
 	before, _ := s.sut.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
 	s.sut.handleState(false, s.prolongationRequest())
@@ -278,6 +307,52 @@ func (s *HelloSuite) Test_ReadyListen_Prolongation_NotAccepted_KeepsTimer() {
 	assert.LessOrEqual(s.T(), after, before)
 	assert.InDelta(s.T(), before, after, float64(100*time.Millisecond))
 	s.assertAnnouncedWaiting(after)
+}
+
+// A burst of prolongation requests is capped: the first two are accepted as SHIP 13.4.4.1.3
+// requires, the rest are declined while more than T_hello_init is left, and every update still
+// announces the time left
+func (s *HelloSuite) Test_ReadyListen_Prolongation_BurstIsCapped() {
+	s.sut.setState(model.SmeHelloStateReadyInit, nil) // inits the timer
+	s.sut.setState(model.SmeHelloStateReadyListen, nil)
+	s.mockShipInfo.EXPECT().AllowWaitingForTrust(mock.Anything).Return(true).Maybe()
+
+	initial, ok := s.sut.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
+	assert.True(s.T(), ok)
+
+	for request := 1; request <= 5; request++ {
+		s.sut.handleState(false, s.prolongationRequest())
+
+		remaining, _ := s.sut.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
+		s.assertAnnouncedWaiting(remaining)
+	}
+
+	remaining, ok := s.sut.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
+	assert.True(s.T(), ok)
+	assert.InDelta(s.T(), initial+2*getHelloIncTimeout(), remaining, float64(100*time.Millisecond),
+		"only the first two requests of a burst may increase the timer")
+	assert.Equal(s.T(), model.SmeHelloStateReadyListen, s.sut.getState())
+}
+
+// Once no more than T_hello_init is left, a further prolongation request is accepted again
+func (s *HelloSuite) Test_ReadyListen_Prolongation_AcceptedAgainWhenTimeRunsLow() {
+	s.sut.setState(model.SmeHelloStateReadyInit, nil) // inits the timer
+	s.sut.setState(model.SmeHelloStateReadyListen, nil)
+	s.mockShipInfo.EXPECT().AllowWaitingForTrust(mock.Anything).Return(true)
+
+	s.sut.handleState(false, s.prolongationRequest())
+	s.sut.handleState(false, s.prolongationRequest())
+
+	// stands in for time passing until the deadline is near
+	left := getHelloInitTimeout() / 4
+	s.sut.setHandshakeTimer(timeoutTimerTypeWaitForReady, left)
+
+	s.sut.handleState(false, s.prolongationRequest())
+
+	remaining, ok := s.sut.handshakeTimerRemaining(timeoutTimerTypeWaitForReady)
+	assert.True(s.T(), ok)
+	assert.InDelta(s.T(), left+getHelloIncTimeout(), remaining, float64(100*time.Millisecond))
+	s.assertAnnouncedWaiting(remaining)
 }
 
 func (s *HelloSuite) Test_ReadyListen_Abort() {
