@@ -1602,7 +1602,7 @@ func (suite *HubPairingQRTestSuite) TestGeneratePairingQR_ValidSecret() {
 	assert.True(suite.T(), strings.HasSuffix(qrString, "ENDSHIP;"), "QR should end with ENDSHIP;")
 
 	// Verify contains required fields
-	assert.Contains(suite.T(), qrString, "SKI:hubtestski;")
+	assert.Contains(suite.T(), qrString, "SKI:hubt ests ki;")
 	assert.Contains(suite.T(), qrString, "ID:i:123_u:hub-test;")
 
 	// Verify contains FPH256 field (SHA-256 fingerprint should be 64 uppercase hex chars)
@@ -1687,7 +1687,7 @@ func (suite *HubPairingQRTestSuite) TestGeneratePairingQR_EmptySecret() {
 	assert.NotEmpty(suite.T(), qrString)
 	assert.True(suite.T(), strings.HasPrefix(qrString, "SHIP;"), "Should start with SHIP;")
 	assert.True(suite.T(), strings.HasSuffix(qrString, "ENDSHIP;"), "Should end with ENDSHIP;")
-	assert.Contains(suite.T(), qrString, "SKI:hubtestski", "Should contain the SKI")
+	assert.Contains(suite.T(), qrString, "SKI:hubt ests ki", "Should contain the SKI")
 	assert.Contains(suite.T(), qrString, "ID:i:123_u:hub-test", "Should contain the ship ID")
 	assert.NotContains(suite.T(), qrString, "SPSEC")
 }
@@ -1706,7 +1706,7 @@ func (suite *HubPairingQRTestSuite) TestGeneratePairingQR_NilSecret() {
 	assert.NotEmpty(suite.T(), qrString)
 	assert.True(suite.T(), strings.HasPrefix(qrString, "SHIP;"), "Should start with SHIP;")
 	assert.True(suite.T(), strings.HasSuffix(qrString, "ENDSHIP;"), "Should end with ENDSHIP;")
-	assert.Contains(suite.T(), qrString, "SKI:hubtestski", "Should contain the SKI")
+	assert.Contains(suite.T(), qrString, "SKI:hubt ests ki", "Should contain the SKI")
 	assert.Contains(suite.T(), qrString, "ID:i:123_u:hub-test", "Should contain the ship ID")
 	assert.NotContains(suite.T(), qrString, "SPSEC")
 }
@@ -1745,6 +1745,40 @@ func (suite *HubPairingQRTestSuite) TestGeneratePairingQR_InvalidCertificate() {
 	assert.Error(suite.T(), err)
 	assert.Empty(suite.T(), qrString)
 	assert.True(suite.T(), errors.Is(err, api.ErrInvalidCertificate), "Should return ErrInvalidCertificate for invalid certificates")
+}
+
+// =============================================================================
+// QR CODE SKI FORMATTING TESTS
+// =============================================================================
+
+func TestFormatSKIForQRCode(t *testing.T) {
+	tests := []struct {
+		name     string
+		ski      string
+		expected string
+	}{
+		{
+			name:     "standard 40 character SKI",
+			ski:      "0357c3d27afc90465d6fcfe212c66c11342c69c3",
+			expected: "0357 c3d2 7afc 9046 5d6f cfe2 12c6 6c11 342c 69c3",
+		},
+		{
+			name:     "empty string",
+			ski:      "",
+			expected: "",
+		},
+		{
+			name:     "length not divisible by four keeps a shorter trailing group",
+			ski:      "0357c3d27",
+			expected: "0357 c3d2 7",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, formatSKIForQRCode(tt.ski))
+		})
+	}
 }
 
 // =============================================================================

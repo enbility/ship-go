@@ -661,7 +661,7 @@ func (h *Hub) GeneratePairingQR() (string, error) {
 
 // generateStandardShipQR generates the standard SHIP QR format
 func (h *Hub) generateStandardShipQR() (string, error) {
-	ski := h.localService.SKI()
+	ski := formatSKIForQRCode(h.localService.SKI())
 	identifier := h.localService.ShipID()
 	optionals := h.buildOptionalMetadata()
 
@@ -686,7 +686,7 @@ func (h *Hub) generatePairingServiceQR(secret api.PairingSecret) (string, error)
 	}
 
 	// Get required fields
-	ski := h.localService.SKI()
+	ski := formatSKIForQRCode(h.localService.SKI())
 	shipID := h.localService.ShipID()
 
 	// Encode secret as uppercase hex
@@ -729,6 +729,22 @@ func (h *Hub) buildOptionalMetadata() string {
 	}
 
 	return optionals
+}
+
+// formatSKIForQRCode inserts a space every 4 characters, as required by SHIP Spec 1.1.0
+// section 12.7 (see also section 12.2): the SKI is encoded as a non-prefixed hexadecimal
+// string with an additional space every 4 hexadecimal digits. The case of the input is
+// preserved, as the spec allows upper or lower case letters.
+func formatSKIForQRCode(ski string) string {
+	var result strings.Builder
+	for i, char := range ski {
+		if i > 0 && i%4 == 0 {
+			result.WriteByte(' ')
+		}
+		result.WriteRune(char)
+	}
+
+	return result.String()
 }
 
 // safeQRCodeKeyValue returns a safe to use key value pair for the QR code text in the proper format
