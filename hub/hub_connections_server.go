@@ -17,7 +17,14 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// verifyPeerCertificate validates the peer certificate for WebSocket connections
+// verifyPeerCertificate validates the peer certificate for WebSocket connections.
+//
+// This is the SHIP-TS-SEC-01/02 enforcement point for the server role (TC_SHIP_SEC_001 §4.4.1
+// step 1, TC_SHIP_SEC_002 §4.4.2 step 2): cert.SkiFromCertificate recomputes SHA-1 over the
+// public key and rejects the certificate if the SKI field does not match it, so a spoofed
+// client certificate fails here - while the TLS handshake is still running - and crypto/tls
+// answers with a bad_certificate alert instead of completing the WebSocket upgrade. There is
+// no need to repeat that comparison in this function.
 func (h *Hub) verifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 	skiFound := false
 	var validCert *x509.Certificate

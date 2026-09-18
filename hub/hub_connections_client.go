@@ -42,12 +42,20 @@ func (h *Hub) validateConnectionLimit() error {
 	return nil
 }
 
+// errCertificateRejected marks a dial that failed because the peer's certificate was
+// rejected during the TLS handshake (SHIP 12.2, SHIP-TS-SEC-01/02).
+var errCertificateRejected = errors.New("peer certificate rejected during TLS handshake")
+
 // createWebSocketDialer creates a configured WebSocket dialer.
+//
+// remoteService carries the SKI and/or fingerprint trusted for the peer being dialled. The peer's
+// certificate is verified against them during the TLS handshake, so a peer that fails is never
+// admitted to the connection; without them, every certificate is rejected.
 //
 // When a dialState is passed, the raw socket of each attempt is handed to it so that an
 // incoming connection to the same SKI can abort this attempt synchronously — see
 // dialState and SHIP 12.2.2.
-func (h *Hub) createWebSocketDialer(state *dialState) *websocket.Dialer {
+func (h *Hub) createWebSocketDialer(state *dialState, remoteService *api.ServiceDetails) *websocket.Dialer {
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 5 * time.Second,
@@ -57,6 +65,44 @@ func (h *Hub) createWebSocketDialer(state *dialState) *websocket.Dialer {
 			InsecureSkipVerify: true, // #nosec G402
 			// SHIP 9.1: the ciphers are reported insecure but are defined to be used by SHIP
 			CipherSuites: cert.CipherSuites, // #nosec G402
+
+			// SHIP 12.2 / EEBus SHIP TestSpec SHIP-TS-SEC-01+02 (TC_SHIP_SEC_001 §4.4.1,
+			// TC_SHIP_SEC_002 §4.4.2): a spoofed certificate - SKI field != SHA-1(public key),
+			// or not matching the SKI or fingerprint trusted for this peer - must be rejected by
+			// aborting the TLS handshake. crypto/tls calls this hook while processing the server
+			// Certificate message, so an error here sends a bad_certificate alert before
+			// gorilla/websocket writes "GET /ship/". Running the same check after the upgrade
+			// (connectFoundService) is too late: the handshake has then already reached
+			// "101 Switching Protocols".
+			// The fingerprint matters as much as the SKI: after SHIP Pairing (parType=fpSha256)
+			// the SKI of the trusted entry is taken from the mDNS announcement (hub_mdns.go), so
+			// only the fingerprint authenticates the peer.
+			// InsecureSkipVerify above is not a weakening - SHIP 12.1 certificates are
+			// self-signed, so there is no chain to validate and this hook is the trust decision.
+			VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+				var expectedSKI, expectedFingerprint string
+				if remoteService != nil {
+					expectedSKI, expectedFingerprint = remoteService.SKI(), remoteService.Fingerprint()
+				}
+				// without a trusted SKI or fingerprint there is nothing to verify the peer against
+				if expectedSKI == "" && expectedFingerprint == "" {
+					return fmt.Errorf("%w: no trusted SKI or fingerprint for the peer", errCertificateRejected)
+				}
+
+				certs := make([]*x509.Certificate, 0, len(rawCerts))
+				for _, raw := range rawCerts {
+					parsed, err := x509.ParseCertificate(raw)
+					if err != nil {
+						return fmt.Errorf("%w: %w", errCertificateRejected, err)
+					}
+					certs = append(certs, parsed)
+				}
+
+				if result := validateRemoteCertificate(certs, expectedSKI, expectedFingerprint); !result.Valid {
+					return fmt.Errorf("%w: %w", errCertificateRejected, result.Error)
+				}
+				return nil
+			},
 		},
 		Subprotocols: []string{api.ShipWebsocketSubProtocol},
 	}
@@ -128,8 +174,8 @@ func validateRemoteCertificate(remoteCerts []*x509.Certificate, expectedSKI, exp
 
 // establishWebSocketConnection creates and establishes a WebSocket connection
 // This is a focused function that handles the connection establishment details
-func (h *Hub) establishWebSocketConnection(host, port, path string, state *dialState) (*websocket.Conn, error) {
-	dialer := h.createWebSocketDialer(state)
+func (h *Hub) establishWebSocketConnection(host, port, path string, state *dialState, remoteService *api.ServiceDetails) (*websocket.Conn, error) {
+	dialer := h.createWebSocketDialer(state, remoteService)
 
 	hostPort := net.JoinHostPort(host, port)
 	address := fmt.Sprintf("wss://%s%s", hostPort, path)
@@ -141,6 +187,12 @@ func (h *Hub) establishWebSocketConnection(host, port, path string, state *dialS
 
 	// an incoming connection took this attempt over, so do not open a second socket
 	if state != nil && state.wasSuperseded() {
+		return nil, err
+	}
+
+	// A rejected certificate is a property of the peer, not of the URL path - retrying
+	// without the path would only repeat the same failed handshake.
+	if errors.Is(err, errCertificateRejected) {
 		return nil, err
 	}
 
@@ -194,7 +246,7 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 	logging.Log().Debugf("initiating connection to %s at %s:%s%s", remoteService.SKI(), host, port, path)
 
 	// Establish WebSocket connection
-	conn, err := h.establishWebSocketConnection(host, port, path, state)
+	conn, err := h.establishWebSocketConnection(host, port, path, state, remoteService)
 	if err != nil {
 		// SHIP 12.2.2: an incoming connection took this attempt over while it was in
 		// flight. Not a failure - no retry, no backoff - as long as that connection
@@ -205,7 +257,7 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 		return err
 	}
 
-	// Validate remote certificate
+	// Already validated during the TLS handshake; this also yields the remote identifiers used below
 	tlsConn := conn.UnderlyingConn().(*tls.Conn)
 	remoteCerts := tlsConn.ConnectionState().PeerCertificates
 	validationResult := validateRemoteCertificate(remoteCerts, remoteService.SKI(), remoteService.Fingerprint())
