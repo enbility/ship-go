@@ -178,12 +178,14 @@ func (c *ShipConnection) abortProtocolHandshake(err model.MessageProtocolHandsha
 	c.stopTimerSafe()
 
 	msg := model.MessageProtocolHandshakeError{
-		Error: err,
+		MessageProtocolHandshakeError: model.MessageProtocolHandshakeErrorType{
+			Error: err,
+		},
 	}
 
 	_ = c.sendShipModel(model.MsgTypeControl, msg)
 
-	c.setState(model.SmeStateError, fmt.Errorf("%w with remote SKI %s: %v", 
+	c.setState(model.SmeStateError, fmt.Errorf("%w with remote SKI %s: %v",
 		api.ErrInvalidHandshake, c.remoteSKI, err))
 
 	c.CloseConnection(false, 0, "")
