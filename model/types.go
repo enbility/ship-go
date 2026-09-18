@@ -39,7 +39,7 @@ const (
 	SmeProtHStateTimeout              ShipMessageExchangeState = 23
 	SmeProtHStateClientOk             ShipMessageExchangeState = 24
 	SmeProtHStateServerOk             ShipMessageExchangeState = 25
-	// Connection PIN State 13.4.5
+	// Connection State PIN Verification SHIP 13.4.4.3
 	SmePinStateCheckInit     ShipMessageExchangeState = 26
 	SmePinStateCheckListen   ShipMessageExchangeState = 27
 	SmePinStateCheckError    ShipMessageExchangeState = 28
@@ -50,13 +50,17 @@ const (
 	SmePinStateAskProcess    ShipMessageExchangeState = 33
 	SmePinStateAskRestricted ShipMessageExchangeState = 34
 	SmePinStateAskOk         ShipMessageExchangeState = 35
-	// ConnectionAccess Methods Identification 13.4.6
+	// Connection data exchange (SHIP 13.4.5) is entered once PIN verification succeeded. Access
+	// methods identification (SHIP 13.4.6) runs in parallel to it, so the following three states
+	// are all connection data exchange.
+
+	// Access Methods Identification SHIP 13.4.6: our access methods request is pending
 	SmeAccessMethodsRequest ShipMessageExchangeState = 36
 
-	// Handshake approved on both ends
+	// The remote's access methods reply was accepted
 	SmeStateApproved ShipMessageExchangeState = 37
 
-	// Handshake process is successfully completed
+	// Connection is established: data exchange, with the remote's SHIP ID verified
 	SmeStateComplete ShipMessageExchangeState = 38
 
 	// Handshake ended with an error

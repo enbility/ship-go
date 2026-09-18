@@ -116,6 +116,8 @@ func (s *PinSuite) Test_CheckListen_Failure() {
 }
 
 func (s *PinSuite) Test_CheckListen_None() {
+	reader := mocks.NewShipConnectionDataReaderInterface(s.T())
+	s.mockShipInfo.EXPECT().SetupRemoteService(mock.Anything, mock.Anything).Return(reader)
 	s.sut.setState(model.SmePinStateCheckListen, nil)
 
 	pinState := model.ConnectionPinState{

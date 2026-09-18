@@ -22,6 +22,10 @@ func getCmiTimeout() time.Duration {
 	return 500 * time.Millisecond // Production: 10s
 }
 
+func getAccessMethodsTimeout() time.Duration {
+	return 500 * time.Millisecond // Production: 60s
+}
+
 // Override timer variables for tests
 func init() {
 	tAbortDelay = 100 * time.Millisecond

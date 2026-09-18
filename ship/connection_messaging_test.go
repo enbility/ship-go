@@ -35,36 +35,28 @@ func (s *ConnectionMessagingSuite) TestShipModelFromMessage() {
 }
 
 func (s *ConnectionMessagingSuite) TestHandleIncomingShipMessage() {
-	modelData := model.ShipData{}
+	spineData := `{"datagram":{}}`
+
+	modelData := model.ShipData{
+		Data: model.DataType{
+			Payload: []byte(spineData),
+		},
+	}
 	jsonData, err := json.Marshal(modelData)
 	assert.Nil(s.T(), err)
 
-	msg := []byte{0}
+	msg := []byte{model.MsgTypeData}
 	msg = append(msg, jsonData...)
 
-	s.sut.HandleIncomingWebsocketMessage(msg)
-
-	spineData := `{"datagram":{}}`
-	jsonData = []byte(spineData)
-
-	modelData = model.ShipData{
-		Data: model.DataType{
-			Payload: jsonData,
-		},
-	}
-	jsonData, err = json.Marshal(modelData)
-	assert.Nil(s.T(), err)
-
-	msg = []byte{0}
-	msg = append(msg, jsonData...)
-
-	s.sut.HandleIncomingWebsocketMessage(msg)
-
+	// outside connection data exchange a SPINE message must be dropped, not crash
 	s.sut.dataReader = s.shipConnectionReader
-
-	s.sut.processBufferedSpineMessages()
-
 	s.sut.HandleIncomingWebsocketMessage(msg)
+	s.shipConnectionReader.AssertNumberOfCalls(s.T(), "HandleShipPayloadMessage", 0)
+
+	// in connection data exchange, SPINE messages are delivered directly
+	s.sut.smeState = model.SmeAccessMethodsRequest
+	s.sut.HandleIncomingWebsocketMessage(msg)
+	s.shipConnectionReader.AssertNumberOfCalls(s.T(), "HandleShipPayloadMessage", 1)
 }
 
 func (s *ConnectionMessagingSuite) TestReportConnectionError() {

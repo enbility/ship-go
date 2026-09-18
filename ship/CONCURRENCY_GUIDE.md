@@ -4,14 +4,13 @@ This document provides guidelines for thread-safe programming in the SHIP connec
 
 ## Overview
 
-The ShipConnection handles the data connection and coordinates SHIP and SPINE message I/O. It manages handshake state machines, timer operations, and message buffering in a concurrent environment.
+The ShipConnection handles the data connection and coordinates SHIP and SPINE message I/O. It manages handshake state machines and timer operations in a concurrent environment.
 
 ## Lock Structure
 
 The ShipConnection uses multiple mutexes to protect different aspects of the connection:
 
-- `mux` - Main connection state mutex  
-- `bufferMux` - SPINE message buffer protection
+- `mux` - Main connection state mutex (SHIP state, error, and the SPINE `dataReader`)
 - `handshakeTimerMux` - Handshake timer state protection
 - `shutdownOnce` - Ensures single shutdown execution
 
@@ -112,20 +111,17 @@ func (c *ShipConnection) getHandshakeTimerRunning() bool {
 }
 ```
 
-## Buffer Management
+## SPINE Data Reader
 
-SPINE message buffering uses a separate mutex to avoid contention:
+`dataReader` is set once, from `enterConnectionDataExchange`, when the connection enters SHIP
+connection data exchange (SHIP 13.4.5). The websocket reader goroutine reads it for every incoming
+SPINE message, so both sides go through `setDataReader()` / `getDataReader()` under `mux`.
 
-```go
-func (c *ShipConnection) HandleIncomingWebsocketMessage(message []byte) {
-    c.bufferMux.Lock()
-    c.spineBuffer = append(c.spineBuffer, message)
-    c.bufferMux.Unlock()
-    
-    // Process buffer without holding lock
-    c.processBufferedMessages()
-}
-```
+`SetupRemoteService` is called without holding `mux`: the application may write SPINE messages
+from inside the callback, which re-enters the connection.
+
+Incoming SPINE data is only delivered while `isDataExchangeState(getState())` holds and the reader
+is non-nil. A nil reader is valid and means the application does not process SPINE data.
 
 ## State Query Patterns
 
@@ -242,7 +238,6 @@ conn.CloseConnection(false, 4001, "reason")
 - Multiple goroutines can query state simultaneously
 
 ### Memory Management
-- Buffer operations use separate mutex
 - No locks held during memory allocations
 - Timer goroutines clean up automatically
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/enbility/ship-go/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -161,7 +162,7 @@ func (s *ConnectionMessagingCoverageSuite) Test_HandleIncomingWebsocketMessage_E
 		},
 		{
 			name:    "spine_message_without_reader",
-			message: append([]byte{0}, []byte(`{"datagram": {"data": {"payload": "test"}}}`)...),
+			message: append([]byte{model.MsgTypeData}, []byte(`{"datagram": {"data": {"payload": "test"}}}`)...),
 		},
 	}
 

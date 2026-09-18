@@ -53,6 +53,33 @@ func (s *ConnectionLifecycleSuite) TestCloseConnection_StateComplete_3() {
 	assert.Equal(s.T(), model.SmeStateError, state)
 }
 
+func (s *ConnectionLifecycleSuite) sentShipMessage() []byte {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+
+	return s.sentMessage
+}
+
+// SHIP 13.4.7 termination applies from the moment connection data exchange is entered, which
+// includes access methods identification (SHIP 13.4.6.2)
+func (s *ConnectionLifecycleSuite) TestCloseConnection_DataExchange_AnnouncesTermination() {
+	s.sut.smeState = model.SmeAccessMethodsRequest
+	s.sut.CloseConnection(true, 0, "User Close")
+
+	msg := s.sentShipMessage()
+	if assert.NotNil(s.T(), msg) {
+		assert.Equal(s.T(), model.MsgTypeEnd, msg[0])
+	}
+}
+
+// Before connection data exchange there is nothing to announce
+func (s *ConnectionLifecycleSuite) TestCloseConnection_Handshake_NoAnnounce() {
+	s.sut.smeState = model.SmePinStateCheckListen
+	s.sut.CloseConnection(true, 0, "User Close")
+
+	assert.Nil(s.T(), s.sentShipMessage())
+}
+
 // TC_SHIP_TERM_001: the announced close message must carry a valid SHIP
 // ConnectionCloseReasonType. Free-form caller strings (e.g. "User close") map to
 // the "unspecific" reason; valid enum values pass through unchanged.

@@ -65,8 +65,10 @@ type ShipConnectionInterface interface {
 	// ShipHandshakeState returns the current SHIP protocol handshake state.
 	//
 	// The SHIP handshake progresses through multiple states (Init, Hello, Protocol,
-	// PIN, Access) before reaching the final message exchange state. This method
-	// provides visibility into the current handshake progress.
+	// PIN) before entering connection data exchange. Access methods identification
+	// runs in parallel to data exchange, and SmeStateComplete is reached once it
+	// verified the remote's SHIP ID. This method provides visibility into the
+	// current handshake progress.
 	//
 	// Returns:
 	// - model.ShipMessageExchangeState: Current handshake state
@@ -177,18 +179,26 @@ type ShipConnectionInfoProviderInterface interface {
 
 	// SetupRemoteService sets up communication with a newly connected remote device.
 	//
-	// This method is called after successful SHIP handshake completion when the
-	// connection is ready for SPINE message exchange. Applications implement this
-	// to establish their communication patterns with the remote device.
+	// This method is called exactly once per connection, when it enters SHIP connection
+	// data exchange (SHIP 13.4.5) after PIN verification succeeded. From then on the remote
+	// device may send SPINE messages, and they are passed to the returned reader immediately
+	// (SHIP IG Transport and Connectivity 2.1). writeI can be used immediately as well.
+	//
+	// The access methods exchange runs in parallel and has not completed at this point. It
+	// verifies the remote's SHIP ID, so for a remote whose SHIP ID was not known before the
+	// connection, the SHIP ID is not available yet. If the verification fails, or the remote
+	// does not answer within 60 seconds, the connection is terminated and HandleConnectionClosed
+	// reports it without a completed handshake.
 	//
 	// Parameters:
 	// - ski: SKI of the remote device
 	// - writeI: Writer interface for sending messages to the remote device
 	//
 	// Returns:
-	// - ShipConnectionDataReaderInterface: Reader interface for receiving messages
+	// - ShipConnectionDataReaderInterface: Reader interface for receiving messages, or nil if
+	//   the application does not process SPINE messages on this connection
 	//
-	// Used when: SHIP handshake completes successfully and device is ready for communication
+	// Used when: The connection enters SHIP connection data exchange
 	SetupRemoteService(ski string, writeI ShipConnectionDataWriterInterface) ShipConnectionDataReaderInterface
 }
 

@@ -39,6 +39,11 @@ var (
 
 	// ErrNotPaired indicates the remote service is not paired
 	ErrNotPaired = errors.New("remote service not paired")
+
+	// ErrShipIDMismatch indicates the remote reported a SHIP ID other than the one trust was
+	// established for. The SHIP ID is the primary identifier in the trust store (SHIP Pairing
+	// Service 10.4).
+	ErrShipIDMismatch = errors.New("SHIP ID mismatch")
 )
 
 // Protocol errors
