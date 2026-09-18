@@ -5,8 +5,9 @@ import "time"
 const (
 	writeWait = 10 * time.Second
 
-	// Upper bound for a close to wait until the SHIP messages queued before it are written.
-	// A peer that stops reading must not turn a close into a hang.
+	// Upper bound for CloseDataConnection to wait for the write pump to drain the SHIP messages
+	// queued before it and write the close frame. A peer that stops reading must not turn a
+	// close into a hang.
 	flushTimeout = 2 * time.Second
 
 	// Time allowed to read the next pong message from the peer.

@@ -151,7 +151,8 @@ func TestWebSocketErrorPaths(t *testing.T) {
 
 		// Don't initialize data processing to block the write pump
 		ws.shipWriteChannel = make(chan []byte, 1) // Small buffer
-		ws.closeChannel = make(chan struct{})
+		ws.writeDone = make(chan struct{})
+		close(ws.writeDone) // no pump running to close it itself
 
 		// Fill the channel
 		err := ws.WriteMessageToWebsocketConnection([]byte{0x01, 0x02})
