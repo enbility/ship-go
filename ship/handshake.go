@@ -268,6 +268,7 @@ func (c *ShipConnection) setHandshakeTimer(timerType timeoutTimerType, duration 
 
 	c.handshakeTimerType = timerType
 	c.handshakeTimerRunning = true
+	c.handshakeTimerDeadline = time.Now().Add(duration)
 	c.handshakeTimer = time.AfterFunc(duration, func() {
 		defer close(done) // Signal completion when this goroutine exits
 
@@ -337,6 +338,40 @@ func (c *ShipConnection) getHandshakeTimerType() timeoutTimerType {
 	defer c.handshakeTimerMux.Unlock()
 
 	return c.handshakeTimerType
+}
+
+// handshakeTimerRemaining returns the time left on the running handshake timer, if it is of the
+// given type
+func (c *ShipConnection) handshakeTimerRemaining(timerType timeoutTimerType) (time.Duration, bool) {
+	c.handshakeTimerMux.Lock()
+	defer c.handshakeTimerMux.Unlock()
+
+	if c.handshakeTimer == nil || c.handshakeTimerType != timerType {
+		return 0, false
+	}
+
+	return max(time.Until(c.handshakeTimerDeadline), 0), true
+}
+
+// extendHandshakeTimer adds extra to the running handshake timer, if it is of the given type.
+//
+// The timer is stopped and rescheduled under handshakeTimerMux, so it cannot expire between
+// reading the time left and extending it. A timer that already fired is left alone: its expiry
+// is being handled. After a successful Stop its callback has not run, so Reset reuses the same
+// callback and done channel.
+func (c *ShipConnection) extendHandshakeTimer(timerType timeoutTimerType, extra time.Duration) bool {
+	c.handshakeTimerMux.Lock()
+	defer c.handshakeTimerMux.Unlock()
+
+	if c.handshakeTimer == nil || c.handshakeTimerType != timerType || !c.handshakeTimer.Stop() {
+		return false
+	}
+
+	remaining := max(time.Until(c.handshakeTimerDeadline), 0) + extra
+	c.handshakeTimerDeadline = time.Now().Add(remaining)
+	c.handshakeTimer.Reset(remaining)
+
+	return true
 }
 
 // stopTimerSafe atomically stops the handshake timer if it's running

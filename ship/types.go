@@ -20,9 +20,12 @@ const (
 	cmiTimeout              = 10 * time.Second // SHIP 4.2
 	cmiCloseTimeout         = 100 * time.Millisecond
 	tHelloInit              = 60 * time.Second // SHIP 13.4.4.1.3
-	tHelloInc               = 60 * time.Second
+	tHelloInc               = tHelloInit       // SHIP 13.4.4.1.3: the same value as T_hello_init
 	tHelloProlongWaitingGap = 15 * time.Second
 )
+
+// SHIP 13.4.4.1.3: an SME User SHALL accept at least two prolongation requests
+const helloProlongationRequestsAlwaysAccepted = 2
 
 // Variables that can be overridden in tests
 var (

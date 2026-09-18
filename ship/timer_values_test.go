@@ -10,6 +10,10 @@ func getHelloInitTimeout() time.Duration {
 	return 500 * time.Millisecond // Production: 60s
 }
 
+func getHelloIncTimeout() time.Duration {
+	return 500 * time.Millisecond // Production: 60s, the same value as T_hello_init
+}
+
 func getAbortDelay() time.Duration {
 	return 100 * time.Millisecond // Production: 1s
 }
