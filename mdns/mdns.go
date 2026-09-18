@@ -500,7 +500,8 @@ func (m *MdnsManager) reannounceWithNewInterfaces() {
 		logging.Log().Info("mdns: making first pairing announcement now that interfaces are available")
 	}
 
-	m.setIsServiceAnnounce(false)
+	// Capture the live instance so it can be released after the new one is up.
+	oldInstanceID := m.instanceID
 
 	// Re-resolve interfaces (will pick up newly available ones)
 	ifaces, ifaceIndexes, err := m.resolveInterfaces()
@@ -532,9 +533,20 @@ func (m *MdnsManager) reannounceWithNewInterfaces() {
 
 	// Announce (or re-announce). The providers handle the transition seamlessly
 	// by creating the new server/entry group before shutting down the old one.
+	m.setIsServiceAnnounce(false) // bypass AnnounceMdnsEntry's already-announced early-return
+
 	if err := m.AnnounceMdnsEntry(); err != nil {
 		logging.Log().Debug("mdns: announcement failed:", err)
+		// the previous announcement is still live, keep the state consistent
+		m.setIsServiceAnnounce(wasAnnounced)
 		return
+	}
+
+	// Create-then-swap: the new instance is live, release the stale one. Without
+	// this the provider-side object (an avahi EntryGroup) is leaked on every
+	// interface change until the daemon's per-client object limit is hit.
+	if oldInstanceID != "" && oldInstanceID != m.instanceID {
+		_ = m.mdnsProvider.UnannounceService(oldInstanceID)
 	}
 
 	// Re-announce all pairing services with the updated interface list.

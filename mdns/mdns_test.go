@@ -2026,7 +2026,11 @@ func (s *MdnsSuite) Test_reannounceWithNewInterfaces_NoInterfaces_WithPairing() 
 	provider := mocks.NewMdnsProviderInterface(s.T())
 	provider.EXPECT().Shutdown().Return().Maybe()
 	// Both pairing instances must be unannounced (map iteration order is non-deterministic)
-	provider.EXPECT().UnannounceService(mock.Anything).Return(nil).Times(2)
+	provider.EXPECT().UnannounceService("p1").Return(nil).Once()
+	provider.EXPECT().UnannounceService("p2").Return(nil).Once()
+	// The SHIP instance must be released as well, otherwise its provider-side
+	// object stays allocated with no interface left to serve it
+	provider.EXPECT().UnannounceService("ship-1").Return(nil).Once()
 
 	s.sut.SetMdnsProvider(provider)
 
@@ -2039,8 +2043,7 @@ func (s *MdnsSuite) Test_reannounceWithNewInterfaces_NoInterfaces_WithPairing() 
 	s.sut.announcedPairingsMux.Unlock()
 
 	// Mark SHIP service as announced so the wasAnnounced path is exercised.
-	// Note: reannounceWithNewInterfaces sets isAnnounced=false before calling
-	// UnannounceMdnsEntry, so UnannounceMdnsEntry returns early without a provider call.
+	s.sut.instanceID = "ship-1"
 	s.sut.muxAnnounced.Lock()
 	s.sut.isAnnounced = true
 	s.sut.muxAnnounced.Unlock()
@@ -2063,6 +2066,74 @@ func (s *MdnsSuite) Test_reannounceWithNewInterfaces_NoInterfaces_WithPairing() 
 	// and will be re-announced when interfaces reappear.
 	assert.True(s.T(), s.sut.IsPairingServiceAnnounced(),
 		"IsPairingServiceAnnounced should remain true: logical entries are preserved for later re-announcement")
+
+	assert.False(s.T(), s.sut.isServiceAnnounced(),
+		"SHIP service should be marked unannounced once no interfaces are available")
+}
+
+// Test_reannounceWithNewInterfaces_ReleasesOldShipInstance verifies create-then-swap
+// for the SHIP service: the previous provider instance is released only after the new
+// one is live. Leaking it allocates a provider-side object (an avahi EntryGroup) per
+// interface change, which eventually exhausts the daemon's per-client object limit.
+func (s *MdnsSuite) Test_reannounceWithNewInterfaces_ReleasesOldShipInstance() {
+	s.sut.Shutdown()
+	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
+		"12345",
+		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
+		"shipid", "serviceName",
+		4729, nil, MdnsProviderSelectionAll)
+
+	provider := mocks.NewMdnsProviderInterface(s.T())
+	provider.EXPECT().Shutdown().Return().Maybe()
+	provider.EXPECT().
+		AnnounceService(shipZeroConfServiceType, mock.Anything, mock.Anything, mock.Anything).
+		Return("new-ship-id", nil).Once()
+	provider.EXPECT().UnannounceService("old-ship-id").Return(nil).Once()
+	// AfterTest shutdown releases the new instance
+	provider.EXPECT().UnannounceService("new-ship-id").Return(nil).Maybe()
+
+	s.sut.SetMdnsProvider(provider)
+
+	s.sut.instanceID = "old-ship-id"
+	s.sut.muxAnnounced.Lock()
+	s.sut.isAnnounced = true
+	s.sut.muxAnnounced.Unlock()
+
+	s.sut.reannounceWithNewInterfaces()
+
+	assert.Equal(s.T(), "new-ship-id", s.sut.instanceID)
+	assert.True(s.T(), s.sut.isServiceAnnounced())
+}
+
+// Test_reannounceWithNewInterfaces_KeepsStateOnAnnounceFailure verifies that a failed
+// re-announcement leaves the still-live previous announcement reflected in the state,
+// so the next AnnounceMdnsEntry does not allocate a second instance on top of it.
+func (s *MdnsSuite) Test_reannounceWithNewInterfaces_KeepsStateOnAnnounceFailure() {
+	s.sut.Shutdown()
+	s.sut = NewMDNS("test", "brand", "model", "EnergyManagementSystem",
+		"12345",
+		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
+		"shipid", "serviceName",
+		4729, nil, MdnsProviderSelectionAll)
+
+	provider := mocks.NewMdnsProviderInterface(s.T())
+	provider.EXPECT().Shutdown().Return().Maybe()
+	provider.EXPECT().
+		AnnounceService(shipZeroConfServiceType, mock.Anything, mock.Anything, mock.Anything).
+		Return("", errors.New("announce failed")).Once()
+	provider.EXPECT().UnannounceService("old-ship-id").Return(nil).Maybe()
+
+	s.sut.SetMdnsProvider(provider)
+
+	s.sut.instanceID = "old-ship-id"
+	s.sut.muxAnnounced.Lock()
+	s.sut.isAnnounced = true
+	s.sut.muxAnnounced.Unlock()
+
+	s.sut.reannounceWithNewInterfaces()
+
+	assert.Equal(s.T(), "old-ship-id", s.sut.instanceID, "previous instance must be retained")
+	assert.True(s.T(), s.sut.isServiceAnnounced(), "state must still reflect the live announcement")
 }
 
 func (s *MdnsSuite) Test_AutoAcceptServiceAlreadyAnnounced() {
