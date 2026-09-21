@@ -18,11 +18,18 @@ func TestProClientSuite(t *testing.T) {
 
 // lastProtocolError decodes the last sent frame as a protocol handshake error
 // and returns its error type, for asserting the SHIP-mandated abort error codes.
+// SHIP 13.4.4.2.1 wraps the error number in the root tag
+// "messageProtocolHandshakeError", so a frame without that envelope fails.
 func (s *ProClientSuite) lastProtocolError() model.MessageProtocolHandshakeErrorErrorType {
 	_, data := s.sut.parseMessage(s.lastMessage(), true)
+
+	var root map[string]json.RawMessage
+	assert.Nil(s.T(), json.Unmarshal(data, &root))
+	assert.Contains(s.T(), root, "messageProtocolHandshakeError", "the abort must use the SHIP envelope")
+
 	var msg model.MessageProtocolHandshakeError
-	_ = json.Unmarshal(data, &msg)
-	return msg.Error
+	assert.Nil(s.T(), json.Unmarshal(data, &msg))
+	return msg.MessageProtocolHandshakeError.Error
 }
 
 type ProClientSuite struct {
