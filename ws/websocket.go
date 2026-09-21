@@ -20,11 +20,19 @@ type WebsocketConnection struct {
 	// The implementation handling message processing
 	dataProcessing api.WebsocketDataReaderInterface
 
-	// The connection was closed
-	closeChannel chan struct{}
-
 	// The ship write channel for outgoing SHIP messages
 	shipWriteChannel chan []byte
+
+	// Closed exactly once, by writeShipPump itself, right before it returns.
+	writeDone chan struct{}
+
+	// A close is underway, so no new SHIP messages are accepted. Guarded by muxShipWrite.
+	closing bool
+
+	// The close code/reason writeShipPump writes as a close frame after draining shipWriteChannel.
+	// Set at most once, guarded by muxShipWrite. An empty reason means no close frame is written.
+	closeCode   int
+	closeReason string
 
 	// internal handling of closed connections
 	connectionClosed bool
@@ -81,7 +89,7 @@ func (w *WebsocketConnection) isConnClosed() bool {
 
 func (w *WebsocketConnection) run() {
 	w.shipWriteChannel = make(chan []byte, DefaultWriteBufferSize) // Send outgoing ship messages
-	w.closeChannel = make(chan struct{}, 1)                        // Listen to close events
+	w.writeDone = make(chan struct{})
 
 	w.pumpsWg.Add(2)
 	go w.readShipPump()
@@ -91,6 +99,7 @@ func (w *WebsocketConnection) run() {
 // writePump pumps messages from the SPINE and SHIP writeChannels to the websocket connection
 func (w *WebsocketConnection) writeShipPump() {
 	defer w.pumpsWg.Done()
+	defer close(w.writeDone)
 	defer func() {
 		if r := recover(); r != nil {
 			logging.Log().Debug(w.remoteSki, "panic in writeShipPump:", r)
@@ -98,25 +107,21 @@ func (w *WebsocketConnection) writeShipPump() {
 		}
 	}()
 	ticker := time.NewTicker(pingPeriod)
-	defer func() {
-		ticker.Stop()
-		w.closeShipWriteChannel()
-	}()
+	defer ticker.Stop()
 
 	for {
 		select {
-		case <-w.closeChannel:
-			return
-
 		case message, ok := <-w.shipWriteChannel:
 			if w.isConnClosed() {
 				return
 			}
 
 			if !ok {
+				// The channel was closed with everything queued before that point already
+				// drained above - write the close frame, if any, from here too, so it can
+				// never overtake a still-queued SHIP message.
 				logging.Log().Debug(w.remoteSki, "ship write channel closed")
-				// The write channel has been closed
-				_ = w.writeMessage(websocket.CloseMessage, []byte{})
+				w.writeCloseFrame()
 				return
 			}
 
@@ -131,6 +136,21 @@ func (w *WebsocketConnection) writeShipPump() {
 			w.handlePing()
 		}
 	}
+}
+
+// writeCloseFrame writes the close frame requested by CloseDataConnection, if any. It runs on the
+// write pump, the only writer, right after draining shipWriteChannel, so it can't overtake or be
+// overtaken by a queued SHIP message.
+func (w *WebsocketConnection) writeCloseFrame() {
+	w.muxShipWrite.Lock()
+	code, reason := w.closeCode, w.closeReason
+	w.muxShipWrite.Unlock()
+
+	if reason == "" {
+		return
+	}
+
+	_ = w.writeMessage(websocket.CloseMessage, websocket.FormatCloseMessage(code, reason))
 }
 
 func (w *WebsocketConnection) handlePing() {
@@ -240,8 +260,8 @@ func (w *WebsocketConnection) close() {
 			_ = w.conn.Close()
 		}
 
-		// Then signal the pumps to stop
-		close(w.closeChannel)
+		// Then unblock the write pump too, in case it's not already stopping via CloseDataConnection
+		w.stopShipWrites(0, "")
 
 		// Wait for pumps to finish with a timeout
 		done := make(chan struct{})
@@ -273,7 +293,7 @@ func (w *WebsocketConnection) WriteMessageToWebsocketConnection(message []byte) 
 	w.muxShipWrite.Lock()
 	defer w.muxShipWrite.Unlock()
 
-	if w.isConnClosed() || w.shipWriteChannel == nil {
+	if w.closing || w.isConnClosed() || w.shipWriteChannel == nil {
 		return fmt.Errorf("%w for remote SKI %s", api.ErrConnectionClosed, w.remoteSki)
 	}
 
@@ -326,9 +346,17 @@ func (w *WebsocketConnection) writeMessageWithoutErrorHandling(messageType int, 
 
 // shutdown the connection and all internals
 func (w *WebsocketConnection) CloseDataConnection(closeCode int, reason string) {
-	// send a close message to the remote side if we have a reason
-	if reason != "" {
-		_ = w.writeMessageWithoutErrorHandling(websocket.CloseMessage, websocket.FormatCloseMessage(closeCode, reason))
+	// Callers queue a final message and close in the same breath - a protocol handshake abort, a
+	// CMI rejection - and close() discards whatever the write pump has not written yet. Stopping
+	// the write pump here, rather than letting close() do it, hands it the close frame to write
+	// too, so both happen from the one goroutine that owns the socket, in queue order.
+	w.stopShipWrites(closeCode, reason)
+
+	select {
+	case <-w.writeDone:
+		// the write pump drained the queue and wrote the close frame, if any
+	case <-time.After(flushTimeout):
+		logging.Log().Debug(w.remoteSki, "timeout waiting for queued SHIP messages to flush before close")
 	}
 
 	w.close()
@@ -346,8 +374,20 @@ func (w *WebsocketConnection) IsDataConnectionClosed() (bool, error) {
 	return isClosed, err
 }
 
-func (w *WebsocketConnection) closeShipWriteChannel() {
+// stopShipWrites stops accepting new SHIP messages and closes shipWriteChannel exactly once. That
+// wakes writeShipPump's !ok branch, which drains whatever was queued before this point and, if
+// reason is non-empty, writes it as the close frame - both before returning. A no-op if a close is
+// already underway, so CloseDataConnection and close() can both call it safely.
+func (w *WebsocketConnection) stopShipWrites(closeCode int, reason string) {
 	w.muxShipWrite.Lock()
 	defer w.muxShipWrite.Unlock()
+
+	if w.closing || w.shipWriteChannel == nil {
+		return
+	}
+
+	w.closing = true
+	w.closeCode = closeCode
+	w.closeReason = reason
 	close(w.shipWriteChannel)
 }
