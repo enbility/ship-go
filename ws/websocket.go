@@ -94,7 +94,20 @@ func (w *WebsocketConnection) writeShipPump() {
 	defer func() {
 		if r := recover(); r != nil {
 			logging.Log().Debug(w.remoteSki, "panic in writeShipPump:", r)
+
+			// Same reasoning as in readShipPump below: closing the socket is not enough,
+			// ReportConnectionError is the only route from here to
+			// ShipConnection.CloseConnection and thus to Hub.HandleConnectionClosed.
+			// Without it the dead connection stays registered - and readShipPump will not
+			// make up for it, because w.close() has marked the connection closed and its
+			// own loop then exits silently.
+			report := !w.isConnClosed()
 			w.close()
+			if report {
+				err := fmt.Errorf("panic while writing a message to %s: %v", w.remoteSki, r)
+				w.setConnClosedError(err)
+				w.dataProcessing.ReportConnectionError(err)
+			}
 		}
 	}()
 	ticker := time.NewTicker(pingPeriod)

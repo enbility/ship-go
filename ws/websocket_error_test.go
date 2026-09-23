@@ -348,3 +348,68 @@ func TestReadPumpPanicReportsConnectionError(t *testing.T) {
 
 	close(send)
 }
+
+// TestWritePumpPanicReportsConnectionError is the write side of
+// TestReadPumpPanicReportsConnectionError.
+//
+// writeShipPump's recover had the same hole: it closed the socket and reported nothing. That
+// is not covered by the read pump, because w.close() marks the connection closed and
+// readShipPump's own "ignore read errors if the connection got closed" check then lets it
+// exit silently - so the hub keeps the dead connection registered exactly as before.
+//
+// The panic is provoked the way it can actually happen at runtime: the ship write channel is
+// closed while the pump is running, so the pump's own deferred closeShipWriteChannel() closes
+// an already closed channel.
+func TestWritePumpPanicReportsConnectionError(t *testing.T) {
+	serverUp := make(chan struct{})
+	serverDone := make(chan struct{})
+
+	server, resp, clientConn := newWSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		close(serverUp)
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				close(serverDone)
+				return
+			}
+		}
+	}))
+	defer func() {
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		server.Close()
+	}()
+	<-serverUp
+
+	var reported atomic.Int32
+
+	reader := mocks.NewWebsocketDataReaderInterface(t)
+	reader.EXPECT().ReportConnectionError(mock.Anything).Run(func(error) {
+		reported.Add(1)
+	}).Maybe()
+	reader.EXPECT().HandleIncomingWebsocketMessage(mock.Anything).Maybe()
+
+	sut := NewWebsocketConnection(clientConn, "test-ski")
+	sut.InitDataProcessing(reader)
+
+	// let both pumps reach their loops
+	time.Sleep(100 * time.Millisecond)
+
+	// Closing the channel from the outside makes the pump leave its loop and then panic in
+	// its own deferred closeShipWriteChannel().
+	sut.closeShipWriteChannel()
+
+	require.Eventually(t, func() bool { return reported.Load() == 1 },
+		5*time.Second, 10*time.Millisecond,
+		"the recovered write pump panic must be reported upwards, otherwise the hub keeps the SKI registered forever")
+
+	closed, _ := sut.IsDataConnectionClosed()
+	assert.True(t, closed)
+	assert.NotNil(t, sut.connClosedError(), "the panic path must record the cause")
+
+	<-serverDone
+}
