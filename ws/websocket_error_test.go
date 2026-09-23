@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -281,4 +282,134 @@ func TestWebSocketErrorPaths(t *testing.T) {
 			return runtime.NumGoroutine() <= initialGoroutines+3
 		}, 2*time.Second, 50*time.Millisecond, "goroutines not cleaned up after panic")
 	})
+}
+
+// TestReadPumpPanicReportsConnectionError guards the fix for the certification wedge.
+//
+// A panic raised while an incoming SHIP payload is handled (spine-go used to panic on an
+// unknown featureType) unwinds through readShipPump. The recover there used to close the
+// socket and stop - without setConnClosedError() and without ReportConnectionError().
+// ReportConnectionError is the only route from the ws layer to ShipConnection, and
+// ShipConnection.CloseConnection is the only caller of Hub.HandleConnectionClosed, so the
+// dead connection stayed in the hub registry: the SKI was never dialled again and every
+// incoming connection for it was rejected right after the handshake until a restart.
+func TestReadPumpPanicReportsConnectionError(t *testing.T) {
+	send := make(chan []byte, 1)
+	serverUp := make(chan struct{})
+
+	server, resp, clientConn := newWSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		close(serverUp)
+		for payload := range send {
+			if err := conn.WriteMessage(websocket.BinaryMessage, payload); err != nil {
+				return
+			}
+		}
+	}))
+	defer func() {
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		server.Close()
+	}()
+	<-serverUp
+
+	var reported, handled atomic.Int32
+
+	reader := mocks.NewWebsocketDataReaderInterface(t)
+	reader.EXPECT().ReportConnectionError(mock.Anything).Run(func(error) {
+		reported.Add(1)
+	}).Maybe()
+	reader.EXPECT().HandleIncomingWebsocketMessage(mock.Anything).Run(func([]byte) {
+		handled.Add(1)
+		panic("unknown featureType 'unsupportedFeatureType'")
+	}).Maybe()
+
+	sut := NewWebsocketConnection(clientConn, "test-ski")
+	sut.InitDataProcessing(reader)
+
+	send <- []byte{0x01, 0x00} // any well-formed SHIP data frame
+
+	require.Eventually(t, func() bool { return handled.Load() == 1 },
+		5*time.Second, 10*time.Millisecond, "the payload never reached the reader")
+
+	require.Eventually(t, func() bool { return reported.Load() == 1 },
+		5*time.Second, 10*time.Millisecond,
+		"the recovered panic must be reported upwards, otherwise the hub keeps the SKI registered forever")
+
+	closed, _ := sut.IsDataConnectionClosed()
+	assert.True(t, closed)
+	// IsDataConnectionClosed() synthesises a generic ErrConnectionClosed when no cause was
+	// stored, so the stored cause has to be inspected directly.
+	assert.NotNil(t, sut.connClosedError(), "the panic path must record the cause")
+
+	close(send)
+}
+
+// TestWritePumpPanicReportsConnectionError is the write side of
+// TestReadPumpPanicReportsConnectionError.
+//
+// writeShipPump's recover had the same hole: it closed the socket and reported nothing. That
+// is not covered by the read pump, because w.close() marks the connection closed and
+// readShipPump's own "ignore read errors if the connection got closed" check then lets it
+// exit silently - so the hub keeps the dead connection registered exactly as before.
+//
+// The panic is provoked the way it can actually happen at runtime: the ship write channel is
+// closed while the pump is running, so the pump's own deferred closeShipWriteChannel() closes
+// an already closed channel.
+func TestWritePumpPanicReportsConnectionError(t *testing.T) {
+	serverUp := make(chan struct{})
+	serverDone := make(chan struct{})
+
+	server, resp, clientConn := newWSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		close(serverUp)
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				close(serverDone)
+				return
+			}
+		}
+	}))
+	defer func() {
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		server.Close()
+	}()
+	<-serverUp
+
+	var reported atomic.Int32
+
+	reader := mocks.NewWebsocketDataReaderInterface(t)
+	reader.EXPECT().ReportConnectionError(mock.Anything).Run(func(error) {
+		reported.Add(1)
+	}).Maybe()
+	reader.EXPECT().HandleIncomingWebsocketMessage(mock.Anything).Maybe()
+
+	sut := NewWebsocketConnection(clientConn, "test-ski")
+	sut.InitDataProcessing(reader)
+
+	// let both pumps reach their loops
+	time.Sleep(100 * time.Millisecond)
+
+	// Closing the channel from the outside makes the pump leave its loop and then panic in
+	// its own deferred closeShipWriteChannel().
+	sut.closeShipWriteChannel()
+
+	require.Eventually(t, func() bool { return reported.Load() == 1 },
+		5*time.Second, 10*time.Millisecond,
+		"the recovered write pump panic must be reported upwards, otherwise the hub keeps the SKI registered forever")
+
+	closed, _ := sut.IsDataConnectionClosed()
+	assert.True(t, closed)
+	assert.NotNil(t, sut.connClosedError(), "the panic path must record the cause")
+
+	<-serverDone
 }
