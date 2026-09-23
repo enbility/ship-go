@@ -625,3 +625,107 @@ func (s *IssuesSuite) Test_SetAutoAcceptUsesCreateThenSwap() {
 func init() {
 	_ = avahi.InterfaceUnspec // ensure import is used
 }
+
+// ---------------------------------------------------------------------
+// Avahi deadlock (#78).
+//
+// AnnounceService holds a.mux while waiting for EntryGroupNew's D-Bus
+// reply. chanListener needs a.mux for every browsed service, via
+// processService -> getIfaceIndexes. The Avahi signal loop that carries
+// the D-Bus replies is the same goroutine that hands browsed services to
+// chanListener, so once it is parked on the browse channel no reply gets
+// through:
+//
+//	A (AnnounceService) holds a.mux, waits for the EntryGroupNew reply
+//	B (chanListener)    waits for a.mux in getIfaceIndexes
+//	C (signal loop)     parked sending into the channel B would drain
+//
+// The cycle is closed and never recovers.
+//
+// This reproducer models exactly that coupling: EntryGroupNew only
+// returns once chanListener has made progress past getIfaceIndexes. With
+// getIfaceIndexes on a.mux, chanListener cannot get there and Announce
+// hangs. With the indexes on their own lock, chanListener runs, the
+// reply is delivered and Announce completes.
+// ---------------------------------------------------------------------
+
+func (s *IssuesSuite) Test_AvahiAnnounceDoesNotDeadlockChanListener() {
+	avahiMock := avahiMocks.NewServerInterface(s.T())
+	serviceBrowserMock := avahiMocks.NewServiceBrowserInterface(s.T())
+	entryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
+
+	sut := NewAvahiProvider([]int32{1})
+	sut.avServer = avahiMock
+
+	avahiMock.EXPECT().Setup(mock.Anything).Return(nil).Once()
+	avahiMock.EXPECT().Start().Return().Once()
+	avahiMock.EXPECT().GetAPIVersion().Return(0, nil).Once()
+	avahiMock.EXPECT().ServiceBrowserNew(
+		mock.AnythingOfType("chan avahi.Service"),
+		mock.AnythingOfType("chan avahi.Service"),
+		int32(-1), int32(-1),
+		shipZeroConfServiceType, shipZeroConfDomain,
+		uint32(0)).Return(serviceBrowserMock, nil).Once()
+	avahiMock.EXPECT().ServiceBrowserNew(
+		mock.AnythingOfType("chan avahi.Service"),
+		mock.AnythingOfType("chan avahi.Service"),
+		int32(-1), int32(-1),
+		shipPairingZeroConfServiceType, shipZeroConfDomain,
+		uint32(0)).Return(serviceBrowserMock, nil).Once()
+
+	noopCB := func(map[string]string, string, string, string, []net.IP, int, bool) {}
+	assert.True(s.T(), sut.Start(api.PairingModeBoth, true, noopCB))
+
+	announceEntered := make(chan struct{})
+	listenerProgressed := make(chan struct{})
+
+	// The D-Bus reply for EntryGroupNew is only delivered once the signal
+	// loop can hand its pending service to chanListener - i.e. once
+	// chanListener got past getIfaceIndexes.
+	avahiMock.EXPECT().EntryGroupNew().RunAndReturn(func() (avahi.EntryGroupInterface, error) {
+		close(announceEntered)
+		<-listenerProgressed
+		return entryGroupMock, nil
+	}).Once()
+	entryGroupMock.EXPECT().AddService(
+		mock.Anything, mock.Anything, mock.Anything,
+		"test", shipZeroConfServiceType, shipZeroConfDomain,
+		"", mock.Anything, mock.Anything,
+	).Return(nil).Once()
+	entryGroupMock.EXPECT().Commit().Return(nil).Once()
+
+	// chanListener reaches ResolveService only after getIfaceIndexes returned.
+	avahiMock.On("ResolveService",
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything,
+	).Run(func(args mock.Arguments) {
+		close(listenerProgressed)
+	}).Return(avahi.Service{}, errors.New("not resolved in this test")).Once()
+
+	announceDone := make(chan error, 1)
+	go func() {
+		_, err := sut.AnnounceService(shipZeroConfServiceType, "test", 4729, []string{"txtvers=1"})
+		announceDone <- err
+	}()
+
+	<-announceEntered
+
+	// The signal loop hands a browsed service to chanListener while the
+	// announce is in flight.
+	go func() {
+		sut.addServiceChan <- avahi.Service{
+			Interface: 1, // must match ifaceIndexes[0] so processService continues
+			Name:      "TestService",
+			Type:      shipZeroConfServiceType,
+			Domain:    shipZeroConfDomain,
+			Aprotocol: -1,
+		}
+	}()
+
+	select {
+	case err := <-announceDone:
+		assert.Nil(s.T(), err, "announce should succeed")
+	case <-time.After(2 * time.Second):
+		s.T().Fatal("deadlock (#78): chanListener is blocked on a.mux while AnnounceService waits for its D-Bus reply")
+	}
+}
