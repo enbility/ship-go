@@ -153,7 +153,20 @@ func (w *WebsocketConnection) readShipPump() {
 	defer func() {
 		if r := recover(); r != nil {
 			logging.Log().Debug(w.remoteSki, "panic in readShipPump:", r)
+
+			// Treat it like any other read failure below: closing the socket is not
+			// enough. ReportConnectionError is the only route from here to
+			// ShipConnection.CloseConnection, and that is the only caller of
+			// Hub.HandleConnectionClosed - so without it the dead connection stays
+			// registered and the SKI is never dialled or accepted again.
+			// As with the read error path, stay quiet if the connection was closed anyway.
+			report := !w.isConnClosed()
 			w.close()
+			if report {
+				err := fmt.Errorf("panic while handling a message from %s: %v", w.remoteSki, r)
+				w.setConnClosedError(err)
+				w.dataProcessing.ReportConnectionError(err)
+			}
 		}
 	}()
 	_ = w.conn.SetReadDeadline(time.Now().Add(pongWait))
