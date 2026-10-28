@@ -1998,6 +1998,48 @@ func (suite *QRAnnouncementTestSuite) TestMultipleAnnouncements() {
 	assert.True(suite.T(), suite.hub.IsAnnouncingTo(target2.ShipID))
 }
 
+// An announcement stopped while its connection is up, for example by the
+// application, must take its lifetime timer with it. Otherwise the timer fires
+// later and ends a new announcement to the same device.
+func (suite *QRAnnouncementTestSuite) TestStopAnnouncementTo_CancelsLifetimeTimer() {
+	target := api.PairingTarget{
+		SKI:         "testtargetski",
+		Fingerprint: "test-fingerprint",
+		ShipID:      "test-target-ship-id",
+		Secret:      []byte("target-secret123"), // 16-byte secret
+	}
+
+	err := suite.hub.Start()
+	suite.Require().NoError(err)
+
+	suite.mockMdnsInterface.MdnsInterface.EXPECT().RequestMdnsEntries().Maybe()
+	suite.hub.RegisterRemoteService(api.NewServiceIdentity(target.SKI, target.Fingerprint, target.ShipID))
+	suite.Require().NoError(suite.hub.StartAnnouncementTo(target))
+
+	// the connection completed: the timer as HandleShipHandshakeStateUpdate starts it,
+	// with a lifetime short enough for the test
+	lifetime := 50 * time.Millisecond
+	suite.hub.announcementLifetimeTracker = &AnnouncementLifetimeTracker{
+		timeout: lifetime,
+		timers:  make(map[string]lifetimeTimer),
+	}
+	suite.hub.announcementLifetimeTracker.StartLifetimeTimer(target.ShipID, func(expiredShipID string) {
+		_ = suite.hub.StopAnnouncementTo(expiredShipID)
+	})
+
+	suite.Require().NoError(suite.hub.StopAnnouncementTo(target.ShipID))
+	assert.False(suite.T(), suite.hub.announcementLifetimeTracker.IsTimerActive(target.ShipID),
+		"stopping the announcement must cancel its lifetime timer")
+
+	// a new pairing request to the same device, not connected yet
+	suite.Require().NoError(suite.hub.StartAnnouncementTo(target))
+	time.Sleep(3 * lifetime)
+	assert.True(suite.T(), suite.hub.IsAnnouncingTo(target.ShipID),
+		"the timer of the stopped announcement must not end the new one")
+
+	suite.Require().NoError(suite.hub.StopAnnouncementTo(target.ShipID))
+}
+
 func (suite *QRAnnouncementTestSuite) TestAnnouncementConcurrencyThreadSafety() {
 	// Test thread safety with concurrent access
 	const numGoroutines = 10
