@@ -503,6 +503,9 @@ func (h *Hub) StopAnnouncementTo(shipID string) error {
 	// Remove from active announcements
 	delete(h.activeAnnouncements, shipID)
 
+	// Cancel the lifetime timer that belongs to this announcement, if exists.
+	h.announcementLifetimeTracker.CancelLifetimeTimer(shipID)
+
 	logging.Log().Debug("stopped announcement to", shipID)
 	return nil
 }
