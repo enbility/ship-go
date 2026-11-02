@@ -10,6 +10,16 @@ import (
 
 // coordinateConnectionInitations coordinates connection initiation attempts to a remote service
 func (h *Hub) coordinateConnectionInitations(ski string, entry *api.MdnsEntry) {
+	// Resolve the service before taking any per-SKI state. UnregisterRemoteService removes
+	// the entry concurrently with mDNS processing, and leaving here with
+	// connectionAttemptRunning set would block this SKI until the process restarts: the flag
+	// is only cleared by the delay timer's callback or by cancelling that timer, and on this
+	// path no timer is ever created.
+	service := h.ServiceForIdentifier(ski, "")
+	if service == nil {
+		return
+	}
+
 	if h.isConnectionAttemptRunning(ski) {
 		return
 	}
@@ -17,11 +27,6 @@ func (h *Hub) coordinateConnectionInitations(ski string, entry *api.MdnsEntry) {
 	h.setConnectionAttemptRunning(ski, true)
 
 	counter, duration := h.getConnectionInitiationDelayTime(ski)
-
-	service := h.ServiceForIdentifier(ski, "")
-	if service == nil {
-		return
-	}
 
 	logging.Log().Debugf("delaying connection to %s by %s to minimize double connection probability", ski, duration)
 

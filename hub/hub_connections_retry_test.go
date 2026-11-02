@@ -110,3 +110,43 @@ func (s *HubConnectionsRetrySuite) Test_ConnectionAttemptRunning() {
 	status = s.sut.isConnectionAttemptRunning(s.remoteSki)
 	assert.Equal(s.T(), false, status)
 }
+
+// coordinateConnectionInitations must not leave per-SKI state behind when the service entry is
+// gone. UnregisterRemoteService removes the entry concurrently with mDNS processing; if the
+// attempt flag stayed set, no timer would ever clear it and the SKI would be blocked from
+// connecting until the process restarts.
+func (s *HubConnectionsRetrySuite) Test_CoordinateConnectionInitations_UnknownService() {
+	ski := "unknownski"
+	entry := &api.MdnsEntry{Ski: ski}
+
+	s.sut.coordinateConnectionInitations(ski, entry)
+
+	assert.False(s.T(), s.sut.isConnectionAttemptRunning(ski),
+		"the attempt flag must not stay set when no service entry exists")
+
+	_, exists := s.sut.getCurrentConnectionAttemptCounter(ski)
+	assert.False(s.T(), exists,
+		"the attempt counter must not be raised when no connection is attempted")
+}
+
+// After an unregister/register cycle the SKI must still be able to connect. Before the fix the
+// unregistered round left the attempt flag set, and every later round returned early.
+func (s *HubConnectionsRetrySuite) Test_CoordinateConnectionInitations_AfterReregister() {
+	ski := "reregisterski"
+	entry := &api.MdnsEntry{Ski: ski}
+
+	// mDNS processing hits the SKI while its service entry is gone
+	s.sut.coordinateConnectionInitations(ski, entry)
+
+	// the service is registered again afterwards
+	service, err := api.NewServiceDetails(ski, "", "")
+	assert.NoError(s.T(), err)
+	_, err = s.sut.mergeOrAddService(service)
+	assert.NoError(s.T(), err)
+
+	s.sut.coordinateConnectionInitations(ski, entry)
+
+	assert.True(s.T(), s.sut.isConnectionAttemptRunning(ski),
+		"a registered service must be able to start a connection attempt again")
+	s.sut.cancelConnectionDelayTimer(ski)
+}
