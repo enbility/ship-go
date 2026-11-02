@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -143,6 +144,12 @@ func (a *AvahiProvider) Start(pairingMode api.PairingMode, autoReconnect bool, c
 		a.avServer.Shutdown()
 		return false
 	}
+
+	// the new browsers report all existing service instances again,
+	// so drop instances of a previous browser whose remove events will never arrive
+	a.muxEl.Lock()
+	a.serviceElements = make(map[string]map[string]string)
+	a.muxEl.Unlock()
 
 	// instead of limiting search on specific allowed interfaces, we allow all and filter the results
 	// Browse for _ship._tcp services
@@ -451,10 +458,26 @@ func (a *AvahiProvider) processService(service avahi.Service, remove bool, cb ap
 func (a *AvahiProvider) processRemovedService(service avahi.Service, cb api.MdnsResolveCB) error {
 	logging.Log().Tracef("mdns: avahi - process remove service: %v", service)
 
-	// get the elements for the service
-	a.muxEl.RLock()
-	elements := a.serviceElements[getServiceUniqueKey(service)]
-	a.muxEl.RUnlock()
+	// avahi reports a service instance per interface and protocol,
+	// the service is only gone once all of its instances are removed
+	key := getServiceUniqueKey(service)
+	servicePrefix := fmt.Sprintf("%s-%s-%s-", service.Name, service.Type, service.Domain)
+
+	a.muxEl.Lock()
+	elements := a.serviceElements[key]
+	delete(a.serviceElements, key)
+	remaining := false
+	for k := range a.serviceElements {
+		if strings.HasPrefix(k, servicePrefix) {
+			remaining = true
+			break
+		}
+	}
+	a.muxEl.Unlock()
+
+	if remaining {
+		return nil
+	}
 
 	cb(elements, service.Name, service.Host, service.Type, nil, -1, true)
 
