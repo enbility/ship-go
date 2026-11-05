@@ -2,6 +2,7 @@ package hub
 
 import (
 	"testing"
+	"time"
 
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/cert"
@@ -149,4 +150,25 @@ func (s *HubConnectionsRetrySuite) Test_CoordinateConnectionInitations_AfterRere
 	assert.True(s.T(), s.sut.isConnectionAttemptRunning(ski),
 		"a registered service must be able to start a connection attempt again")
 	s.sut.cancelConnectionDelayTimer(ski)
+}
+
+func (s *HubConnectionsRetrySuite) Test_RegisterRemoteServiceResetsBackoff() {
+	s.sut.hasStarted = true
+
+	// simulate an accumulated backoff with a pending delay timer
+	s.sut.increaseConnectionAttemptCounter(s.remoteSki)
+	s.sut.increaseConnectionAttemptCounter(s.remoteSki)
+	s.sut.setConnectionAttemptRunning(s.remoteSki, true)
+	s.sut.storeConnectionDelayTimer(s.remoteSki, newConnectionDelayTimer(time.Minute, func() {}))
+
+	s.sut.RegisterRemoteService(api.NewServiceIdentity(s.remoteSki, "", ""))
+
+	_, exists := s.sut.getCurrentConnectionAttemptCounter(s.remoteSki)
+	assert.False(s.T(), exists)
+	assert.False(s.T(), s.sut.isConnectionAttemptRunning(s.remoteSki))
+
+	s.sut.muxTimers.Lock()
+	_, timerExists := s.sut.connectionDelayTimers[s.remoteSki]
+	s.sut.muxTimers.Unlock()
+	assert.False(s.T(), timerExists)
 }
