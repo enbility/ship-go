@@ -61,8 +61,18 @@ type AvahiProvider struct {
 	instanceCounter  int
 	serviceInstances map[string]*instanceData // instanceID -> service data
 
-	mux   sync.Mutex
-	muxEl sync.RWMutex // used for serviceElements
+	mux sync.Mutex
+	// muxIface guards ifaceIndexes only, deliberately not mux.
+	//
+	// Announce, Start, Shutdown and attemptReconnect all hold mux across blocking D-Bus
+	// round trips, and chanListener needs the interface indexes for every browsed service.
+	// With one shared lock that closes a deadlock cycle (#78): the announcing goroutine
+	// holds mux inside EntryGroupNew, chanListener waits for mux in getIfaceIndexes, and
+	// the Avahi signal loop is parked sending into the browse channel chanListener would
+	// drain - so the D-Bus reply that would release mux can never be delivered. Keeping
+	// the indexes on their own lock takes chanListener out of that cycle.
+	muxIface sync.RWMutex
+	muxEl    sync.RWMutex // used for serviceElements
 
 	// Prevent multiple reconnection goroutines
 	reconnectInProgress bool
@@ -85,15 +95,15 @@ func NewAvahiProvider(ifaceIndexes []int32) *AvahiProvider {
 // UpdateInterfaces updates the interface indexes in a thread-safe manner.
 // AvahiProvider uses ifaceIndexes; ifaces is ignored.
 func (a *AvahiProvider) UpdateInterfaces(_ []net.Interface, ifaceIndexes []int32) {
-	a.mux.Lock()
-	defer a.mux.Unlock()
+	a.muxIface.Lock()
+	defer a.muxIface.Unlock()
 	a.ifaceIndexes = ifaceIndexes
 }
 
 // getIfaceIndexes returns a copy of the interface indexes in a thread-safe manner
 func (a *AvahiProvider) getIfaceIndexes() []int32 {
-	a.mux.Lock()
-	defer a.mux.Unlock()
+	a.muxIface.RLock()
+	defer a.muxIface.RUnlock()
 	// Return a copy to avoid race conditions
 	indexesCopy := make([]int32, len(a.ifaceIndexes))
 	copy(indexesCopy, a.ifaceIndexes)
@@ -532,7 +542,7 @@ func (a *AvahiProvider) AnnounceService(serviceType, serviceName string, port in
 
 	// Add service to the dedicated EntryGroup
 	// Note: For _shippairing._tcp, we use the same port as the SHIP server since pairing connects to the same WebSocket endpoint
-	for _, iface := range a.ifaceIndexes {
+	for _, iface := range a.getIfaceIndexes() {
 		err := entryGroup.AddService(iface, avahi.ProtoUnspec, 0, serviceName, serviceType, shipZeroConfDomain, "", uint16(port), btxt) // #nosec G115
 		if err != nil {
 			// Clean up the EntryGroup we just created since AddService failed
