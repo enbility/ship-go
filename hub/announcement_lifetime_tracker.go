@@ -115,8 +115,9 @@ func (t *AnnouncementLifetimeTracker) StartLifetimeTimer(shipID string, onExpiry
 // CancelLifetimeTimer cancels the announcement lifetime timer for a specific device.
 //
 // This should be called when a SHIP connection is interrupted (closed) before the
-// 15-minute window completes. The announcement will continue to be active since
-// the spec requires an *uninterrupted* connection for the full duration.
+// 15-minute window completes or the announcement was withdrawn by the announcer.
+// The announcement will continue to be active since the spec requires
+// an uninterrupted connection for the full duration.
 //
 // Parameters:
 //   - shipID: The SHIP ID of the device whose timer should be cancelled
