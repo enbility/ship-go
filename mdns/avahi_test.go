@@ -448,8 +448,13 @@ func (a *AvahiSuite) Test_chanListener() {
 		int32(-1), int32(-1),
 		shipPairingZeroConfServiceType, shipZeroConfDomain,
 		uint32(0)).Return(a.serviceBrowserMock, nil).Once()
+	// instance of a previous browser, e.g. before an avahi reconnect
+	a.sut.serviceElements["Stale-_ship._tcp-local-0-1"] = map[string]string{}
 	available := a.sut.Start(api.PairingModeListener, true, cb)
 	assert.True(a.T(), available)
+	a.sut.muxEl.RLock()
+	assert.Equal(a.T(), 0, len(a.sut.serviceElements))
+	a.sut.muxEl.RUnlock()
 
 	time.Sleep(time.Second * 1)
 
@@ -481,4 +486,59 @@ func (a *AvahiSuite) Test_chanListener() {
 	// Two ServiceBrowserFree calls - one for each browser
 	a.avahiMock.EXPECT().ServiceBrowserFree(a.serviceBrowserMock).Return().Times(2)
 	a.sut.Shutdown()
+}
+
+// avahi reports a service instance per interface and protocol, removing one
+// instance must not report the service as removed while others still exist
+func (a *AvahiSuite) Test_RemoveServiceInstancePerInterface() {
+	removes := 0
+	cb := func(elements map[string]string, name, host, service string, addresses []net.IP, port int, remove bool) {
+		if remove {
+			removes++
+		}
+	}
+
+	instance := func(iface, protocol int32) avahi.Service {
+		return avahi.Service{
+			Interface: iface,
+			Protocol:  protocol,
+			Name:      "TestService",
+			Type:      "_ship._tcp",
+			Domain:    "local",
+			Host:      "localhost.local",
+			Address:   "192.168.1.1",
+			Port:      4711,
+			Txt:       [][]byte{[]byte("txtvers=1"), []byte("ski=1234")},
+		}
+	}
+	ipv4If1 := instance(1, avahi.ProtoInet)
+	ipv6If1 := instance(1, avahi.ProtoInet6)
+	ipv4If2 := instance(2, avahi.ProtoInet)
+	// shares the name prefix, must not keep "TestService" alive
+	otherService := instance(1, avahi.ProtoInet)
+	otherService.Name = "TestService2"
+
+	for _, service := range []avahi.Service{ipv4If1, ipv6If1, ipv4If2, otherService} {
+		assert.Nil(a.T(), a.sut.processAddedService(service, cb))
+	}
+
+	assert.Nil(a.T(), a.sut.processRemovedService(ipv4If1, cb))
+	assert.Equal(a.T(), 0, removes)
+
+	assert.Nil(a.T(), a.sut.processRemovedService(ipv6If1, cb))
+	assert.Equal(a.T(), 0, removes)
+
+	// remove of an instance that was never added, e.g. because its resolve failed
+	assert.Nil(a.T(), a.sut.processRemovedService(instance(3, avahi.ProtoInet), cb))
+	assert.Equal(a.T(), 0, removes)
+
+	assert.Nil(a.T(), a.sut.processRemovedService(ipv4If2, cb))
+	assert.Equal(a.T(), 1, removes)
+
+	assert.Nil(a.T(), a.sut.processRemovedService(otherService, cb))
+	assert.Equal(a.T(), 2, removes)
+
+	a.sut.muxEl.RLock()
+	assert.Equal(a.T(), 0, len(a.sut.serviceElements))
+	a.sut.muxEl.RUnlock()
 }

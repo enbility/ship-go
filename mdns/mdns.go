@@ -1179,7 +1179,7 @@ func (m *MdnsManager) processShipMdnsEntry(elements map[string]string, serviceNa
 	if remove && exists {
 		updated = true
 		// remove
-		// there will be a remove for each address with avahi, but we'll delete it right away
+		// the provider reports a remove only once the service is gone on all interfaces
 		m.removeMdnsEntry(serviceName)
 
 		logging.Log().Debug("mdns: remove - ski:", ski, "name:", serviceName, "brand:", brand, "model:", model, "typ:", deviceType, "serial:", serial, "categories:", categoriesStr, "identifier:", identifier, "register:", register, "host:", host, "port:", port, "addresses:", addresses)
