@@ -10,13 +10,15 @@ import (
 
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/logging"
-	"github.com/enbility/zeroconf/v2"
+	"github.com/enbility/zeroconf/v3"
+	zapi "github.com/enbility/zeroconf/v3/api"
 )
 
-// ZeroconfServerInterface abstracts zeroconf.Server for testing
+// ZeroconfServerInterface abstracts zeroconf.Server for testing.
+// Note: zeroconf/v3 no longer exposes TTL as a method on *Server (it is a
+// ServerOption applied at registration time), so it is not part of this interface.
 type ZeroconfServerInterface interface {
 	Shutdown()
-	TTL(uint32)
 }
 
 // ZeroconfFactoryInterface abstracts zeroconf.Register for testing
@@ -24,15 +26,28 @@ type ZeroconfFactoryInterface interface {
 	Register(serviceName, serviceType, domain string, port int, txt []string, ifaces []net.Interface) (ZeroconfServerInterface, error)
 }
 
-// DefaultZeroconfFactory implements ZeroconfFactoryInterface using real zeroconf
-type DefaultZeroconfFactory struct{}
+// DefaultZeroconfFactory implements ZeroconfFactoryInterface using real zeroconf.
+// The connection factory and interface provider are passed through to zeroconf so
+// they can be replaced with mocks for testing.
+type DefaultZeroconfFactory struct {
+	connFactory       zapi.ConnectionFactory
+	interfaceProvider zapi.InterfaceProvider
+}
 
 func (f *DefaultZeroconfFactory) Register(serviceName, serviceType, domain string, port int, txt []string, ifaces []net.Interface) (ZeroconfServerInterface, error) {
-	return zeroconf.Register(serviceName, serviceType, domain, port, txt, ifaces, zeroconf.TTL(120))
+	// Set TTL to 2 minutes as defined in SHIP chapter 7
+	opts := []zeroconf.ServerOption{
+		zeroconf.TTL(120),
+		zeroconf.WithServerConnFactory(f.connFactory),
+		zeroconf.WithServerInterfaceProvider(f.interfaceProvider),
+	}
+	return zeroconf.Register(serviceName, serviceType, domain, port, txt, ifaces, opts...)
 }
 
 type ZeroconfProvider struct {
-	ifaces []net.Interface
+	ifaces            []net.Interface
+	connFactory       zapi.ConnectionFactory
+	interfaceProvider zapi.InterfaceProvider
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -62,13 +77,33 @@ type zeroconfInstanceData struct {
 	Txt         []string
 }
 
-func NewZeroconfProvider(ifaces []net.Interface) *ZeroconfProvider {
+// NewZeroconfProvider creates a ZeroconfProvider.
+//
+// The connection factory and interface provider can be replaced with mocks for testing.
+// For normal operation no special connection factory or interface provider need to be
+// passed (simply pass nil for both) and zeroconf's defaults are used.
+func NewZeroconfProvider(ifaces []net.Interface, connFactory *zapi.ConnectionFactory, interfaceProvider *zapi.InterfaceProvider) *ZeroconfProvider {
+	zConnFactory := zeroconf.NewConnectionFactory()
+	if connFactory != nil {
+		zConnFactory = *connFactory
+	}
+
+	zInterfaceProvider := zeroconf.NewInterfaceProvider()
+	if interfaceProvider != nil {
+		zInterfaceProvider = *interfaceProvider
+	}
+
 	return &ZeroconfProvider{
-		ifaces:           ifaces,
-		instanceServers:  make(map[string]ZeroconfServerInterface),
-		instanceCounter:  0,
-		serviceInstances: make(map[string]*zeroconfInstanceData),
-		serverFactory:    &DefaultZeroconfFactory{},
+		ifaces:            ifaces,
+		connFactory:       zConnFactory,
+		interfaceProvider: zInterfaceProvider,
+		instanceServers:   make(map[string]ZeroconfServerInterface),
+		instanceCounter:   0,
+		serviceInstances:  make(map[string]*zeroconfInstanceData),
+		serverFactory: &DefaultZeroconfFactory{
+			connFactory:       zConnFactory,
+			interfaceProvider: zInterfaceProvider,
+		},
 	}
 }
 
@@ -240,14 +275,19 @@ func (z *ZeroconfProvider) chanListener(pairingMode api.PairingMode, cb api.Mdns
 	// Browse for _ship._tcp services
 	// Get a thread-safe copy of interfaces
 	ifaces := z.getIfaces()
+	clientOpts := []zeroconf.ClientOption{
+		zeroconf.SelectIfaces(ifaces),
+		zeroconf.WithClientConnFactory(z.connFactory),
+		zeroconf.WithClientInterfaceProvider(z.interfaceProvider),
+	}
 	go func() {
-		_ = zeroconf.Browse(myCtx, shipZeroConfServiceType, shipZeroConfDomain, zcEntries, zcRemoved, zeroconf.SelectIfaces(ifaces))
+		_ = zeroconf.Browse(myCtx, shipZeroConfServiceType, shipZeroConfDomain, zcEntries, zcRemoved, clientOpts...)
 	}()
 
 	// Also browse for _shippairing._tcp services
 	if pairingMode == api.PairingModeListener || pairingMode == api.PairingModeBoth {
 		go func() {
-			_ = zeroconf.Browse(myCtx, shipPairingZeroConfServiceType, shipZeroConfDomain, zcPairingEntries, zcPairingRemoved, zeroconf.SelectIfaces(ifaces))
+			_ = zeroconf.Browse(myCtx, shipPairingZeroConfServiceType, shipZeroConfDomain, zcPairingEntries, zcPairingRemoved, clientOpts...)
 		}()
 	}
 
