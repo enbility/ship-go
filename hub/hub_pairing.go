@@ -249,6 +249,14 @@ func (h *Hub) PairingService() api.ShipPairingServiceInterface {
 	return h.pairingService
 }
 
+// PairingListener returns the active devA pairing listener, if any.
+func (h *Hub) PairingListener() api.PairingListenerInterface {
+	h.muxPairingListener.RLock()
+	defer h.muxPairingListener.RUnlock()
+
+	return h.activePairingListener
+}
+
 // SetPairingService configures the optional pairing service (called during Hub construction)
 func (h *Hub) SetPairingService(service api.ShipPairingServiceInterface) error {
 	h.muxPairing.Lock()

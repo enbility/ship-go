@@ -83,6 +83,14 @@ func (suite *ServiceTestSuite) TestServiceLifecycle() {
 	assert.False(suite.T(), status)
 }
 
+func (suite *ServiceTestSuite) TestServiceListenerGetter() {
+	require.Nil(suite.T(), suite.sut.Listener())
+
+	listener := suite.sut.CreateListener()
+	require.NotNil(suite.T(), listener)
+	assert.Same(suite.T(), listener, suite.sut.Listener())
+}
+
 func (suite *ServiceTestSuite) TestShutdown_ServiceStateOnly() {
 	// Test that Service shutdown only manages Service state (stateless factory pattern)
 
