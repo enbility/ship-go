@@ -729,3 +729,130 @@ func (s *IssuesSuite) Test_AvahiAnnounceDoesNotDeadlockChanListener() {
 		s.T().Fatal("deadlock (#78): chanListener is blocked on a.mux while AnnounceService waits for its D-Bus reply")
 	}
 }
+
+// ---------------------------------------------------------------------
+// SetAutoAccept has to get the new register value onto the network.
+//
+// The create-then-swap path announces a second instance under the same
+// service name, which Avahi rejects with "Local name collision", so the
+// record on the wire kept register=false however often the flag was set.
+// A provider that can rewrite the TXT record in place has to be used.
+// ---------------------------------------------------------------------
+
+type txtUpdatingProviderMock struct {
+	*mocks.MdnsProviderInterface
+
+	mux      sync.Mutex
+	updates  [][]string
+	updateID string
+	err      error
+}
+
+func (p *txtUpdatingProviderMock) UpdateServiceTxt(instanceID string, txt []string) error {
+	p.mux.Lock()
+	defer p.mux.Unlock()
+
+	p.updateID = instanceID
+	if p.err != nil {
+		return p.err
+	}
+	p.updates = append(p.updates, txt)
+
+	return nil
+}
+
+func (p *txtUpdatingProviderMock) recorded() ([][]string, string) {
+	p.mux.Lock()
+	defer p.mux.Unlock()
+
+	return p.updates, p.updateID
+}
+
+func (s *IssuesSuite) Test_SetAutoAcceptUpdatesTheTxtRecordInPlace() {
+	provider := &txtUpdatingProviderMock{MdnsProviderInterface: mocks.NewMdnsProviderInterface(s.T())}
+	provider.EXPECT().AnnounceService(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("7", nil).Once()
+	provider.EXPECT().UnannounceService(mock.Anything).Return(nil).Maybe()
+	provider.EXPECT().Shutdown().Return().Maybe()
+
+	sut := NewMDNS("test", "brand", "model", "EnergyManagementSystem", "12345",
+		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
+		"shipid", "serviceName", 4729, nil, MdnsProviderSelectionAll)
+	sut.SetMdnsProvider(provider)
+
+	assert.Nil(s.T(), sut.AnnounceMdnsEntry())
+
+	sut.SetAutoAccept(true)
+
+	updates, instanceID := provider.recorded()
+	assert.Equal(s.T(), 1, len(updates), "the txt record was not updated in place")
+	assert.Equal(s.T(), "7", instanceID)
+	assert.Contains(s.T(), updates[0], "register=true")
+
+	sut.Shutdown()
+}
+
+func (s *IssuesSuite) Test_SetAutoAcceptFallsBackToReannouncing() {
+	provider := &txtUpdatingProviderMock{
+		MdnsProviderInterface: mocks.NewMdnsProviderInterface(s.T()),
+		err:                   errors.New("not supported"),
+	}
+	provider.EXPECT().AnnounceService(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("7", nil).Once()
+	provider.EXPECT().AnnounceService(mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(txt []string) bool {
+		for _, entry := range txt {
+			if entry == "register=true" {
+				return true
+			}
+		}
+		return false
+	})).Return("8", nil).Once()
+	provider.EXPECT().UnannounceService("7").Return(nil).Once()
+	provider.EXPECT().UnannounceService(mock.Anything).Return(nil).Maybe()
+	provider.EXPECT().Shutdown().Return().Maybe()
+
+	sut := NewMDNS("test", "brand", "model", "EnergyManagementSystem", "12345",
+		[]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem},
+		"shipid", "serviceName", 4729, nil, MdnsProviderSelectionAll)
+	sut.SetMdnsProvider(provider)
+
+	assert.Nil(s.T(), sut.AnnounceMdnsEntry())
+
+	sut.SetAutoAccept(true)
+
+	sut.Shutdown()
+}
+
+func (s *IssuesSuite) Test_AvahiUpdateServiceTxtRewritesTheCommittedEntryGroup() {
+	avahiMock := avahiMocks.NewServerInterface(s.T())
+	entryGroupMock := avahiMocks.NewEntryGroupInterface(s.T())
+
+	sut := NewAvahiProvider([]int32{1, 2})
+	sut.avServer = avahiMock
+
+	avahiMock.EXPECT().EntryGroupNew().Return(entryGroupMock, nil).Once()
+	entryGroupMock.EXPECT().AddService(
+		mock.Anything, mock.Anything, mock.Anything,
+		"test", shipZeroConfServiceType, shipZeroConfDomain,
+		"", mock.Anything, mock.Anything,
+	).Return(nil).Twice()
+	entryGroupMock.EXPECT().Commit().Return(nil).Once()
+
+	instanceID, err := sut.AnnounceService(shipZeroConfServiceType, "test", 4729, []string{"txtvers=1", "register=false"})
+	assert.Nil(s.T(), err)
+
+	// the same entry group on every interface, no second AddService
+	for _, iface := range []int32{1, 2} {
+		entryGroupMock.EXPECT().UpdateServiceTxt(
+			iface, mock.Anything, mock.Anything,
+			"test", shipZeroConfServiceType, shipZeroConfDomain,
+			[][]byte{[]byte("txtvers=1"), []byte("register=true")},
+		).Return(nil).Once()
+	}
+
+	err = sut.UpdateServiceTxt(instanceID, []string{"txtvers=1", "register=true"})
+	assert.Nil(s.T(), err)
+
+	assert.Equal(s.T(), []string{"txtvers=1", "register=true"}, sut.serviceInstances[instanceID].Txt)
+
+	err = sut.UpdateServiceTxt("unknown", []string{"txtvers=1"})
+	assert.ErrorIs(s.T(), err, api.ErrPairingNotActive)
+}

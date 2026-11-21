@@ -670,6 +670,32 @@ func (m *MdnsManager) Shutdown() {
 	m.setIsServiceAnnounce(false)
 }
 
+// txtRecord builds the TXT record of the _ship._tcp announcement, SHIP 7.3.2.
+func (m *MdnsManager) txtRecord() []string {
+	txt := []string{
+		"txtvers=1",
+		"path=" + shipWebsocketPath,
+		"id=" + m.identifier,
+		"ski=" + m.ski,
+		"brand=" + m.deviceBrand,
+		"model=" + m.deviceModel,
+		"type=" + m.deviceType,
+		"register=" + fmt.Sprintf("%v", m.autoaccept.Load()),
+	}
+
+	// SHIP Requirements for Installation Process V1.0.0
+	if len(m.deviceSerial) > 0 {
+		txt = append(txt, "serial="+m.deviceSerial)
+	}
+
+	categories := m.deviceCategoriesString(m.deviceCategories)
+	if len(categories) > 0 {
+		txt = append(txt, "cat="+categories)
+	}
+
+	return txt
+}
+
 // Announces the service to the network via mDNS
 // A CEM service should always invoke this on startup
 // Any other service should only invoke this whenever it is not connected to a CEM service
@@ -697,28 +723,7 @@ func (m *MdnsManager) AnnounceMdnsEntry() error {
 		return fmt.Errorf("cannot announce mDNS entry: invalid port %d", m.port)
 	}
 
-	serviceIdentifier := m.identifier
-
-	txt := []string{ // SHIP 7.3.2
-		"txtvers=1",
-		"path=" + shipWebsocketPath,
-		"id=" + serviceIdentifier,
-		"ski=" + m.ski,
-		"brand=" + m.deviceBrand,
-		"model=" + m.deviceModel,
-		"type=" + m.deviceType,
-		"register=" + fmt.Sprintf("%v", m.autoaccept.Load()),
-	}
-
-	// SHIP Requirements for Installation Process V1.0.0
-	if len(m.deviceSerial) > 0 {
-		txt = append(txt, "serial="+m.deviceSerial)
-	}
-
-	categories := m.deviceCategoriesString(m.deviceCategories)
-	if len(categories) > 0 {
-		txt = append(txt, "cat="+categories)
-	}
+	txt := m.txtRecord()
 
 	logging.Log().Debug("mdns: announce")
 
@@ -769,11 +774,31 @@ func (m *MdnsManager) setIsServiceAnnounce(value bool) {
 	m.isAnnounced = value
 }
 
+// txtRecordUpdater is implemented by providers that can rewrite the TXT
+// record of a running announcement in place. It is optional: a provider
+// without it goes through announce-and-replace.
+type txtRecordUpdater interface {
+	UpdateServiceTxt(instanceID string, txt []string) error
+}
+
 func (m *MdnsManager) SetAutoAccept(accept bool) {
 	m.autoaccept.Store(accept)
 
 	if !m.isServiceAnnounced() || m.mdnsProvider == nil {
 		return
+	}
+
+	// Rewrite the TXT record of the live instance where the provider can do
+	// that. Avahi rejects a second announcement under the same service name
+	// with "Local name collision", so the create-then-swap below never gets
+	// the new record onto the network there and register would stay stale.
+	if updater, ok := m.mdnsProvider.(txtRecordUpdater); ok && m.instanceID != "" {
+		err := updater.UpdateServiceTxt(m.instanceID, m.txtRecord())
+		if err == nil {
+			return
+		}
+
+		logging.Log().Debug("mdns: updating the txt record failed, re-announcing", err)
 	}
 
 	// Create-then-swap: announce a new instance with the updated TXT record

@@ -587,6 +587,58 @@ func (a *AvahiProvider) AnnounceService(serviceType, serviceName string, port in
 	return instanceID, nil
 }
 
+// UpdateServiceTxt replaces the TXT record of an already announced instance.
+//
+// Avahi refuses a second AddService for a service name that is already
+// committed ("Local name collision"), so a TXT change cannot go through
+// announce-then-free. UpdateServiceTxt rewrites the record in the existing
+// entry group instead, which keeps the instance and its SRV record in place.
+func (a *AvahiProvider) UpdateServiceTxt(instanceID string, txt []string) error {
+	a.mux.Lock()
+	instance, exists := a.serviceInstances[instanceID]
+	if !exists {
+		a.mux.Unlock()
+		return api.ErrPairingNotActive
+	}
+
+	entryGroup := a.instanceEntryGroups[instanceID]
+	serviceType := instance.ServiceType
+	serviceName := instance.ServiceName
+	a.mux.Unlock()
+
+	if entryGroup == nil {
+		return api.ErrPairingNotActive
+	}
+
+	btxt := make([][]byte, len(txt))
+	for i, t := range txt {
+		btxt[i] = []byte(t)
+	}
+
+	// Without mux held: this is a dBus round trip, and nothing below needs
+	// the provider state.
+	for _, iface := range a.getIfaceIndexes() {
+		if err := entryGroup.UpdateServiceTxt(iface, avahi.ProtoUnspec, 0, serviceName, serviceType, shipZeroConfDomain, btxt); err != nil {
+			return fmt.Errorf("failed to update %s txt record: %w", serviceType, err)
+		}
+	}
+
+	a.mux.Lock()
+	defer a.mux.Unlock()
+
+	if instance, ok := a.serviceInstances[instanceID]; ok {
+		instance.Txt = txt
+	}
+	if state, ok := a.instanceStates[instanceID]; ok {
+		state.Txt = txt
+	}
+	if serviceType == shipZeroConfServiceType && a.mdnsServiceData != nil {
+		a.mdnsServiceData.Txt = txt
+	}
+
+	return nil
+}
+
 // UnannounceService removes a service instance by its instance ID
 func (a *AvahiProvider) UnannounceService(instanceID string) error {
 	a.mux.Lock()
