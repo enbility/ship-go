@@ -132,11 +132,9 @@ func TestApprovePendingHandshake_RaceCondition(t *testing.T) {
 	// Verify HandleConnectionClosed was called if abort succeeded
 	// Note: Due to timing, HandleConnectionClosed might not always be called immediately
 	closedCalls := safeTracker.GetConnectionClosedCalls()
-	if len(closedCalls) > 0 {
-		// If we have close calls, verify the remote SKI is correct
-		for _, call := range closedCalls {
-			assert.Equal(t, "remote-ski", call.RemoteSKI, "Remote SKI should match")
-		}
+	// If we have close calls, verify the remote SKI is correct
+	for _, call := range closedCalls {
+		assert.Equal(t, "remote-ski", call.RemoteSKI, "Remote SKI should match")
 	}
 
 	// Verify handshake state updates were recorded
