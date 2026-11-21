@@ -89,6 +89,7 @@ func TestReportMdnsEntries(t *testing.T) {
 			if entry.Ski != "SKI1" || entry.Brand != "BrandA" {
 				t.Errorf("Service 1 fields do not match")
 			}
+			assert.Equal(t, []net.IP{net.ParseIP("192.168.1.2")}, entry.Addresses)
 		}
 		if entry.Name == "Service 2" {
 			if entry.Ski != "SKI2" || entry.Brand != "BrandB" {
