@@ -25,8 +25,9 @@ func logConnectionError(err error, context string) {
 		return
 	}
 
-	// Connection refused/timeout can be Debug (expected during discovery)
-	if errors.Is(err, syscall.ECONNREFUSED) {
+	// Connection refused/timeout can be Debug (expected during discovery).
+	// EINVAL: hostname resolved to a zone-less link-local IPv6 address; the hub retries via IP.
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.EINVAL) {
 		logging.Log().Debug(context, err)
 		return
 	}
