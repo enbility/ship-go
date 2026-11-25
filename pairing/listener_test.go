@@ -3,6 +3,7 @@ package pairing
 import (
 	"context"
 	"errors"
+	"runtime"
 	"testing"
 	"time"
 
@@ -1289,6 +1290,27 @@ func (suite *ListenerTestSuite) TestStartListening_SnapshotReadError_KeepsListen
 		"a failed snapshot read must not tear down the subscription")
 
 	assert.NoError(suite.T(), sut.StopListening())
+}
+
+func (suite *ListenerTestSuite) TestStopStartCycles_NoGoroutineLeak() {
+	// The stop watcher must end with its listener session, not with the
+	// long-lived parent context, and must not stop a later session.
+	suite.mockMdns.EXPECT().SearchPairingServices(mock.AnythingOfType("func(*api.ShipPairingTXT) bool")).Return(nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	baseline := runtime.NumGoroutine()
+	for range 50 {
+		assert.NoError(suite.T(), suite.sut.StartListening(ctx, suite.testSecret))
+		assert.NoError(suite.T(), suite.sut.StopListening())
+	}
+	assert.NoError(suite.T(), suite.sut.StartListening(ctx, suite.testSecret))
+
+	assert.Eventually(suite.T(), func() bool {
+		return runtime.NumGoroutine() <= baseline+5
+	}, 2*time.Second, 10*time.Millisecond, "stop watcher goroutines leaked")
+	assert.True(suite.T(), suite.sut.GetListenerStatus().Active, "a stale watcher must not stop the current session")
 }
 
 /* Test Helper Functions */
