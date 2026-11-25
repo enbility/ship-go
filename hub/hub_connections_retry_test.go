@@ -2,6 +2,7 @@ package hub
 
 import (
 	"testing"
+	"time"
 
 	"github.com/enbility/ship-go/api"
 	"github.com/enbility/ship-go/cert"
@@ -148,5 +149,38 @@ func (s *HubConnectionsRetrySuite) Test_CoordinateConnectionInitations_AfterRere
 
 	assert.True(s.T(), s.sut.isConnectionAttemptRunning(ski),
 		"a registered service must be able to start a connection attempt again")
+	s.sut.cancelConnectionDelayTimer(ski)
+}
+
+// The delay timer must not fire before it is stored. Otherwise its callback
+// clears the attempt flag, a second attempt arms and stores its own timer, and
+// storing the first (fired) timer stops the second one: the flag stays set.
+func (s *HubConnectionsRetrySuite) Test_CoordinateConnectionInitations_TimerStoredBeforeItFires() {
+	ranges := connectionInitiationDelayTimeRanges
+	connectionInitiationDelayTimeRanges = []connectionInitiationDelayTimeRange{{min: 0, max: 1}}
+	defer func() { connectionInitiationDelayTimeRanges = ranges }()
+
+	ski := "storeorderski"
+	// untrusted: the timer callback returns without connecting
+	service, err := api.NewServiceDetails(ski, "", "")
+	assert.NoError(s.T(), err)
+	_, err = s.sut.mergeOrAddService(service)
+	assert.NoError(s.T(), err)
+
+	// keep the timer from being stored
+	s.sut.muxTimers.Lock()
+	done := make(chan struct{})
+	go func() {
+		s.sut.coordinateConnectionInitations(ski, &api.MdnsEntry{Ski: ski})
+		close(done)
+	}()
+
+	// longer than the maximum delay of 1s
+	time.Sleep(1200 * time.Millisecond)
+	running := s.sut.isConnectionAttemptRunning(ski)
+	s.sut.muxTimers.Unlock()
+	<-done
+
+	assert.True(s.T(), running, "the timer callback ran before the timer was stored")
 	s.sut.cancelConnectionDelayTimer(ski)
 }

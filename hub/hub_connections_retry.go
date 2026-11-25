@@ -20,23 +20,30 @@ func (h *Hub) coordinateConnectionInitations(ski string, entry *api.MdnsEntry) {
 		return
 	}
 
-	if h.isConnectionAttemptRunning(ski) {
+	h.muxConAttempt.Lock()
+	if h.connectionAttemptRunning[ski] {
+		h.muxConAttempt.Unlock()
 		return
 	}
-
-	h.setConnectionAttemptRunning(ski, true)
+	h.connectionAttemptRunning[ski] = true
+	h.muxConAttempt.Unlock()
 
 	counter, duration := h.getConnectionInitiationDelayTime(ski)
 
 	logging.Log().Debugf("delaying connection to %s by %s to minimize double connection probability", ski, duration)
 
-	// Create a cancellable timer
-	timer := newConnectionDelayTimer(duration, func() {
+	// Arm and store the timer in one muxTimers section: storing a timer that already
+	// fired would stop a newer attempt's timer and leave the attempt flag set.
+	h.muxTimers.Lock()
+	defer h.muxTimers.Unlock()
+
+	if existing, ok := h.connectionDelayTimers[ski]; ok {
+		existing.Stop()
+	}
+
+	h.connectionDelayTimers[ski] = newConnectionDelayTimer(duration, func() {
 		h.prepareConnectionInitation(ski, counter, entry)
 	})
-
-	// Store the timer so it can be cancelled if needed
-	h.storeConnectionDelayTimer(ski, timer)
 }
 
 // prepareConnectionInitation is invoked by coordinateConnectionInitations either with a delay or directly
