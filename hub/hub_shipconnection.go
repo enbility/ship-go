@@ -130,11 +130,16 @@ func (h *Hub) HandleShipHandshakeStateUpdate(ski string, state model.ShipState) 
 
 	pairingDetail := api.NewConnectionStateDetail(pairingState, state.Error)
 
+	// compare-and-set under muxReg: double connections to one SKI update the same service concurrently
+	h.muxReg.Lock()
 	existingDetails := service.ConnectionStateDetail()
-	existingState := existingDetails.State()
-	if existingState != pairingState || !errors.Is(existingDetails.Error(), state.Error) {
+	changed := existingDetails.State() != pairingState || !errors.Is(existingDetails.Error(), state.Error)
+	if changed {
 		service.SetConnectionStateDetail(pairingDetail)
+	}
+	h.muxReg.Unlock()
 
+	if changed {
 		if pairingState == api.ConnectionStateCompleted {
 			connectedIdentity := service.ToServiceIdentity()
 			h.hubReader.RemoteServiceConnected(connectedIdentity)
