@@ -87,12 +87,18 @@ func (t *AnnouncementLifetimeTracker) StartLifetimeTimer(shipID string, onExpiry
 	}
 
 	// Start new timer
-	timer := time.AfterFunc(t.timeout, func() {
+	var timer *time.Timer
+	timer = time.AfterFunc(t.timeout, func() {
 		// Capture shipID before clearing state
 		expiredShipID := shipID
 
 		// Clear state when timer expires
 		t.mutex.Lock()
+		// the timer was cancelled or replaced after it fired
+		if t.timers[expiredShipID].timer != timer {
+			t.mutex.Unlock()
+			return
+		}
 		t.removeLifetimeTimer(expiredShipID)
 		t.mutex.Unlock()
 
