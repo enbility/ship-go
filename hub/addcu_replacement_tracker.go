@@ -94,7 +94,8 @@ func (t *AddCuReplacementTracker) StartTimer(shipID string, onTimeout func(expir
 	t.disconnectionTime = time.Now()
 
 	// Create new timer with callback
-	t.timer = time.AfterFunc(t.timeout, func() {
+	var timer *time.Timer
+	timer = time.AfterFunc(t.timeout, func() {
 		// Capture shipID before clearing state to pass to callback
 		expiredShipID := shipID
 
@@ -103,6 +104,11 @@ func (t *AddCuReplacementTracker) StartTimer(shipID string, onTimeout func(expir
 		// and sync.RWMutex is not reentrant — holding the lock while calling onTimeout
 		// would deadlock.
 		t.mutex.Lock()
+		// the timer was stopped or replaced after it fired
+		if t.timer != timer {
+			t.mutex.Unlock()
+			return
+		}
 		t.pairedDeviceShipID = ""
 		t.disconnectionTime = time.Time{}
 		t.timer = nil
@@ -113,6 +119,7 @@ func (t *AddCuReplacementTracker) StartTimer(shipID string, onTimeout func(expir
 			onTimeout(expiredShipID)
 		}
 	})
+	t.timer = timer
 }
 
 // StopTimer stops tracking the specified device if it matches the currently tracked device.
