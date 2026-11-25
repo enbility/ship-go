@@ -384,6 +384,32 @@ func (suite *HubIntegrationTestSuite) TestStopAnnouncement_Success() {
 	suite.sut.mux.RUnlock()
 }
 
+func (suite *HubIntegrationTestSuite) TestStopAnnouncement_KeepsCallerSecret() {
+	// Stopping clears the announcer's copy of the target, not the caller's secret
+	secret := []byte("test-secret-1234")
+	target := api.PairingTarget{
+		SKI:         "targetdeviceski",
+		Fingerprint: "C74B7855D3479415F62CC01E5F6D9A93EBC676057D85417ADA16FD1384338943",
+		ShipID:      "i:983327_u:C8277H008F-3",
+		Secret:      secret,
+	}
+	require.NoError(suite.T(), suite.sut.EnablePairingService(&PairingConfiguration{
+		Mode:    PairingModeAnnouncer,
+		Secret:  api.PairingSecret(target.Secret),
+		Enabled: true,
+	}))
+
+	suite.mockCrypto.EXPECT().GenerateNonce().Return([]byte{0x01, 0x02}, nil).Once()
+	suite.mockCrypto.EXPECT().CalculateDigest(mock.Anything, mock.AnythingOfType("api.HMACParams")).Return([]byte{0xAA, 0xBB}, nil).Once()
+	suite.mockPairingMdns.EXPECT().AnnouncePairingService(mock.AnythingOfType("*api.ShipPairingTXT")).Return("active-instance-id", nil).Once()
+	suite.mockPairingMdns.EXPECT().UnannouncePairingService("active-instance-id").Return(nil).Once()
+
+	require.NoError(suite.T(), suite.sut.Announce(target))
+	require.NoError(suite.T(), suite.sut.StopAnnouncement())
+
+	assert.Equal(suite.T(), []byte("test-secret-1234"), secret, "caller's secret must not be zeroed")
+}
+
 func (suite *HubIntegrationTestSuite) TestStopAnnouncement_NotAnnouncing() {
 	// Test stopping when not currently announcing (edge case)
 

@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -168,6 +169,8 @@ func (p *PairingAnnouncer) AnnounceToDevice(target api.PairingTarget) error {
 
 	// Update state
 	p.currentTarget = target
+	// Clear() zeroes the secret; keep it from zeroing the caller's bytes
+	p.currentTarget.Secret = slices.Clone(target.Secret)
 	p.currentInstanceID = instanceID
 	p.announcing = true
 
