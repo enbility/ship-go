@@ -108,10 +108,16 @@ func (a *AvahiProvider) Start(pairingMode api.PairingMode, autoReconnect bool, c
 	a.mux.Lock()
 	defer a.mux.Unlock()
 
+	a.manualShutdown = false
+
+	return a.start(pairingMode, autoReconnect, cb)
+}
+
+// start requires a.mux to be held
+func (a *AvahiProvider) start(pairingMode api.PairingMode, autoReconnect bool, cb api.MdnsResolveCB) bool {
 	a.pairingMode = pairingMode
 	a.autoReconnect = autoReconnect
 	a.resolveCB = cb
-	a.manualShutdown = false
 
 	err := a.avServer.Setup(a.avahiCallback)
 	if err != nil {
@@ -323,7 +329,16 @@ func (a *AvahiProvider) attemptReconnect(cb api.MdnsResolveCB, serviceData *mdns
 
 		logging.Log().Tracef("mdns: avahi - reconnection attempt %d (delay: %v)", attempt, currentDelay)
 
-		if !a.Start(a.pairingMode, true, cb) {
+		// check and restart under one lock so a concurrent Shutdown is never undone
+		a.mux.Lock()
+		if a.manualShutdown {
+			a.mux.Unlock()
+			return
+		}
+		started := a.start(a.pairingMode, true, cb)
+		a.mux.Unlock()
+
+		if !started {
 			// Exponential backoff with jitter
 			currentDelay = currentDelay * 2
 			// Add jitter (±10%)

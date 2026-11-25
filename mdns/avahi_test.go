@@ -482,3 +482,33 @@ func (a *AvahiSuite) Test_chanListener() {
 	a.avahiMock.EXPECT().ServiceBrowserFree(a.serviceBrowserMock).Return().Times(2)
 	a.sut.Shutdown()
 }
+
+func (a *AvahiSuite) Test_Avahi_ShutdownDuringReconnect() {
+	someError := errors.New("some error")
+
+	// avahi stays down; a reconnect attempt must not undo the shutdown
+	a.avahiMock.EXPECT().Setup(mock.Anything).Return(someError).Maybe()
+	a.avahiMock.EXPECT().Shutdown().Return().Once()
+
+	a.sut.setupSuccessful = true
+	a.sut.reconnectInProgress = true
+	go a.sut.attemptReconnect(nil, nil)
+
+	// shut down while the reconnect goroutine sleeps before its first attempt
+	time.Sleep(100 * time.Millisecond)
+	done := make(chan struct{})
+	go func() {
+		a.sut.Shutdown()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		a.T().Fatal("Shutdown must return once the reconnect goroutine wakes up")
+	}
+
+	a.sut.mux.Lock()
+	assert.True(a.T(), a.sut.manualShutdown)
+	a.sut.mux.Unlock()
+}
