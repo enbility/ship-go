@@ -3,6 +3,8 @@ package pairing
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1289,6 +1291,38 @@ func (suite *ListenerTestSuite) TestStartListening_SnapshotReadError_KeepsListen
 		"a failed snapshot read must not tear down the subscription")
 
 	assert.NoError(suite.T(), sut.StopListening())
+}
+
+func (suite *ListenerTestSuite) TestConcurrentDelivery_AcceptsOnce() {
+	// The browse callback and the snapshot evaluation started by StartListening
+	// may deliver records at the same time; only one may be accepted.
+	txtRecord := suite.createValidTestTXTRecord()
+
+	suite.mockMdns.EXPECT().SearchPairingServices(mock.AnythingOfType("func(*api.ShipPairingTXT) bool")).Return(nil).Once()
+	suite.mockCrypto.EXPECT().ValidateDigest(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	suite.mockHistory.EXPECT().HasSeenDigest(mock.Anything, mock.Anything).Return(false).Maybe()
+	suite.mockHistory.EXPECT().RecordPairing(mock.Anything, mock.Anything).Return().Maybe()
+
+	var accepted atomic.Int32
+	suite.mockHub.EXPECT().OnPairingSuccess(txtRecord.TrustId, txtRecord.TrustPar).Return().Maybe().
+		Run(func(mock.Arguments) {
+			accepted.Add(1)
+			time.Sleep(50 * time.Millisecond)
+		})
+
+	assert.NoError(suite.T(), suite.sut.StartListening(context.Background(), suite.testSecret))
+
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			suite.sut.handleMdnsDiscovery(txtRecord)
+		}()
+	}
+	wg.Wait()
+
+	assert.Equal(suite.T(), int32(1), accepted.Load(), "pairing must be accepted exactly once")
 }
 
 /* Test Helper Functions */
