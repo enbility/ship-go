@@ -50,6 +50,9 @@ type Hub struct {
 	// see SHIP 12.2.2 and hub_connections_dialstate.go
 	connectionsInitiating map[string]*dialState
 
+	// incoming connections admitted by ServeHTTP but not yet registered
+	connectionsIncoming int
+
 	port        int
 	certificate tls.Certificate
 

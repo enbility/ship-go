@@ -74,7 +74,7 @@ func (h *Hub) verifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.
 }
 
 // isDoubleConnectionRequest reports whether an incoming request comes from a SKI that
-// already has a connection, i.e. whether it is a double connection in the sense of
+// already has a connection or is being dialled, i.e. whether it is a double connection in the sense of
 // SHIP 12.2.2 rather than an additional peer.
 func (h *Hub) isDoubleConnectionRequest(r *http.Request) bool {
 	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
@@ -86,7 +86,14 @@ func (h *Hub) isDoubleConnectionRequest(r *http.Request) bool {
 		return false
 	}
 
-	return h.isSkiConnected(util.NormalizeSKI(ski))
+	ski = util.NormalizeSKI(ski)
+
+	// an outgoing dial to this SKI already holds a slot
+	h.muxCon.RLock()
+	_, initiating := h.connectionsInitiating[ski]
+	h.muxCon.RUnlock()
+
+	return initiating || h.isSkiConnected(ski)
 }
 
 // startWebsocketServer starts the SHIP websocket server
@@ -128,16 +135,26 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// A second connection from a SKI we are already connected to is exempt: it replaces
 	// the existing one rather than adding to the total, and SHIP 12.2.2 requires such a
 	// double connection to be resolved by SKI comparison, not rejected on capacity.
-	h.muxCon.RLock()
-	currentConnections := len(h.connections)
-	maxConnections := h.maxConnections
-	h.muxCon.RUnlock()
+	//
+	// The slot is reserved until this connection is registered or has failed.
+	doubleConnection := h.isDoubleConnectionRequest(r)
+	h.muxCon.Lock()
+	limitErr := h.validateConnectionLimit()
+	if limitErr == nil || doubleConnection {
+		h.connectionsIncoming++
+	}
+	h.muxCon.Unlock()
 
-	if currentConnections >= maxConnections && !h.isDoubleConnectionRequest(r) {
-		logging.Log().Debug("connection limit reached, rejecting new connection", currentConnections, maxConnections)
+	if limitErr != nil && !doubleConnection {
+		logging.Log().Debug("rejecting new incoming connection:", limitErr)
 		http.Error(w, "Connection limit reached", http.StatusServiceUnavailable)
 		return
 	}
+	defer func() {
+		h.muxCon.Lock()
+		h.connectionsIncoming--
+		h.muxCon.Unlock()
+	}()
 
 	upgrader := websocket.Upgrader{
 		CheckOrigin:  func(r *http.Request) bool { return true },
