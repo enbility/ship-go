@@ -3402,3 +3402,94 @@ func (suite *HubPairingCompositionTestSuite) TestInitializePairingServiceWithCon
 	assert.Error(suite.T(), err)
 	assert.Contains(suite.T(), err.Error(), "mDNS interface does not support pairing operations")
 }
+
+// Start initializes the pairing service and sets hasStarted while other
+// goroutines read the pairing fields or call SetPairingService: run with -race.
+func TestHub_PairingFieldsConcurrentWithStart(t *testing.T) {
+	// run starts a hub and calls access concurrently until Start has returned;
+	// with wait, Start only continues past mDNS once access is running
+	run := func(t *testing.T, pairingConfig *api.PairingConfig, wait bool, access func(*Hub)) {
+		mockHubReader := mocks.NewHubReaderInterface(t)
+		mockMdns := mocks.NewMdnsInterface(t)
+		mockPairing := mocks.NewMdnsPairingInterface(t)
+		mockPairing.EXPECT().RequestPairingEntries().Return(map[string]*api.ShipPairingTXT{}, nil).Maybe()
+		mockPairing.EXPECT().AnnouncePairingService(mock.Anything).Return("test-instance-id", nil).Maybe()
+		mockPairing.EXPECT().UnannouncePairingService(mock.AnythingOfType("string")).Return(nil).Maybe()
+		mockPairing.EXPECT().SearchPairingServices(mock.Anything).Return(nil).Maybe()
+		mockPairing.EXPECT().IsPairingServiceAnnounced().Return(false).Maybe()
+		mockMdns.EXPECT().Shutdown().Return().Maybe()
+		mockMdns.EXPECT().AnnounceMdnsEntry().Return(nil).Maybe()
+		mockMdns.EXPECT().RequestMdnsEntries().Return().Maybe()
+		mockMdns.EXPECT().DeviceBrand().Return("TestBrand").Maybe()
+		mockMdns.EXPECT().DeviceModel().Return("TestModel").Maybe()
+		mockMdns.EXPECT().DeviceSerial().Return("12345").Maybe()
+		mockMdns.EXPECT().DeviceCategories().Return([]api.DeviceCategoryType{api.DeviceCategoryTypeEnergyManagementSystem}).Maybe()
+		mockMdns.EXPECT().DeviceType().Return("12345").Maybe()
+
+		// access starts once the mock has matched (and formatted) the *Hub argument
+		mdnsStarted := make(chan struct{})
+		running := make(chan struct{})
+		mockMdns.EXPECT().Start(mock.Anything, mock.AnythingOfType("*hub.Hub")).Return(nil).Run(func(api.PairingMode, api.MdnsReportInterface) {
+			close(mdnsStarted)
+			if wait {
+				<-running
+			}
+		}).Once()
+
+		certificate, err := cert.CreateCertificate("test-unit", "test-org", "DE", "test-cn")
+		require.NoError(t, err)
+		localService, _ := api.NewServiceDetails("hubtestski", "", "")
+		localService.SetShipID("i:123_u:hub-test")
+
+		sut, err := newTestHub(mockHubReader, &CompositeMdnsMock{MdnsInterface: mockMdns, MdnsPairingInterface: mockPairing},
+			0, certificate, localService, pairingConfig)
+		require.NoError(t, err)
+		defer sut.Shutdown()
+
+		started := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			<-mdnsStarted
+			access(sut)
+			close(running)
+			for {
+				select {
+				case <-started:
+					return
+				default:
+					access(sut)
+				}
+			}
+		}()
+
+		defer func() {
+			close(started)
+			<-done
+		}()
+		require.NoError(t, sut.Start())
+	}
+
+	pairingConfig := api.NewPairingConfig(api.PairingModeListener, api.PairingSecret([]byte("test-secret-16b!")))
+
+	t.Run("pairingService", func(t *testing.T) {
+		run(t, pairingConfig, true, func(h *Hub) {
+			_ = h.PairingService()
+		})
+	})
+
+	t.Run("pairingConfig", func(t *testing.T) {
+		run(t, pairingConfig, true, func(h *Hub) {
+			_, _ = h.GeneratePairingQR()
+		})
+	})
+
+	// SetPairingService waits for a running Start, so Start must not wait for it
+	t.Run("hasStarted", func(t *testing.T) {
+		pairingService := mocks.NewShipPairingServiceInterface(t)
+		pairingService.EXPECT().Shutdown().Maybe()
+		run(t, nil, false, func(h *Hub) {
+			_ = h.SetPairingService(pairingService)
+		})
+	})
+}

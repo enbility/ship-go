@@ -56,7 +56,10 @@ func (h *Hub) HandleConnectionClosed(connection api.ShipConnectionInterface, han
 	h.hubReader.RemoteServiceDisconnected(disconnectedIdentity)
 
 	// Cancel any announcement lifetime timer for this device for devZ
-	if h.pairingService != nil && h.pairingConfig != nil && (h.pairingConfig.Mode == api.PairingModeAnnouncer || h.pairingConfig.Mode == api.PairingModeBoth) {
+	h.muxPairing.RLock()
+	pairingService, pairingConfig := h.pairingService, h.pairingConfig
+	h.muxPairing.RUnlock()
+	if pairingService != nil && pairingConfig != nil && (pairingConfig.Mode == api.PairingModeAnnouncer || pairingConfig.Mode == api.PairingModeBoth) {
 		if remoteService.ShipID() != "" {
 			h.announcementLifetimeTracker.CancelLifetimeTimer(remoteService.ShipID())
 		}
