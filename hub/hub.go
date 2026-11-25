@@ -50,7 +50,7 @@ type Hub struct {
 	// see SHIP 12.2.2 and hub_connections_dialstate.go
 	connectionsInitiating map[string]*dialState
 
-	// set by Shutdown under muxCon, so a connection established afterwards is not registered
+	// set by Shutdown under muxCon: no further connection attempts, and a connection established afterwards is not registered
 	shutDown bool
 
 	port        int
@@ -351,6 +351,11 @@ func (h *Hub) Shutdown() {
 	// Then shutdown mDNS
 	h.mdns.Shutdown()
 
+	// before the timers are stopped: a callback that fired already must not dial any more
+	h.muxCon.Lock()
+	h.shutDown = true
+	h.muxCon.Unlock()
+
 	// Cancel all pending connection delay timers
 	h.muxTimers.Lock()
 	for ski, timer := range h.connectionDelayTimers {
@@ -364,13 +369,12 @@ func (h *Hub) Shutdown() {
 
 	// Close all connections with timeout
 	var wg sync.WaitGroup
-	h.muxCon.Lock()
-	h.shutDown = true
+	h.muxCon.RLock()
 	connections := make(map[string]api.ShipConnectionInterface)
 	for ski, c := range h.connections {
 		connections[ski] = c
 	}
-	h.muxCon.Unlock()
+	h.muxCon.RUnlock()
 
 	for ski, conn := range connections {
 		wg.Add(1)

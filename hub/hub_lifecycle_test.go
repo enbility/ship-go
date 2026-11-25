@@ -233,6 +233,45 @@ func TestHub_Lifecycle_TimerCallbackAfterShutdown(t *testing.T) {
 	assert.False(t, dut.isConnectionAttemptRunning(tool.ski), "attempt flag must be cleared")
 }
 
+// A delay timer callback that fired while Shutdown is still stopping the timers must not dial.
+func TestHub_Lifecycle_TimerCallbackDuringShutdown(t *testing.T) {
+	log := newDcEventLog()
+	dutCert, toolCert := certsBySkiOrder(t)
+
+	tool := newTestTool(t, log, toolCert, policyPassive)
+	dut := newDUT(t, dutCert)
+	dut.trust(t, tool.ski)
+
+	counter := dut.increaseConnectionAttemptCounter(tool.ski)
+
+	// hold Shutdown at the point where it stops the timers
+	dut.muxTimers.Lock()
+	done := make(chan struct{})
+	go func() {
+		dut.Shutdown()
+		close(done)
+	}()
+
+	shuttingDown := func() bool {
+		dut.muxCon.RLock()
+		defer dut.muxCon.RUnlock()
+		return dut.shutDown
+	}
+	if !assert.Eventually(t, shuttingDown, 5*time.Second, 10*time.Millisecond, "Shutdown must refuse connection attempts before it stops the timers") {
+		dut.muxTimers.Unlock()
+		<-done
+		return
+	}
+
+	host, _ := tool.address()
+	dut.prepareConnectionInitation(tool.ski, counter, &api.MdnsEntry{Host: host, Port: tool.port, Path: "/ship/"})
+
+	dut.muxTimers.Unlock()
+	<-done
+
+	assert.False(t, log.has(evATLSDone), "no connection attempt during Shutdown\n%s", log.dump())
+}
+
 // After Shutdown and Start, outgoing connection attempts must work again.
 func TestHub_Lifecycle_OutgoingConnectionAfterRestart(t *testing.T) {
 	log := newDcEventLog()
