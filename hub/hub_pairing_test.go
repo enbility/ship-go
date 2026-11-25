@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -3505,27 +3504,15 @@ func TestHub_SetPairingServiceAtomicWithStart(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() { errCh <- h.SetPairingService(pairingService) }()
 
-	// wait until SetPairingService is past its check, blocked on muxPairing
-	buf := make([]byte, 1<<20)
-	for {
-		stacks := string(buf[:runtime.Stack(buf, true)])
-		if strings.Contains(stacks, "sync.(*RWMutex).Lock") && strings.Contains(stacks, "(*Hub).SetPairingService") {
-			break
+	// while SetPairingService waits for muxPairing, Start must be locked out
+	assert.Eventually(t, func() bool {
+		if h.muxStarted.TryLock() {
+			h.muxStarted.Unlock()
+			return false
 		}
-		runtime.Gosched()
-	}
+		return true
+	}, time.Second, time.Millisecond)
 
-	// a Start running now must either be excluded or be seen by SetPairingService
-	started := h.muxStarted.TryLock()
-	if started {
-		h.hasStarted = true
-		h.muxStarted.Unlock()
-	}
 	h.muxPairing.Unlock()
-
-	if err := <-errCh; started {
-		assert.ErrorIs(t, err, api.ErrServiceAlreadyStarted)
-	} else {
-		assert.NoError(t, err)
-	}
+	assert.NoError(t, <-errCh)
 }
