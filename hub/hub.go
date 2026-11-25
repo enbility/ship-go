@@ -194,6 +194,13 @@ func (h *Hub) Start() error {
 	h.serverStarted = make(chan struct{})
 	h.serverStartErr = nil
 
+	// Shutdown cancels the pairing context; renew it for a restart
+	h.muxPairingListener.Lock()
+	if h.pairingCtx.Err() != nil {
+		h.pairingCtx, h.pairingCancel = context.WithCancel(context.Background())
+	}
+	h.muxPairingListener.Unlock()
+
 	// start the websocket server
 	if err := h.startWebsocketServer(); err != nil {
 		return fmt.Errorf("failed to start hub: %w", err)

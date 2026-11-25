@@ -69,7 +69,8 @@ func (l *PairingListener) StartListening(ctx context.Context, secret api.Pairing
 	}
 
 	// Setup context and secret
-	l.ctx, l.cancel = context.WithCancel(ctx)
+	ctx, l.cancel = context.WithCancel(ctx)
+	l.ctx = ctx
 	l.secret = make(api.PairingSecret, len(secret))
 	copy(l.secret, secret)
 	l.startTime = time.Now()
@@ -79,7 +80,7 @@ func (l *PairingListener) StartListening(ctx context.Context, secret api.Pairing
 	go func() {
 		<-ctx.Done()
 		l.mux.Lock()
-		if l.listening {
+		if l.listening && l.ctx == ctx {
 			l.stopListeningInternal()
 		}
 		l.mux.Unlock()

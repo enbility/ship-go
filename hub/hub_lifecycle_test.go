@@ -95,6 +95,33 @@ func TestHub_Lifecycle_RestartAfterShutdown(t *testing.T) {
 	hub.Shutdown()
 }
 
+// TestHub_Lifecycle_RestartRenewsPairingContext verifies that Start() after
+// Shutdown() hands the pairing listener a live context again.
+func TestHub_Lifecycle_RestartRenewsPairingContext(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	hubReader := mocks.NewMockHubReaderInterface(ctrl)
+	mdnsService := mocks.NewMockMdnsInterface(ctrl)
+	mdnsService.EXPECT().Start(gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	mdnsService.EXPECT().Shutdown().Times(2)
+
+	certificate, _ := cert.CreateCertificate("unit", "org", "DE", "CN")
+	localService, _ := api.NewServiceDetails("localSKI", "", "")
+
+	hub, err := NewHub(hubReader, mdnsService, 0, certificate, localService, nil, nil)
+	assert.NoError(t, err)
+
+	assert.NoError(t, hub.Start())
+	hub.Shutdown()
+	assert.Error(t, hub.pairingCtx.Err(), "Shutdown() should cancel the pairing context")
+
+	assert.NoError(t, hub.Start())
+	assert.NoError(t, hub.pairingCtx.Err(), "restart must provide a live pairing context")
+
+	hub.Shutdown()
+}
+
 // TestHub_Lifecycle_ShutdownResetsState verifies that Shutdown() resets
 // the hasStarted flag so the Hub can be restarted.
 //
