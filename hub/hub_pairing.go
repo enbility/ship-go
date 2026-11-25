@@ -251,12 +251,16 @@ func (h *Hub) PairingService() api.ShipPairingServiceInterface {
 
 // SetPairingService configures the optional pairing service (called during Hub construction)
 func (h *Hub) SetPairingService(service api.ShipPairingServiceInterface) error {
-	h.muxPairing.Lock()
-	defer h.muxPairing.Unlock()
+	// hold muxStarted so Start cannot run between check and set; same order as Start
+	h.muxStarted.RLock()
+	defer h.muxStarted.RUnlock()
 
 	if h.hasStarted {
 		return api.ErrServiceAlreadyStarted
 	}
+
+	h.muxPairing.Lock()
+	defer h.muxPairing.Unlock()
 
 	h.pairingService = service
 	return nil
@@ -278,7 +282,9 @@ func (h *Hub) initializePairingServiceWithConfig(config *api.PairingConfig) erro
 	}
 	h.muxPairing.RUnlock()
 
+	h.muxPairing.Lock()
 	h.pairingConfig = config
+	h.muxPairing.Unlock()
 
 	// Create crypto provider
 	cryptoProvider := pairing.NewHMACCalculator()
@@ -313,14 +319,17 @@ func (h *Hub) initializePairingServiceWithConfig(config *api.PairingConfig) erro
 		return fmt.Errorf("failed to create pairing service: %w", err)
 	}
 
+	h.muxPairing.Lock()
 	h.pairingService = service
+	h.muxPairing.Unlock()
 
 	return nil
 }
 
 // enablePairingListener starts ship pairing listener
 func (h *Hub) enablePairingListener(config *api.PairingConfig) error {
-	if h.pairingService == nil {
+	pairingService := h.PairingService()
+	if pairingService == nil {
 		return fmt.Errorf("pairing service not available")
 	}
 
@@ -343,7 +352,7 @@ func (h *Hub) enablePairingListener(config *api.PairingConfig) error {
 		listener = h.activePairingListener
 	} else {
 		// Create new listener through pairing service
-		listener = h.pairingService.CreateListener()
+		listener = pairingService.CreateListener()
 		if listener == nil {
 			return fmt.Errorf("failed to create pairing listener")
 		}
@@ -653,13 +662,17 @@ func (h *Hub) GetLocalCertificateFingerprint() (string, error) {
 // When there is no pairing service, or secret key is not defined: generates standard SHIP QR format
 // When there is pairing service in listener mode with secret key provided: generates SHIP Pairing Service QR format
 func (h *Hub) GeneratePairingQR() (string, error) {
-	if h.pairingConfig == nil || len(h.pairingConfig.Secret) == 0 {
+	h.muxPairing.RLock()
+	pairingConfig := h.pairingConfig
+	h.muxPairing.RUnlock()
+
+	if pairingConfig == nil || len(pairingConfig.Secret) == 0 {
 		// Generate standard SHIP QR format: SHIP;SKI:<ski>;ID:<identifier>;<optionals>ENDSHIP;
 		return h.generateStandardShipQR()
 	}
 
 	// Generate SHIP Pairing Service QR format
-	return h.generatePairingServiceQR(h.pairingConfig.Secret)
+	return h.generatePairingServiceQR(pairingConfig.Secret)
 }
 
 // generateStandardShipQR generates the standard SHIP QR format
