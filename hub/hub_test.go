@@ -499,6 +499,50 @@ func (s *HubSuite) Test_startAddCuReplacementTimersForOfflineDevices_ConnectedAd
 	// Test passes - timer should not start for connected devices
 }
 
+// A muxReg writer queued while the startup scan is in connectionForService's
+// fallback path must not deadlock the scan's nested muxReg read.
+func (s *HubSuite) Test_startAddCuReplacementTimersForOfflineDevices_NoDeadlockWithQueuedWriter() {
+	offline, _ := api.NewServiceDetails("offline-addcu-ski", "offline-fp", "offline-ship")
+	offline.SetPairingType(api.PairingTypeAddCu)
+	offline.SetTrusted(true)
+	s.sut.addService(offline)
+
+	other, _ := api.NewServiceDetails("other-ski", "other-fp", "other-ship")
+	s.sut.addService(other)
+
+	// a connection for another SKI forces the fallback path
+	mockConnection := mocks.NewShipConnectionInterface(s.T())
+	mockConnection.EXPECT().CloseConnection(mock.Anything, mock.Anything, mock.Anything).Maybe()
+
+	// hold muxCon so the scan stops between its muxReg and muxCon acquisitions
+	s.sut.muxCon.Lock()
+	s.sut.connections["other-ski"] = mockConnection
+
+	scanDone := make(chan struct{})
+	go func() {
+		s.sut.startAddCuReplacementTimersForOfflineDevices()
+		close(scanDone)
+	}()
+	time.Sleep(50 * time.Millisecond)
+
+	writerDone := make(chan struct{})
+	go func() {
+		s.sut.removeService("unknown-ski", "")
+		close(writerDone)
+	}()
+	time.Sleep(50 * time.Millisecond)
+
+	s.sut.muxCon.Unlock()
+
+	for _, done := range []chan struct{}{scanDone, writerDone} {
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			s.T().Fatal("deadlock: startup scan and muxReg writer block each other")
+		}
+	}
+}
+
 func (s *HubSuite) Test_startAddCuReplacementTimersForOfflineDevices_UntrustedAddCuDevice() {
 	// Test startup with untrusted AddCu device - should NOT start timer
 	
