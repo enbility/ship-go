@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"sync/atomic"
 	"time"
 )
 
@@ -8,6 +9,7 @@ import (
 type connectionDelayTimer struct {
 	timer *time.Timer
 	done  chan struct{}
+	fired atomic.Bool
 }
 
 // newConnectionDelayTimer creates a new cancellable timer
@@ -23,6 +25,7 @@ func newConnectionDelayTimer(duration time.Duration, f func()) *connectionDelayT
 			return
 		default:
 			// Timer not cancelled, run the function
+			cdt.fired.Store(true)
 			f()
 		}
 	})
@@ -49,6 +52,12 @@ func (h *Hub) storeConnectionDelayTimer(ski string, timer *connectionDelayTimer)
 	// Cancel any existing timer
 	if existing, ok := h.connectionDelayTimers[ski]; ok {
 		existing.Stop()
+	}
+
+	// a timer that fired before it got here has nothing left to cancel
+	if timer.fired.Load() {
+		delete(h.connectionDelayTimers, ski)
+		return
 	}
 
 	h.connectionDelayTimers[ski] = timer

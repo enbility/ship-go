@@ -163,6 +163,15 @@ func (h *Hub) registerConnection(connection api.ShipConnectionInterface) {
 		return
 	}
 
+	// A websocket is marked closed before HandleConnectionClosed runs, so a connection that closed
+	// before this point was not found there and must not be registered now.
+	if c, ok := connection.(*ship.ShipConnection); ok {
+		if closed, _ := c.DataHandler().IsDataConnectionClosed(); closed {
+			h.muxCon.Unlock()
+			return
+		}
+	}
+
 	ski := connection.RemoteSKI()
 	displaced := h.connections[ski]
 	if displaced == connection {

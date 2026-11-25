@@ -354,7 +354,10 @@ func (h *Hub) Shutdown() {
 	// Cancel all pending connection delay timers
 	h.muxTimers.Lock()
 	for ski, timer := range h.connectionDelayTimers {
-		timer.Stop()
+		// a stopped timer's callback never clears the attempt flag, see cancelConnectionDelayTimer
+		if timer.Stop() {
+			h.setConnectionAttemptRunning(ski, false)
+		}
 		delete(h.connectionDelayTimers, ski)
 	}
 	h.muxTimers.Unlock()
