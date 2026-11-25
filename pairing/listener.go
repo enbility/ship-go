@@ -34,6 +34,9 @@ type PairingListener struct {
 
 	// Thread safety
 	mux sync.RWMutex
+
+	// requestMux serialises request evaluation so concurrent deliveries cannot both be accepted
+	requestMux sync.Mutex
 }
 
 // NewPairingListener creates a new pairing listener
@@ -284,6 +287,9 @@ func (l *PairingListener) handlePairingRequest(txtRecord *api.ShipPairingTXT) bo
 
 // handleMdnsDiscovery processes mDNS discoveries (internal method for testing)
 func (l *PairingListener) handleMdnsDiscovery(txtRecord *api.ShipPairingTXT) bool {
+	l.requestMux.Lock()
+	defer l.requestMux.Unlock()
+
 	l.mux.RLock()
 	listening := l.listening
 	l.mux.RUnlock()
