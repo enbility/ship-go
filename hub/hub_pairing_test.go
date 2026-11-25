@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -3492,4 +3493,39 @@ func TestHub_PairingFieldsConcurrentWithStart(t *testing.T) {
 			_ = h.SetPairingService(pairingService)
 		})
 	})
+}
+
+// A Start completing between SetPairingService's started check and its write
+// must not have its pairing service overwritten.
+func TestHub_SetPairingServiceAtomicWithStart(t *testing.T) {
+	h := &Hub{}
+	pairingService := mocks.NewShipPairingServiceInterface(t)
+
+	h.muxPairing.Lock()
+	errCh := make(chan error, 1)
+	go func() { errCh <- h.SetPairingService(pairingService) }()
+
+	// wait until SetPairingService is past its check, blocked on muxPairing
+	buf := make([]byte, 1<<20)
+	for {
+		stacks := string(buf[:runtime.Stack(buf, true)])
+		if strings.Contains(stacks, "sync.(*RWMutex).Lock") && strings.Contains(stacks, "(*Hub).SetPairingService") {
+			break
+		}
+		runtime.Gosched()
+	}
+
+	// a Start running now must either be excluded or be seen by SetPairingService
+	started := h.muxStarted.TryLock()
+	if started {
+		h.hasStarted = true
+		h.muxStarted.Unlock()
+	}
+	h.muxPairing.Unlock()
+
+	if err := <-errCh; started {
+		assert.ErrorIs(t, err, api.ErrServiceAlreadyStarted)
+	} else {
+		assert.NoError(t, err)
+	}
 }

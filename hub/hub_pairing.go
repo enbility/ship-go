@@ -251,8 +251,11 @@ func (h *Hub) PairingService() api.ShipPairingServiceInterface {
 
 // SetPairingService configures the optional pairing service (called during Hub construction)
 func (h *Hub) SetPairingService(service api.ShipPairingServiceInterface) error {
-	// before muxPairing: Start takes muxStarted, then muxPairing
-	if h.checkHasStarted() {
+	// hold muxStarted so Start cannot run between check and set; same order as Start
+	h.muxStarted.RLock()
+	defer h.muxStarted.RUnlock()
+
+	if h.hasStarted {
 		return api.ErrServiceAlreadyStarted
 	}
 
