@@ -50,6 +50,9 @@ type Hub struct {
 	// see SHIP 12.2.2 and hub_connections_dialstate.go
 	connectionsInitiating map[string]*dialState
 
+	// set by Shutdown under muxCon: no further connection attempts, and a connection established afterwards is not registered
+	shutDown bool
+
 	port        int
 	certificate tls.Certificate
 
@@ -192,6 +195,9 @@ func (h *Hub) Start() error {
 
 	// Reset server state for a fresh start or retry after a previous failure
 	h.serverStarted = make(chan struct{})
+	h.muxCon.Lock()
+	h.shutDown = false
+	h.muxCon.Unlock()
 	h.serverStartErr = nil
 
 	// start the websocket server
@@ -345,10 +351,18 @@ func (h *Hub) Shutdown() {
 	// Then shutdown mDNS
 	h.mdns.Shutdown()
 
+	// before the timers are stopped: a callback that fired already must not dial any more
+	h.muxCon.Lock()
+	h.shutDown = true
+	h.muxCon.Unlock()
+
 	// Cancel all pending connection delay timers
 	h.muxTimers.Lock()
 	for ski, timer := range h.connectionDelayTimers {
-		timer.Stop()
+		// a stopped timer's callback never clears the attempt flag, see cancelConnectionDelayTimer
+		if timer.Stop() {
+			h.setConnectionAttemptRunning(ski, false)
+		}
 		delete(h.connectionDelayTimers, ski)
 	}
 	h.muxTimers.Unlock()

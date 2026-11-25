@@ -33,6 +33,13 @@ func (h *Hub) coordinateConnectionInitations(ski string, entry *api.MdnsEntry) {
 	// Create a cancellable timer
 	timer := newConnectionDelayTimer(duration, func() {
 		h.prepareConnectionInitation(ski, counter, entry)
+
+		// only a timer that fired is dead, a newer pending one for this SKI must stay
+		h.muxTimers.Lock()
+		if t, ok := h.connectionDelayTimers[ski]; ok && t.fired.Load() {
+			delete(h.connectionDelayTimers, ski)
+		}
+		h.muxTimers.Unlock()
 	})
 
 	// Store the timer so it can be cancelled if needed
@@ -45,6 +52,15 @@ func (h *Hub) prepareConnectionInitation(ski string, counter int, entry *api.Mdn
 	defer func() {
 		h.setConnectionAttemptRunning(ski, false)
 	}()
+
+	// the timer may have fired just before Shutdown stopped it
+	h.muxCon.RLock()
+	shutDown := h.shutDown
+	h.muxCon.RUnlock()
+	if shutDown {
+		return
+	}
+
 	// check if the current counter is still the same, otherwise this counter is irrelevant
 	currentCounter, exists := h.getCurrentConnectionAttemptCounter(ski)
 	if !exists || currentCounter != counter {
