@@ -306,10 +306,11 @@ func createTestConnectionWithMocks(t *testing.T) (*ShipConnection, *mocks.ShipCo
 func TestHandshakeTimerStaleCallback(t *testing.T) {
 	conn := createTestConnectionNoMocks(t)
 
-	conn.setHandshakeTimer(timeoutTimerTypeWaitForReady, time.Millisecond)
+	conn.setHandshakeTimer(timeoutTimerTypeWaitForReady, time.Hour)
 
-	// re-arm while holding the lock, so the first callback can only run after the new timer is stored
+	// fire and re-arm while holding the lock, so the first callback can only run after the new timer is stored
 	conn.handshakeTimerMux.Lock()
+	conn.handshakeTimer.Reset(0)
 	done := conn.handshakeTimerDone
 	conn.handshakeTimerDone = make(chan struct{})
 	newTimer := time.AfterFunc(time.Hour, func() {})
