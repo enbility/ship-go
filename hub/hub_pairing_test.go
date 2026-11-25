@@ -3402,3 +3402,37 @@ func (suite *HubPairingCompositionTestSuite) TestInitializePairingServiceWithCon
 	assert.Error(suite.T(), err)
 	assert.Contains(suite.T(), err.Error(), "mDNS interface does not support pairing operations")
 }
+
+// UnregisterRemoteService while an outgoing dial is in flight has no connection to close.
+// The dial must not put the removed entry back and register a connection for it: the
+// SHIP client goes straight to hello "ready", and SmeHelloStateOk would mark it trusted again.
+func TestUnregisterRemoteService_DuringInflightDial(t *testing.T) {
+	log := newDcEventLog()
+	dutCert, toolCert := certsBySkiOrder(t)
+
+	tool := newTestTool(t, log, toolCert, policyPassive)
+	dut := newDUT(t, dutCert)
+	peer := dut.trust(t, tool.ski)
+
+	release := tool.holdInbound()
+	defer release()
+
+	host, port := tool.address()
+	dialDone := dut.dial(peer, host, port)
+	log.waitFor(t, evATLSDone, 5*time.Second)
+
+	dut.UnregisterRemoteService(api.SKIToServiceIdentity(tool.ski))
+	require.Nil(t, dut.ServiceForIdentifier(tool.ski, ""))
+
+	release()
+	select {
+	case <-dialDone:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("dial did not return\n%s", log.dump())
+	}
+
+	assert.Nil(t, dut.ServiceForIdentifier(tool.ski, ""),
+		"the unregistered service must not be added back by the dial")
+	_, connected := dut.registeredConnection(tool.ski)
+	assert.False(t, connected, "no connection must be registered for an unregistered service")
+}
