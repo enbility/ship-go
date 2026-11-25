@@ -502,14 +502,11 @@ func (a *AvahiSuite) Test_Avahi_ShutdownDuringReconnect() {
 		close(done)
 	}()
 
-	assert.Eventually(a.T(), func() bool {
-		select {
-		case <-done:
-			return true
-		default:
-			return false
-		}
-	}, 3*time.Second, 10*time.Millisecond, "Shutdown must return once the reconnect goroutine wakes up")
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		a.T().Fatal("Shutdown must return once the reconnect goroutine wakes up")
+	}
 
 	a.sut.mux.Lock()
 	assert.True(a.T(), a.sut.manualShutdown)
