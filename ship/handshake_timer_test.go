@@ -301,3 +301,32 @@ func createTestConnectionWithMocks(t *testing.T) (*ShipConnection, *mocks.ShipCo
 
 	return conn, mockInfoProvider, mockDataHandler
 }
+
+// A callback of a replaced timer must not clear the new timer or time out the new state
+func TestHandshakeTimerStaleCallback(t *testing.T) {
+	conn := createTestConnectionNoMocks(t)
+
+	conn.setHandshakeTimer(timeoutTimerTypeWaitForReady, time.Hour)
+
+	// fire and re-arm while holding the lock, so the first callback can only run after the new timer is stored
+	conn.handshakeTimerMux.Lock()
+	conn.handshakeTimer.Reset(0)
+	done := conn.handshakeTimerDone
+	conn.handshakeTimerDone = make(chan struct{})
+	newTimer := time.AfterFunc(time.Hour, func() {})
+	defer newTimer.Stop()
+	conn.handshakeTimer = newTimer
+	conn.handshakeTimerRunning = true
+	conn.handshakeTimerMux.Unlock()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("first timer callback did not run")
+	}
+
+	conn.handshakeTimerMux.Lock()
+	defer conn.handshakeTimerMux.Unlock()
+	assert.Same(t, newTimer, conn.handshakeTimer)
+	assert.True(t, conn.handshakeTimerRunning)
+}

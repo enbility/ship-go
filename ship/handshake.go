@@ -323,12 +323,13 @@ func (c *ShipConnection) setHandshakeTimer(timerType timeoutTimerType, duration 
 	c.handshakeTimerType = timerType
 	c.handshakeTimerRunning = true
 	c.handshakeTimerDeadline = time.Now().Add(duration)
-	c.handshakeTimer = time.AfterFunc(duration, func() {
+	var timer *time.Timer
+	timer = time.AfterFunc(duration, func() {
 		defer close(done) // Signal completion when this goroutine exits
 
 		c.handshakeTimerMux.Lock()
-		// Check if this timer is still active
-		if c.handshakeTimer == nil {
+		// Check if this timer is still active and was not replaced by a newer one
+		if c.handshakeTimer != timer {
 			c.handshakeTimerMux.Unlock()
 			return
 		}
@@ -338,6 +339,7 @@ func (c *ShipConnection) setHandshakeTimer(timerType timeoutTimerType, duration 
 
 		c.handleState(true, nil)
 	})
+	c.handshakeTimer = timer
 }
 
 // stopHandshakeTimer stops the timer and returns a channel that closes when the timer goroutine completes
