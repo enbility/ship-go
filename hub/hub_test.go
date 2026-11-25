@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1737,4 +1738,48 @@ func mustHexToBytes(hexStr string) []byte {
 		panic(fmt.Sprintf("invalid hex string: %s", hexStr))
 	}
 	return bytes
+}
+
+// Concurrent completions for one SKI (double connection) must report the
+// service as connected only once.
+func TestHandleShipHandshakeStateUpdate_RemoteServiceConnectedOnce(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	hubReader := mocks.NewMockHubReaderInterface(ctrl)
+	mdns := mocks.NewMockMdnsInterface(ctrl)
+
+	var connected atomic.Int32
+	hubReader.EXPECT().RemoteServiceConnected(gomock.Any()).Do(func(api.ServiceIdentity) {
+		connected.Add(1)
+	}).AnyTimes()
+	hubReader.EXPECT().ServicePairingDetailUpdate(gomock.Any(), gomock.Any()).AnyTimes()
+
+	certificate, err := cert.CreateCertificate("test-unit", "test-org", "DE", "test-cn")
+	require.NoError(t, err)
+	localService, _ := api.NewServiceDetails("hubtestski", "", "")
+	hub, err := newTestHub(hubReader, mdns, 0, certificate, localService, nil)
+	require.NoError(t, err)
+
+	const ski = "testski123"
+	service, _ := api.NewServiceDetails(ski, "", "")
+	require.True(t, hub.addService(service))
+
+	for i := 0; i < 500; i++ {
+		service.SetConnectionStateDetail(api.NewConnectionStateDetail(api.ConnectionStateInProgress, nil))
+		connected.Store(0)
+
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for j := 0; j < 2; j++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				hub.HandleShipHandshakeStateUpdate(ski, model.ShipState{State: model.SmeStateComplete})
+			}()
+		}
+		close(start)
+		wg.Wait()
+
+		require.Equal(t, int32(1), connected.Load(), "iteration %d", i)
+	}
 }
