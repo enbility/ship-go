@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -756,12 +757,14 @@ func (h *Hub) StopAddCuReplacementTimer(service *api.ServiceDetails) {
 // that are trusted but not currently connected during hub startup.
 // This ensures the Device Replacement Timing Logic works correctly across application restarts.
 func (h *Hub) startAddCuReplacementTimersForOfflineDevices() {
+	// connectionForService takes muxCon and then muxReg, so it must not run under muxReg
 	h.muxReg.RLock()
-	defer h.muxReg.RUnlock()
+	services := slices.Clone(h.remoteServices)
+	h.muxReg.RUnlock()
 
 	offlineAddCuCount := 0
 
-	for _, service := range h.remoteServices {
+	for _, service := range services {
 		// Only process AddCu devices (devices paired via SHIP Pairing Service)
 		if service.PairingType() != api.PairingTypeAddCu {
 			continue
@@ -877,8 +880,8 @@ func (h *Hub) ServiceForIdentifierFull(ski, fingerprint, shipID string) *api.Ser
 	ski = util.NormalizeSKI(ski)
 	fpUpper := strings.ToUpper(fingerprint)
 
-	h.muxReg.Lock()
-	defer h.muxReg.Unlock()
+	h.muxReg.RLock()
+	defer h.muxReg.RUnlock()
 
 	var firstMatch *api.ServiceDetails
 	for _, service := range h.remoteServices {
