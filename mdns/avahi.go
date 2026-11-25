@@ -350,26 +350,27 @@ func (a *AvahiProvider) attemptReconnect(cb api.MdnsResolveCB, serviceData *mdns
 		// legacy compatibility check below (keyed by service name).
 		restoredShipServices := make(map[string]bool)
 
-		for instanceID, serviceState := range statesToRestore {
-			// Capture service type before any map deletions below
-			serviceType := "_shippairing._tcp" // Default fallback
-			if instanceInfo, exists := a.serviceInstances[instanceID]; exists {
-				serviceType = instanceInfo.ServiceType
+		for instanceID := range statesToRestore {
+			// re-announce under the same instance ID, unless it was unannounced meanwhile
+			a.mux.Lock()
+			serviceState, exists := a.instanceStates[instanceID]
+			instanceInfo, ok := a.serviceInstances[instanceID]
+			if !exists || !ok {
+				a.mux.Unlock()
+				continue
 			}
-			if _, err := a.AnnounceService(serviceType, serviceState.Name, serviceState.Port, serviceState.Txt); err != nil {
+			serviceType := instanceInfo.ServiceType
+			entryGroup, err := a.newEntryGroup(instanceID, serviceType, serviceState.Name, serviceState.Port, serviceState.Txt)
+			if err != nil {
+				a.mux.Unlock()
 				logging.Log().Debugf("mdns: avahi - error re-announcing service %s: %v", serviceState.Name, err)
 				continue
 			}
-			// create-then-swap: new entry group is now committed; release the stale
-			// (disconnected-server) entry group and remove the old instance ID.
-			// AnnounceService has already registered a new instance ID for this service.
-			a.mux.Lock()
+			// create-then-swap: release the stale (disconnected-server) entry group
 			if oldEG, ok := a.instanceEntryGroups[instanceID]; ok {
 				a.avServer.EntryGroupFree(oldEG)
-				delete(a.instanceEntryGroups, instanceID)
 			}
-			delete(a.instanceStates, instanceID)
-			delete(a.serviceInstances, instanceID)
+			a.instanceEntryGroups[instanceID] = entryGroup
 			a.mux.Unlock()
 
 			if serviceType == shipZeroConfServiceType {
@@ -517,38 +518,11 @@ func (a *AvahiProvider) AnnounceService(serviceType, serviceName string, port in
 	a.instanceCounter++
 	instanceID := strconv.Itoa(a.instanceCounter)
 
-	// Create dedicated EntryGroup for this instance - no sharing
-	entryGroup, err := a.avServer.EntryGroupNew()
+	entryGroup, err := a.newEntryGroup(instanceID, serviceType, serviceName, port, txt)
 	if err != nil {
-		return "", fmt.Errorf("failed to create entry group for instance %s: %w", instanceID, err)
+		return "", err
 	}
 	a.instanceEntryGroups[instanceID] = entryGroup
-
-	// Convert TXT records to Avahi format ([][]byte)
-	btxt := make([][]byte, len(txt))
-	for i, t := range txt {
-		btxt[i] = []byte(t)
-	}
-
-	// Add service to the dedicated EntryGroup
-	// Note: For _shippairing._tcp, we use the same port as the SHIP server since pairing connects to the same WebSocket endpoint
-	for _, iface := range a.ifaceIndexes {
-		err := entryGroup.AddService(iface, avahi.ProtoUnspec, 0, serviceName, serviceType, shipZeroConfDomain, "", uint16(port), btxt) // #nosec G115
-		if err != nil {
-			// Clean up the EntryGroup we just created since AddService failed
-			a.avServer.EntryGroupFree(entryGroup)
-			delete(a.instanceEntryGroups, instanceID)
-			return "", fmt.Errorf("failed to add %s service: %w", serviceType, err)
-		}
-	}
-
-	// Commit the EntryGroup
-	if err := entryGroup.Commit(); err != nil {
-		// Clean up the EntryGroup we just created since Commit failed
-		a.avServer.EntryGroupFree(entryGroup)
-		delete(a.instanceEntryGroups, instanceID)
-		return "", fmt.Errorf("failed to commit %s service: %w", serviceType, err)
-	}
 
 	// Store service data for this instance only after successful commit
 	a.instanceStates[instanceID] = &mdnsServiceData{
@@ -575,6 +549,40 @@ func (a *AvahiProvider) AnnounceService(serviceType, serviceName string, port in
 	}
 
 	return instanceID, nil
+}
+
+// newEntryGroup creates and commits a dedicated EntryGroup for one instance, requires a.mux to be held
+func (a *AvahiProvider) newEntryGroup(instanceID, serviceType, serviceName string, port int, txt []string) (avahi.EntryGroupInterface, error) {
+	entryGroup, err := a.avServer.EntryGroupNew()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create entry group for instance %s: %w", instanceID, err)
+	}
+
+	// Convert TXT records to Avahi format ([][]byte)
+	btxt := make([][]byte, len(txt))
+	for i, t := range txt {
+		btxt[i] = []byte(t)
+	}
+
+	// Add service to the dedicated EntryGroup
+	// Note: For _shippairing._tcp, we use the same port as the SHIP server since pairing connects to the same WebSocket endpoint
+	for _, iface := range a.ifaceIndexes {
+		err := entryGroup.AddService(iface, avahi.ProtoUnspec, 0, serviceName, serviceType, shipZeroConfDomain, "", uint16(port), btxt) // #nosec G115
+		if err != nil {
+			// Clean up the EntryGroup we just created since AddService failed
+			a.avServer.EntryGroupFree(entryGroup)
+			return nil, fmt.Errorf("failed to add %s service: %w", serviceType, err)
+		}
+	}
+
+	// Commit the EntryGroup
+	if err := entryGroup.Commit(); err != nil {
+		// Clean up the EntryGroup we just created since Commit failed
+		a.avServer.EntryGroupFree(entryGroup)
+		return nil, fmt.Errorf("failed to commit %s service: %w", serviceType, err)
+	}
+
+	return entryGroup, nil
 }
 
 // UnannounceService removes a service instance by its instance ID

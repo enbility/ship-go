@@ -2,13 +2,18 @@ package mdns
 
 import (
 	"errors"
+	"maps"
 	"net"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/enbility/go-avahi"
 	mocks "github.com/enbility/go-avahi/mocks"
 	"github.com/enbility/ship-go/api"
+	"github.com/enbility/ship-go/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -481,4 +486,80 @@ func (a *AvahiSuite) Test_chanListener() {
 	// Two ServiceBrowserFree calls - one for each browser
 	a.avahiMock.EXPECT().ServiceBrowserFree(a.serviceBrowserMock).Return().Times(2)
 	a.sut.Shutdown()
+}
+
+// reconnectHookLogger runs hook on the first failed re-announce, which is logged outside a.mux
+type reconnectHookLogger struct {
+	logging.NoLogging
+	once sync.Once
+	hook func()
+}
+
+func (l *reconnectHookLogger) Debugf(format string, args ...interface{}) {
+	if strings.Contains(format, "re-announcing") {
+		l.once.Do(l.hook)
+	}
+}
+
+func (a *AvahiSuite) Test_Avahi_ReconnectKeepsInstanceIDs() {
+	someError := errors.New("some error")
+	newEntryGroupMock := mocks.NewEntryGroupInterface(a.T())
+
+	a.avahiMock.EXPECT().EntryGroupNew().Return(a.entryGroupMock, nil).Times(3)
+	a.entryGroupMock.EXPECT().AddService(mock.Anything, mock.Anything, mock.Anything, mock.Anything, shipZeroConfServiceType, shipZeroConfDomain, "", mock.Anything, mock.Anything).Return(nil).Times(3)
+	a.entryGroupMock.EXPECT().Commit().Return(nil).Times(3)
+	ids := make(map[string]string)
+	for _, name := range []string{"first", "second", "third"} {
+		instanceID, err := a.sut.AnnounceService(shipZeroConfServiceType, name, 4289, []string{"more=more"})
+		assert.Nil(a.T(), err)
+		ids[name] = instanceID
+	}
+
+	a.avahiMock.EXPECT().Setup(mock.Anything).Return(nil).Once()
+	a.avahiMock.EXPECT().Start().Return().Once()
+	a.avahiMock.EXPECT().GetAPIVersion().Return(0, nil).Once()
+	a.avahiMock.EXPECT().ServiceBrowserNew(
+		mock.AnythingOfType("chan avahi.Service"),
+		mock.AnythingOfType("chan avahi.Service"),
+		int32(-1), int32(-1),
+		shipZeroConfServiceType, shipZeroConfDomain,
+		uint32(0)).Return(a.serviceBrowserMock, nil).Once()
+	a.avahiMock.EXPECT().EntryGroupNew().Return(newEntryGroupMock, nil)
+	a.avahiMock.EXPECT().EntryGroupFree(mock.Anything).Return().Maybe()
+
+	// the first re-announce fails, then one of the others is unannounced before it is re-announced
+	var failed, unannounced, kept string
+	newEntryGroupMock.EXPECT().AddService(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, shipZeroConfDomain, "", mock.Anything, mock.Anything).
+		Run(func(_ int32, _ int32, _ uint32, name string, _ string, _ string, _ string, _ uint16, _ [][]byte) {
+			if failed == "" {
+				failed = ids[name]
+			}
+		}).Return(nil)
+	newEntryGroupMock.EXPECT().Commit().Return(someError).Once()
+	newEntryGroupMock.EXPECT().Commit().Return(nil).Maybe()
+
+	logging.SetLogging(&reconnectHookLogger{hook: func() {
+		for _, instanceID := range ids {
+			switch {
+			case instanceID == failed:
+			case unannounced == "":
+				unannounced = instanceID
+			default:
+				kept = instanceID
+			}
+		}
+		assert.Nil(a.T(), a.sut.UnannounceService(unannounced))
+	}})
+	defer logging.SetLogging(&logging.NoLogging{})
+
+	a.sut.attemptReconnect(nil, nil)
+
+	a.sut.mux.Lock()
+	assert.ElementsMatch(a.T(), []string{failed, kept}, slices.Collect(maps.Keys(a.sut.serviceInstances)))
+	assert.ElementsMatch(a.T(), []string{failed, kept}, slices.Collect(maps.Keys(a.sut.instanceEntryGroups)))
+	a.sut.mux.Unlock()
+
+	// the instance IDs handed out before the reconnect must still withdraw the announcements
+	assert.Nil(a.T(), a.sut.UnannounceService(kept))
+	assert.Nil(a.T(), a.sut.UnannounceService(failed))
 }
