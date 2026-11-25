@@ -246,3 +246,40 @@ func createInvalidCertificate(organizationalUnit, organization, country, commonN
 
 	return tlsCertificate, nil
 }
+
+// A connection that is still being established counts against maxConnections: with the
+// only slot taken by an in-flight outgoing dial, an incoming connection from another
+// peer must be rejected rather than both ending up registered.
+func TestServeHTTP_ConnectionLimitCountsInflightDial(t *testing.T) {
+	log := newDcEventLog()
+	dutCert, toolCert := certsBySkiOrder(t)
+	otherCert, err := cert.CreateCertificate("unit", "org", "DE", "other")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tool := newTestTool(t, log, toolCert, policyPassive)
+	other := newTestTool(t, newDcEventLog(), otherCert, policyPassive)
+	dut := newDUT(t, dutCert)
+	dut.SetMaxConnections(1)
+	peer := dut.trust(t, tool.ski)
+
+	release := tool.holdInbound()
+	defer release()
+
+	host, port := tool.address()
+	dialDone := dut.dial(peer, host, port)
+	log.waitFor(t, evATLSDone, 5*time.Second)
+
+	_, err = other.dialDUT(dut.port, 0)
+	assert.Error(t, err, "the incoming connection must be rejected, the only slot is taken")
+
+	release()
+	select {
+	case <-dialDone:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("dial did not return\n%s", log.dump())
+	}
+
+	assert.LessOrEqual(t, dut.connectionCount(), 1, "maxConnections must not be exceeded")
+}

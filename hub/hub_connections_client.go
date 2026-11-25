@@ -27,13 +27,16 @@ type CertificateValidationResult struct {
 	Error             error
 }
 
-// validateConnectionLimit checks if a new connection can be established
-// This is a pure function that's easy to test
+// validateConnectionLimit checks if a new connection can be established.
+// Connections still being established count too. The caller must hold muxCon.
 func (h *Hub) validateConnectionLimit() error {
-	h.muxCon.RLock()
-	currentConnections := len(h.connections)
+	currentConnections := len(h.connections) + h.connectionsIncoming
+	for ski := range h.connectionsInitiating {
+		if _, registered := h.connections[ski]; !registered {
+			currentConnections++
+		}
+	}
 	maxConnections := h.maxConnections
-	h.muxCon.RUnlock()
 
 	if currentConnections >= maxConnections {
 		logging.Log().Debug("connection limit reached, not initiating new connection", currentConnections, maxConnections)
@@ -228,6 +231,11 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 			h.muxCon.Unlock()
 			return nil
 		}
+		// Check the connection limit and reserve the slot in one step
+		if err := h.validateConnectionLimit(); err != nil {
+			h.muxCon.Unlock()
+			return err
+		}
 		h.connectionsInitiating[ski] = state
 		h.muxCon.Unlock()
 
@@ -236,11 +244,13 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 			delete(h.connectionsInitiating, ski)
 			h.muxCon.Unlock()
 		}()
-	}
-
-	// Check connection limit before initiating new connection
-	if err := h.validateConnectionLimit(); err != nil {
-		return err
+	} else {
+		h.muxCon.RLock()
+		err := h.validateConnectionLimit()
+		h.muxCon.RUnlock()
+		if err != nil {
+			return err
+		}
 	}
 
 	logging.Log().Debugf("initiating connection to %s at %s:%s%s", remoteService.SKI(), host, port, path)
