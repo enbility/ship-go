@@ -914,14 +914,15 @@ func (s *AddCuReplacementTrackerSuite) TestAddCuReplacementTracker_ConfigurableT
 }
 
 func (s *AddCuReplacementTrackerSuite) TestAddCuReplacementTracker_StaleCallback() {
-	// The tracker state is changed under the lock, so the first callback can only run afterwards,
-	// as it does when it fired but had not yet taken the lock.
+	// The timer is fired while the lock is held and the state is changed, so its callback
+	// only runs afterwards, as it does when it fired but had not yet taken the lock.
 	s.Run("callback of a replaced timer keeps the new timer", func() {
-		s.tracker = NewAddCuReplacementTrackerWithTimeout(time.Millisecond)
+		s.tracker = NewAddCuReplacementTrackerWithTimeout(time.Hour)
 		fired := make(chan string, 1)
 		s.tracker.StartTimer("old-device", func(expiredShipID string) { fired <- expiredShipID })
 
 		s.tracker.mutex.Lock()
+		s.tracker.timer.Reset(0)
 		newTimer := time.AfterFunc(time.Hour, func() {})
 		defer newTimer.Stop()
 		s.tracker.pairedDeviceShipID = "new-device"
@@ -938,11 +939,12 @@ func (s *AddCuReplacementTrackerSuite) TestAddCuReplacementTracker_StaleCallback
 	})
 
 	s.Run("callback of a stopped timer does not time out", func() {
-		s.tracker = NewAddCuReplacementTrackerWithTimeout(time.Millisecond)
+		s.tracker = NewAddCuReplacementTrackerWithTimeout(time.Hour)
 		fired := make(chan string, 1)
 		s.tracker.StartTimer("device", func(expiredShipID string) { fired <- expiredShipID })
 
 		s.tracker.mutex.Lock()
+		s.tracker.timer.Reset(0)
 		s.tracker.pairedDeviceShipID = ""
 		s.tracker.disconnectionTime = time.Time{}
 		s.tracker.timer = nil
