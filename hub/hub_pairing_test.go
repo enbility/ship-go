@@ -3403,9 +3403,7 @@ func (suite *HubPairingCompositionTestSuite) TestInitializePairingServiceWithCon
 	assert.Contains(suite.T(), err.Error(), "mDNS interface does not support pairing operations")
 }
 
-// UnregisterRemoteService while an outgoing dial is in flight has no connection to close.
-// The dial must not put the removed entry back and register a connection for it: the
-// SHIP client goes straight to hello "ready", and SmeHelloStateOk would mark it trusted again.
+// A dial in flight during UnregisterRemoteService must not re-add the service or register a connection.
 func TestUnregisterRemoteService_DuringInflightDial(t *testing.T) {
 	log := newDcEventLog()
 	dutCert, toolCert := certsBySkiOrder(t)
