@@ -275,6 +275,16 @@ func (h *Hub) connectFoundService(remoteService *api.ServiceDetails, host, port,
 	if remoteService.Fingerprint() == "" && validationResult.RemoteFingerprint != "" {
 		remoteService.SetFingerprint(validationResult.RemoteFingerprint)
 	}
+	// UnregisterRemoteService during the dial found no connection to close; merging
+	// would add the removed entry back and the handshake would trust it again.
+	h.muxReg.RLock()
+	registered := slices.Contains(h.remoteServices, remoteService)
+	h.muxReg.RUnlock()
+	if !registered {
+		h.safeClose(conn, "service was unregistered")
+		return nil
+	}
+
 	// Now that the cert has revealed the remote SKI and fingerprint, fold
 	// any other registry entry that matches by these identifiers — this
 	// prevents an orphan untrusted entry from shadowing the trusted one.
