@@ -912,3 +912,46 @@ func (s *AddCuReplacementTrackerSuite) TestAddCuReplacementTracker_ConfigurableT
 		}
 	})
 }
+
+func (s *AddCuReplacementTrackerSuite) TestAddCuReplacementTracker_StaleCallback() {
+	// The tracker state is changed under the lock, so the first callback can only run afterwards,
+	// as it does when it fired but had not yet taken the lock.
+	s.Run("callback of a replaced timer keeps the new timer", func() {
+		s.tracker = NewAddCuReplacementTrackerWithTimeout(time.Millisecond)
+		fired := make(chan string, 1)
+		s.tracker.StartTimer("old-device", func(expiredShipID string) { fired <- expiredShipID })
+
+		s.tracker.mutex.Lock()
+		newTimer := time.AfterFunc(time.Hour, func() {})
+		defer newTimer.Stop()
+		s.tracker.pairedDeviceShipID = "new-device"
+		s.tracker.disconnectionTime = time.Now()
+		s.tracker.timer = newTimer
+		s.tracker.mutex.Unlock()
+
+		select {
+		case id := <-fired:
+			s.T().Fatalf("callback of replaced timer fired for %s", id)
+		case <-time.After(100 * time.Millisecond):
+		}
+		assert.True(s.T(), s.tracker.IsTracking("new-device"))
+	})
+
+	s.Run("callback of a stopped timer does not time out", func() {
+		s.tracker = NewAddCuReplacementTrackerWithTimeout(time.Millisecond)
+		fired := make(chan string, 1)
+		s.tracker.StartTimer("device", func(expiredShipID string) { fired <- expiredShipID })
+
+		s.tracker.mutex.Lock()
+		s.tracker.pairedDeviceShipID = ""
+		s.tracker.disconnectionTime = time.Time{}
+		s.tracker.timer = nil
+		s.tracker.mutex.Unlock()
+
+		select {
+		case id := <-fired:
+			s.T().Fatalf("callback of stopped timer fired for %s", id)
+		case <-time.After(100 * time.Millisecond):
+		}
+	})
+}
