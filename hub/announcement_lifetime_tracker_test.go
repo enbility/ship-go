@@ -245,15 +245,16 @@ func (s *AnnouncementLifetimeTrackerSuite) TestSpecCompliance() {
 }
 
 func (s *AnnouncementLifetimeTrackerSuite) TestStaleCallback() {
-	// The tracker state is changed under the lock, so the first callback can only run afterwards,
-	// as it does when it fired but had not yet taken the lock.
+	// The timer is fired while the lock is held and the state is changed, so its callback
+	// only runs afterwards, as it does when it fired but had not yet taken the lock.
 	s.Run("callback of a replaced timer keeps the new timer", func() {
-		s.tracker = newAnnouncementLifetimeTrackerWithCustomTimeout(time.Millisecond)
+		s.tracker = newAnnouncementLifetimeTrackerWithCustomTimeout(time.Hour)
 		shipID := "devA-ship-id"
 		fired := make(chan string, 1)
 		s.tracker.StartLifetimeTimer(shipID, func(expiredShipID string) { fired <- expiredShipID })
 
 		s.tracker.mutex.Lock()
+		s.tracker.timers[shipID].timer.Reset(0)
 		newTimer := time.AfterFunc(time.Hour, func() {})
 		defer newTimer.Stop()
 		s.tracker.timers[shipID] = lifetimeTimer{shipID: shipID, timer: newTimer}
@@ -268,12 +269,13 @@ func (s *AnnouncementLifetimeTrackerSuite) TestStaleCallback() {
 	})
 
 	s.Run("callback of a cancelled timer does not expire", func() {
-		s.tracker = newAnnouncementLifetimeTrackerWithCustomTimeout(time.Millisecond)
+		s.tracker = newAnnouncementLifetimeTrackerWithCustomTimeout(time.Hour)
 		shipID := "devA-ship-id"
 		fired := make(chan string, 1)
 		s.tracker.StartLifetimeTimer(shipID, func(expiredShipID string) { fired <- expiredShipID })
 
 		s.tracker.mutex.Lock()
+		s.tracker.timers[shipID].timer.Reset(0)
 		delete(s.tracker.timers, shipID)
 		s.tracker.mutex.Unlock()
 
