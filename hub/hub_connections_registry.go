@@ -157,6 +157,12 @@ func (h *Hub) retire(connection api.ShipConnectionInterface) {
 func (h *Hub) registerConnection(connection api.ShipConnectionInterface) {
 	h.muxCon.Lock()
 
+	if h.shutDown {
+		h.muxCon.Unlock()
+		connection.CloseConnection(false, 0, "hub shutdown")
+		return
+	}
+
 	ski := connection.RemoteSKI()
 	displaced := h.connections[ski]
 	if displaced == connection {

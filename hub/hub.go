@@ -50,6 +50,9 @@ type Hub struct {
 	// see SHIP 12.2.2 and hub_connections_dialstate.go
 	connectionsInitiating map[string]*dialState
 
+	// set by Shutdown under muxCon, so a connection established afterwards is not registered
+	shutDown bool
+
 	port        int
 	certificate tls.Certificate
 
@@ -192,6 +195,9 @@ func (h *Hub) Start() error {
 
 	// Reset server state for a fresh start or retry after a previous failure
 	h.serverStarted = make(chan struct{})
+	h.muxCon.Lock()
+	h.shutDown = false
+	h.muxCon.Unlock()
 	h.serverStartErr = nil
 
 	// start the websocket server
@@ -355,12 +361,13 @@ func (h *Hub) Shutdown() {
 
 	// Close all connections with timeout
 	var wg sync.WaitGroup
-	h.muxCon.RLock()
+	h.muxCon.Lock()
+	h.shutDown = true
 	connections := make(map[string]api.ShipConnectionInterface)
 	for ski, c := range h.connections {
 		connections[ski] = c
 	}
-	h.muxCon.RUnlock()
+	h.muxCon.Unlock()
 
 	for ski, conn := range connections {
 		wg.Add(1)

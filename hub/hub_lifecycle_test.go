@@ -170,3 +170,33 @@ func TestHub_Lifecycle_RetryAfterMdnsFailure(t *testing.T) {
 	mdnsService.EXPECT().Shutdown()
 	hub.Shutdown()
 }
+
+// Shutdown closes the connections registered at that moment. An outgoing dial that was
+// already in flight must not register a connection that outlives it.
+func TestHub_Lifecycle_ShutdownDuringInflightDial(t *testing.T) {
+	log := newDcEventLog()
+	dutCert, toolCert := certsBySkiOrder(t)
+
+	tool := newTestTool(t, log, toolCert, policyPassive)
+	dut := newDUT(t, dutCert)
+	peer := dut.trust(t, tool.ski)
+
+	release := tool.holdInbound()
+	defer release()
+
+	host, port := tool.address()
+	dialDone := dut.dial(peer, host, port)
+	log.waitFor(t, evATLSDone, 5*time.Second)
+
+	dut.Shutdown()
+
+	release()
+	select {
+	case <-dialDone:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("dial did not return\n%s", log.dump())
+	}
+
+	assert.Equal(t, 0, dut.connectionCount(), "no connection must be registered after Shutdown")
+	log.waitFor(t, evAClosed, 5*time.Second)
+}
