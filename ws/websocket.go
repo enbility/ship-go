@@ -164,6 +164,8 @@ func (w *WebsocketConnection) handlePing() {
 func (w *WebsocketConnection) closeWithError(err error, reason string) {
 	logging.Log().Debug(w.remoteSki, reason, err)
 	w.setConnClosedError(err)
+	// close() returns early once the connection is marked closed, so close the socket here
+	_ = w.conn.Close()
 	w.dataProcessing.ReportConnectionError(err)
 }
 

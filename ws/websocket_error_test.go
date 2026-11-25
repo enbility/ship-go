@@ -1,10 +1,14 @@
 package ws
 
 import (
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -282,4 +286,67 @@ func TestWebSocketErrorPaths(t *testing.T) {
 			return runtime.NumGoroutine() <= initialGoroutines+3
 		}, 2*time.Second, 50*time.Millisecond, "goroutines not cleaned up after panic")
 	})
+}
+
+// failingConn lets a test make writes fail and observe whether the socket gets closed.
+type failingConn struct {
+	net.Conn
+	failWrites atomic.Bool
+	closed     atomic.Bool
+}
+
+func (c *failingConn) Write(b []byte) (int, error) {
+	if c.failWrites.Load() {
+		return 0, errors.New("injected write error")
+	}
+	return c.Conn.Write(b)
+}
+
+func (c *failingConn) Close() error {
+	c.closed.Store(true)
+	return c.Conn.Close()
+}
+
+// A write error must close the socket, even though the error report loops back into
+// CloseDataConnection after the connection has already been marked closed.
+func TestWriteErrorClosesSocket(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}))
+	defer server.Close()
+
+	var fc *failingConn
+	dialer := websocket.Dialer{NetDial: func(network, addr string) (net.Conn, error) {
+		c, err := net.Dial(network, addr)
+		fc = &failingConn{Conn: c}
+		return fc, err
+	}}
+	clientConn, resp, err := dialer.Dial(strings.ReplaceAll(server.URL, "http://", "ws://"), nil)
+	require.NoError(t, err)
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+
+	sut := NewWebsocketConnection(clientConn, "test-ski")
+
+	reader := mocks.NewWebsocketDataReaderInterface(t)
+	reader.EXPECT().HandleIncomingWebsocketMessage(mock.Anything).Maybe()
+	reader.EXPECT().ReportConnectionError(mock.Anything).Run(func(error) {
+		sut.CloseDataConnection(4001, "close")
+	}).Maybe()
+	sut.InitDataProcessing(reader)
+
+	fc.failWrites.Store(true)
+	require.NoError(t, sut.WriteMessageToWebsocketConnection([]byte{0x01, 0x00}))
+
+	require.Eventually(t, fc.closed.Load, 5*time.Second, 10*time.Millisecond,
+		"socket must be closed after a write error")
 }
